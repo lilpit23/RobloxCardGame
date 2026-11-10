@@ -40,6 +40,12 @@ Combos.Stories = {
 	{ name = "Vampire Hunters", cards = { "van_helsing", "mina_harker", "jonathan_harker", "count_dracula" }, income = 0.75 },
 	{ name = "It's Alive!", cards = { "victor_frankenstein", "frankenstein_s_creature", "laboratory_assistant" }, aura = 0.75 },
 	{ name = "Two Faces", cards = { "dr_jekyll", "mr_hyde" }, income = 0.3 },
+	{ name = "The Labyrinth", cards = { "minotaur", "daedalus", "icarus" }, luck = 3 },
+	{ name = "Heroes of Legend", cards = { "hercules", "achilles", "odysseus", "perseus" }, aura = 1 },
+	{ name = "The Olympians", cards = { "zeus", "poseidon", "hades", "athena", "apollo", "hermes" }, income = 1 },
+	{ name = "Merry Men", cards = { "robin_hood", "little_john", "friar_tuck", "will_scarlet", "maid_marian" }, income = 0.75 },
+	{ name = "The Round Table", cards = { "king_arthur", "sir_lancelot", "sir_galahad", "sir_gawain", "sir_percival" }, aura = 1 },
+	{ name = "Sword in the Stone", cards = { "king_arthur", "merlin", "excalibur" }, luck = 4 },
 }
 
 for _, story in ipairs(Combos.Stories) do

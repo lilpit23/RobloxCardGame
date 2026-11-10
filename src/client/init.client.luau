@@ -860,15 +860,64 @@ panels.Book = function()
 	-- set tabs
 	local tabs = newRow(1, 40)
 	tabs.BackgroundTransparency = 1
-	local tabWidth = math.floor(640 / #Cards.SetOrder) - 6
+	local tabCount = #Cards.SetOrder + 1 -- one per set, plus the combo book
+	local tabWidth = math.floor(640 / tabCount) - 6
 	for index, setId in ipairs(Cards.SetOrder) do
-		local set = Cards.Sets[setId]
-		local found, total = Cards.setProgress(state.collection, setId)
-		local label = set.name .. (found >= total and "  ✓" or "")
+		local tabSet = Cards.Sets[setId]
+		local tabFound, tabTotal = Cards.setProgress(state.collection, setId)
+		local label = tabSet.icon .. " " .. tabSet.code .. (tabFound >= tabTotal and " ✓" or "")
 		newButton(tabs, label, UDim2.new(0, (index - 1) * (tabWidth + 6), 0, 2), UDim2.new(0, tabWidth, 0, 36), bookSet == setId and COLORS.button or COLORS.row, function()
 			bookSet = setId
 			renderPanel()
 		end).TextSize = 13
+	end
+	newButton(tabs, "📜 Combos", UDim2.new(0, (tabCount - 1) * (tabWidth + 6), 0, 2), UDim2.new(0, tabWidth, 0, 36), bookSet == "combos" and COLORS.button or COLORS.row, function()
+		bookSet = "combos"
+		renderPanel()
+	end).TextSize = 13
+
+	if bookSet == "combos" then
+		-- Combo book: every story combo, what it needs, and what you have
+		local inDeck = {}
+		for _, key in pairs(state.slots) do
+			local def = Cards.parse(key)
+			if def then
+				inDeck[def.id] = true
+			end
+		end
+		local note = newRow(2, 34)
+		note.BackgroundTransparency = 1
+		newLabel(note, "✅ in your deck    🟡 owned, not in deck    ❌ not owned yet.  A combo needs every card in the deck.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
+			TextSize = 12,
+			TextColor3 = COLORS.dim,
+		})
+		for index, story in ipairs(Combos.Stories) do
+			local parts = {}
+			local have = 0
+			for _, id in ipairs(story.cards) do
+				local mark = "❌"
+				if inDeck[id] then
+					mark = "✅"
+					have = have + 1
+				elseif Rebirth.ownsCard(state, id) then
+					mark = "🟡"
+				end
+				table.insert(parts, mark .. " " .. Cards.ById[id].name)
+			end
+			local done = have >= #story.cards
+			local row = newRow(2 + index, 64)
+			newLabel(row, story.name .. "   " .. Combos.bonusText(story) .. (done and "   ACTIVE" or ""), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+				Font = Enum.Font.FredokaOne,
+				TextSize = 17,
+				TextColor3 = done and Color3.fromRGB(255, 215, 90) or COLORS.text,
+			})
+			newLabel(row, table.concat(parts, "    "), UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 30), {
+				TextSize = 12,
+				TextColor3 = COLORS.dim,
+				TextYAlignment = Enum.TextYAlignment.Top,
+			})
+		end
+		return
 	end
 
 	local set = Cards.Sets[bookSet]
@@ -876,7 +925,7 @@ panels.Book = function()
 	local info = newRow(2, 38)
 	local complete = found >= total
 	local bonusPercent = math.floor(Config.SetCompleteBonus * 100 + 0.5)
-	local progress = set.code .. "  ·  " .. found .. "/" .. total .. " cards  ·  "
+	local progress = set.icon .. " " .. set.name .. "  ·  " .. found .. "/" .. total .. " cards  ·  "
 	if complete then
 		progress = progress .. "SET COMPLETE: +" .. bonusPercent .. "% income!"
 	else

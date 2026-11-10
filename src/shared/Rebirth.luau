@@ -15,6 +15,8 @@ Rebirth.Levels = {
 	{ cash = 250000000, aura = 250000, cards = { "moby_dick", "nezha", "dr_watson" } }, -- + Midnight Classics
 	{ cash = 2500000000, aura = 1500000, cards = { "sun_wukong", "sherlock_holmes" } },
 	{ cash = 25000000000, aura = 10000000, cards = { "jade_emperor", "count_dracula" } },
+	{ cash = 2000000000000, aura = 100000000, cards = { "hercules", "medusa" } }, -- + Olympus
+	{ cash = 200000000000000, aura = 1000000000, cards = { "zeus", "king_arthur", "merlin" } }, -- + Knights and Outlaws
 }
 
 Rebirth.IncomePerRebirth = 0.5 -- +50% income per rebirth

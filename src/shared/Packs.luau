@@ -18,7 +18,7 @@ local ELITE_PRICE = 8 -- an Elite pack costs this many times its set's Booster
 
 -- Store tier needed to buy each set's packs. Price and colour live on the set, in Cards.
 -- A pack can have image = "rbxassetid://..." cover art; upload assets/packs/<pack id>.png.
-local SET_TIER = { storybook = 1, seas = 2, west = 3, midnight = 4 }
+local SET_TIER = { storybook = 1, seas = 2, west = 3, midnight = 4, olympus = 5, knights = 6 }
 
 Packs.List = {}
 
@@ -52,8 +52,8 @@ table.insert(Packs.List, {
 	id = "champion",
 	name = "Champion Pack",
 	currency = "cash",
-	cost = 500000000,
-	storeTier = 5,
+	cost = 2000000000000,
+	storeTier = 7,
 	color = Color3.fromRGB(245, 245, 250),
 	slots = { CHAMPION, CHAMPION, CHAMPION, CHAMPION, CHAMPION },
 })

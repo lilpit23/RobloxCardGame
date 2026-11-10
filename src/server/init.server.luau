@@ -14,6 +14,7 @@ local Quests = require(Shared:WaitForChild("Quests"))
 local Perks = require(Shared:WaitForChild("Perks"))
 local Combos = require(Shared:WaitForChild("Combos"))
 local Luck = require(Shared:WaitForChild("Luck"))
+local Deck = require(Shared:WaitForChild("Deck"))
 local Battle = require(Shared:WaitForChild("Battle"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
@@ -469,7 +470,7 @@ EquipBestRemote.OnServerEvent:Connect(function(player)
 	end
 	local count = slotCount(data)
 
-	-- Pull everything off the stands, then put the highest earners back.
+	-- Take every card out of the deck, then rebuild it.
 	for index = 1, count do
 		local slotKey = tostring(index)
 		if data.slots[slotKey] then
@@ -478,27 +479,10 @@ EquipBestRemote.OnServerEvent:Connect(function(player)
 		end
 	end
 
-	local keys = {}
-	for key in pairs(data.inventory) do
-		table.insert(keys, key)
-	end
-	table.sort(keys, function(a, b)
-		local incomeA, incomeB = Cards.getIncome(a), Cards.getIncome(b)
-		if incomeA ~= incomeB then
-			return incomeA > incomeB
-		end
-		return a < b
-	end)
-
-	local index = 1
-	for _, key in ipairs(keys) do
-		while index <= count and (data.inventory[key] or 0) > 0 do
-			takeCard(data, key, 1)
+	-- Deck.autoFill starts from the highest earners and swaps in story combos that pay more.
+	for index, key in ipairs(Deck.autoFill(data.inventory, count)) do
+		if takeCard(data, key, 1) then
 			data.slots[tostring(index)] = key
-			index = index + 1
-		end
-		if index > count then
-			break
 		end
 	end
 
@@ -1094,9 +1078,42 @@ Plots.init({
 ---------------------------------------------------------------------
 -- Income loop
 ---------------------------------------------------------------------
+local function updateLeaderboard()
+	local rows = {}
+	for player in pairs(sessions) do
+		local data = PlayerData.get(player)
+		if data then
+			local income = totals(data)
+			table.insert(rows, { name = player.DisplayName, income = income, rebirths = data.rebirths })
+		end
+	end
+	table.sort(rows, function(a, b)
+		if a.income ~= b.income then
+			return a.income > b.income
+		end
+		return a.name < b.name
+	end)
+	local lines = {}
+	for index = 1, math.min(5, #rows) do
+		local row = rows[index]
+		local line = index .. ". " .. row.name .. "   " .. Format.cash(row.income) .. "/s"
+		if row.rebirths > 0 then
+			line = line .. "   ★" .. row.rebirths
+		end
+		table.insert(lines, line)
+	end
+	Plots.setLeaderboard(lines)
+end
+
+local leaderboardTick = 0
+
 task.spawn(function()
 	while true do
 		task.wait(1)
+		leaderboardTick = leaderboardTick + 1
+		if leaderboardTick % 5 == 0 then
+			updateLeaderboard()
+		end
 		for player, session in pairs(sessions) do
 			local data = PlayerData.get(player)
 			if data then

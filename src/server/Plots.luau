@@ -26,9 +26,12 @@ local TIER_STYLE = {
 	{ floor = Color3.fromRGB(235, 235, 240), material = Enum.Material.Marble, accent = Color3.fromRGB(170, 90, 240) },
 	{ floor = Color3.fromRGB(45, 45, 60), material = Enum.Material.SmoothPlastic, accent = Color3.fromRGB(255, 80, 170) },
 	{ floor = Color3.fromRGB(240, 195, 80), material = Enum.Material.Foil, accent = Color3.fromRGB(255, 240, 150) },
+	{ floor = Color3.fromRGB(120, 210, 230), material = Enum.Material.Glass, accent = Color3.fromRGB(120, 255, 255) },
+	{ floor = Color3.fromRGB(25, 20, 45), material = Enum.Material.Neon, accent = Color3.fromRGB(255, 120, 255) },
 }
 
 local plots = {}
+local leaderboardLabels = {}
 local callbacks: { [string]: (...any) -> ...any } = {}
 
 local function newPart(parent, name, size, cframe, color, material)
@@ -295,6 +298,16 @@ local function buildStreet(perRow, spacing)
 	for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
 		newSurfaceLabel(banner, face, "🎴 " .. string.upper(Config.GameName) .. " 🎴")
 	end
+
+	-- Top stores leaderboard hanging under the banner
+	local board = newPart(street, "Leaderboard", Vector3.new(30, 9, 0.6), CFrame.new(0, 11.5, 0) * CFrame.Angles(0, math.pi / 2, 0), Color3.fromRGB(25, 25, 38))
+	for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+		local label = newSurfaceLabel(board, face, "🏆 TOP STORES")
+		label.TextScaled = false
+		label.TextSize = 34
+		label.TextYAlignment = Enum.TextYAlignment.Top
+		table.insert(leaderboardLabels, label)
+	end
 end
 
 function Plots.init(handlers)
@@ -357,6 +370,14 @@ function Plots.release(player)
 			Plots.setSign(plot, "Unclaimed")
 			Plots.setPending(plot, 0)
 		end
+	end
+end
+
+-- lines = array of strings, best store first.
+function Plots.setLeaderboard(lines)
+	local text = "🏆 TOP STORES\n" .. table.concat(lines, "\n")
+	for _, label in ipairs(leaderboardLabels) do
+		label.Text = text
 	end
 end
 

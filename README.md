@@ -20,15 +20,17 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
    beforehand survive the reset, so you start the next run with them.
 9. Quality of life: open 3 or 10 packs at once, buy the Auto Collector (aura) so you never walk
    over pads again, and earn +1% income for every card you discover in the collection book.
-10. **Sets and booster packs, like a real card game.** Four numbered sets built from
-    public-domain stories, 37 cards each (148 cards, 592 with variants):
+10. **Sets and booster packs, like a real card game.** Six numbered sets built from
+    public-domain stories, 37 cards each (222 cards, 1,554 with effects):
     **Storybook Friends** (Winnie-the-Pooh, Alice, Oz, Peter Pan), **High Seas** (Treasure Island,
-    Moby-Dick, Captain Nemo, Sinbad), **Journey to the West** (Sun Wukong and company) and
-    **Midnight Classics** (Dracula, Frankenstein, Sherlock Holmes). Every set has its own colour
-    and emblem, a 5-card **Booster** (3 commons, 1 uncommon, 1 guaranteed rare-or-better) and a
-    pricier **Elite** pack. Later sets cost more and earn more. The collection book is a binder
-    page per set with card numbers (secret cards are numbered past the set size), and completing
-    a set gives +25% income.
+    Moby-Dick, Captain Nemo, Sinbad), **Journey to the West** (Sun Wukong and company),
+    **Midnight Classics** (Dracula, Frankenstein, Sherlock Holmes), **Olympus** (Greek myth) and
+    **Knights and Outlaws** (King Arthur, Robin Hood). Each unlocks at a higher store tier (there
+    are seven). Every set has its own colour and emblem, a 5-card **Booster** (3 commons, 1
+    uncommon, 1 guaranteed rare-or-better) and a pricier **Elite** pack. Later sets cost more and
+    earn more. The collection book is a binder page per set with card numbers (secret cards are
+    numbered past the set size), plus a **combo book** of every story combo. Completing a set
+    gives +25% income.
 11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
     earn cash) pay aura, and a login streak reward grows up to day 7.
 12. **Active deck and combos.** Your deck is the set of cards that earn. It starts with 4 slots
@@ -92,6 +94,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Perks.luau` | Aura Shrine perks: prices, levels, effects |
 | `src/shared/Combos.luau` | Deck combos: type, set, effect and story combos and their bonuses |
 | `src/shared/Luck.luau` | Every source of the Luck stat |
+| `src/shared/Deck.luau` | How "Auto-fill Deck" chooses cards |
 | `src/shared/Battle.luau` | Battle rules, tower enemy strength, tower rewards |
 | `src/shared/Quests.luau` | Quest types, goals and rewards, daily reward size |
 | `src/shared/Rebirth.luau` | Rebirth requirements (cash, aura, cards), bonuses, vault size |

@@ -33,10 +33,9 @@ Done: four numbered sets from public-domain stories (Storybook Friends, High Sea
 the West, Midnight Classics; 37 cards each), per-set colour and emblem on cards and packs, Booster
 and Elite packs built from slots, binder-style collection book, set completion bonus.
 
-- [ ] **C1 New sets.** More public-domain sets with their own boosters: Olympus (Greek myth),
-  Round Table (King Arthur), Sherwood (Robin Hood), Grimm fairy tales, Jungle Book, a full Oz
-  set. Confirm US public-domain status for each source and extend store tiers or rebirth gating
-  so they unlock later.
+- [ ] **C1 New sets.** Olympus and Knights and Outlaws are done (six sets, seven store tiers). More
+  public-domain ideas: Grimm fairy tales, Jungle Book, Norse myth, Arabian Nights, a full Oz set.
+  Confirm US public-domain status for each source.
 - [ ] **C2 Bigger sets.** Grow each set toward 60+ cards; keep the slot odds and re-run the
   sell-back check (cards in an average pack must sell for well under the pack price).
 - [ ] **C3 Card art.** Anime-style illustrations per card via the image field, one consistent
@@ -51,12 +50,11 @@ and Elite packs built from slots, binder-style collection book, set completion b
 Done: 4-to-64-slot active deck with one cash register, six card effects with their own bonuses,
 type / set / effect / story combos (`Combos.luau`), a Luck stat with eight sources (`Luck.luau`).
 
-- [ ] **D1 Smarter auto-fill.** "Auto-fill Deck" picks the highest earners; make it account for
-  combos (try completing story and type combos when that earns more).
+- [x] **D1 Smarter auto-fill.** Done: `Deck.autoFill` swaps in story combos when they earn more.
+  Follow-up: also weigh type and set combos, and aura / luck goals.
 - [ ] **D2 More effects.** Frozen (earns while offline), Fiery (bonus that ramps the longer it
   stays in the deck), Cursed (big cash, lowers luck). Each needs a distinct trade-off.
-- [ ] **D3 Combo book.** A panel listing every story combo, which cards it needs, and which you
-  own, so players can chase them.
+- [x] **D3 Combo book.** Done: a Combos tab in the collection book.
 - [ ] **D4 Deck layouts.** Save and swap named decks (cash deck, aura deck, luck deck for opening
   packs).
 - [ ] **D5 Stand visuals.** Effect particles on deck cards in the store (slime drips, shadow
@@ -89,8 +87,8 @@ type / set / effect / story combos (`Combos.luau`), a Luck stat with eight sourc
   at the swap, no yields mid-swap), listings across rebirth and rejoin, remote spam.
 - [ ] **S3 Move saving to ProfileStore.** Replace the hand-written session lock in `PlayerData`
   with ProfileStore via Wally, keeping the same `load / get / save / release` interface.
-- [ ] **S4 Global leaderboards.** OrderedDataStore boards for total cash earned and aura, shown on
-  two boards in the street, refreshed every 2 minutes.
+- [ ] **S4 Global leaderboards.** An in-server "Top Stores" board is done. Still to do:
+  OrderedDataStore boards across all servers for cash earned, aura and rebirths.
 
 ## Track G — gameplay depth (pick in order; each is independent of the others)
 

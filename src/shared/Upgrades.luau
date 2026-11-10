@@ -10,6 +10,8 @@ Upgrades.StoreTiers = {
 	{ name = "Card Emporium", cost = 50000, mult = 2.5 },
 	{ name = "Mega Card Store", cost = 1000000, mult = 4 },
 	{ name = "Aura Tower", cost = 25000000, mult = 7 },
+	{ name = "Card Palace", cost = 5000000000, mult = 12 },
+	{ name = "Hall of Legends", cost = 250000000000, mult = 20 },
 }
 
 Upgrades.Order = { "store", "slots", "charm", "luck", "auto" }

@@ -23,6 +23,7 @@ local function addLabel(parent, text, yScale, heightScale, font)
 	label.TextStrokeColor3 = Color3.new(0, 0, 0)
 	label.TextStrokeTransparency = 0.4
 	label.TextScaled = true
+	label.ZIndex = 2
 	label.Parent = parent
 	return label
 end
@@ -55,7 +56,26 @@ end
 -- "DJL 007/038 ★" — set code, card number and rarity mark, like the corner of a real card.
 local function numberLine(def)
 	local set = Cards.Sets[def.set]
-	return set.code .. " " .. def.numberText .. " " .. Cards.Rarities[def.rarity].symbol
+	return set.icon .. " " .. set.code .. " " .. def.numberText .. " " .. Cards.Rarities[def.rarity].symbol
+end
+
+-- Every set has its own colour: a band behind the name and a strip behind the card number,
+-- so cards from one set look like they belong together.
+local function addSetBands(frame, def, transparency)
+	local set = Cards.Sets[def.set]
+	for _, band in ipairs({ { 0, 0.185 }, { 0.875, 0.125 } }) do
+		local strip = Instance.new("Frame")
+		strip.Name = "SetBand"
+		strip.BorderSizePixel = 0
+		strip.BackgroundColor3 = set.color
+		strip.BackgroundTransparency = transparency
+		strip.Position = UDim2.new(0, 0, band[1], 0)
+		strip.Size = UDim2.new(1, 0, band[2], 0)
+		strip.Parent = frame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.3, 0)
+		corner.Parent = strip
+	end
 end
 
 -- Full card face for a card key.
@@ -74,6 +94,7 @@ function CardView.new(key)
 		rainbow.Parent = stroke
 	end
 
+	addSetBands(frame, def, 0.1)
 	addLabel(frame, def.name, 0.02, 0.15)
 
 	if def.image then
@@ -128,8 +149,9 @@ function CardView.newUnknown(def)
 		if def.rarity == "Secret" then
 			label.TextColor3 = Color3.fromRGB(255, 80, 80)
 		end
+		addSetBands(frame, def, 0.6)
 		local number = addLabel(frame, numberLine(def), 0.89, 0.07)
-		number.TextColor3 = Color3.fromRGB(150, 150, 165)
+		number.TextColor3 = Color3.fromRGB(190, 190, 205)
 	end
 	return frame
 end

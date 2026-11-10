@@ -29,17 +29,20 @@ display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash
 
 ## Track C — cards and sets (trading-card-game structure)
 
-Done: four numbered sets (Uno Price, Noodle Ninja, Dragon Bowl, Demon Sweeper; 37 cards each),
-Booster and Elite packs built from slots, binder-style collection book, set completion bonus.
+Done: four numbered sets from public-domain stories (Storybook Friends, High Seas, Journey to
+the West, Midnight Classics; 37 cards each), per-set colour and emblem on cards and packs, Booster
+and Elite packs built from slots, binder-style collection book, set completion bonus.
 
-- [ ] **C1 New sets.** Add a fifth and sixth set (hero school, giant-walls, sorcery school themes)
-  with their own boosters; extend store tiers or rebirth gating so they unlock later.
+- [ ] **C1 New sets.** More public-domain sets with their own boosters: Olympus (Greek myth),
+  Round Table (King Arthur), Sherwood (Robin Hood), Grimm fairy tales, Jungle Book, a full Oz
+  set. Confirm US public-domain status for each source and extend store tiers or rebirth gating
+  so they unlock later.
 - [ ] **C2 Bigger sets.** Grow each set toward 60+ cards; keep the slot odds and re-run the
   sell-back check (cards in an average pack must sell for well under the pack price).
-- [ ] **C3 Card art.** Original illustrations per card via the image field. Must be original
-  designs, not lookalikes of existing characters.
+- [ ] **C3 Card art.** Anime-style illustrations per card via the image field, one consistent
+  style per set. Draw from the original books, not from film or TV versions.
 - [ ] **C4 Special card treatments.** Full-art and alternate-art versions as extra secret numbers.
-- [ ] **C5 Set rotation / limited sets.** A time-limited promo set tied to events.
+- [ ] **C5 Limited sets.** A time-limited promo set tied to events.
 - [ ] **C6 Balance pass.** Early game is fast now that every booster holds a rare; tune set
   multipliers, pack prices and stand costs with the simulator (T4).
 

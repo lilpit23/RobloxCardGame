@@ -5,10 +5,10 @@ const path = require('path');
 const out = path.join(__dirname, '..', 'assets');
 
 const SETS = [
-  ['pirate', 'Uno Price', '海', '#4678dc'],
-  ['ninja', 'Noodle Ninja', '忍', '#f05ac8'],
-  ['dragon', 'Dragon Bowl', '龍', '#f09632'],
-  ['demon', 'Demon Sweeper', '鬼', '#5a6eeb'],
+  ['storybook', 'Storybook Friends', '本', '#eba83c'],
+  ['seas', 'High Seas', '海', '#3c82d7'],
+  ['west', 'Journey to the West', '西', '#e14b41'],
+  ['midnight', 'Midnight Classics', '夜', '#8250c8'],
 ];
 // One Booster and one (darker) Elite cover per set, plus the two special packs.
 const PACKS = [];
@@ -88,12 +88,12 @@ const pack = (name, kanji, color, count) => `<style>${base}
   .seal { position: absolute; left: 50%; top: 150px; width: 260px; height: 260px; margin-left: -130px; border-radius: 50%;
     background: rgba(20,10,35,.82); border: 8px solid rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; }
   .seal .kanji { font-size: 170px; }
-  .name { position: absolute; left: 0; right: 0; top: 430px; text-align: center; font-weight: 900; font-style: italic; font-size: 46px;
-    line-height: .98; text-transform: uppercase; color: #fff; -webkit-text-stroke: 3px #1a0b2e; paint-order: stroke fill;
+  .name { position: absolute; left: 0; right: 0; top: 430px; text-align: center; font-weight: 900; font-style: italic; font-size: 40px;
+    line-height: 1; text-transform: uppercase; color: #fff; -webkit-text-stroke: 3px #1a0b2e; paint-order: stroke fill;
     filter: drop-shadow(0 4px 0 #1a0b2e); padding: 0 20px; }
   .count { position: absolute; left: 0; right: 0; bottom: 70px; text-align: center; font-weight: 800; font-size: 30px; color: rgba(20,10,35,.85); letter-spacing: .12em; }
 </style><div class="pack"><div class="crimp top"></div><div class="crimp bottom"></div>
-<div class="seal"><div class="kanji">${kanji}</div></div><div class="name">${name.replace(/ /g, '<br>')}</div>
+<div class="seal"><div class="kanji">${kanji}</div></div><div class="name">${name.replace(/ (Booster|Elite|Pack)$/, '<br>$1').replace(' to the ', ' to<br>the ')}</div>
 <div class="count">${count} CARDS</div><div class="shine"></div></div>`;
 
 (async () => {

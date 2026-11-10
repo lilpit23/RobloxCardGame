@@ -28,11 +28,14 @@ way so the repo stays the whole game.
 - No stealing and no PvP (owner's decision). Cards only change hands through trading and the
   market, both in `init.server.luau`; any new way to move cards between players needs the same
   care (re-check ownership at the moment of the swap, never yield in the middle).
-- Sets are parodies of anime genres (owner's decision). Cards use plain descriptive nicknames
-  ("Stretch Pirate", "Green Swordsman"). Never use a real character's name, official title or
-  epithet, catchphrase, logo, or art that copies a character's design — renaming alone does not
-  make a lookalike safe, and Roblox removes games for it.
-- A card's id is its name slugified (`stretch_pirate`) and is what gets saved. Renaming or
+- Sets are built from public-domain stories (owner's decision), so real character names are
+  fine. Each set lists its `sources` in `Cards.luau`. Base cards and art on the original books,
+  not on later films, shows or games: things an adaptation added (Disney's red-shirted Pooh, the
+  ruby slippers from the 1939 Oz film, a film's monster make-up) can still be protected, and
+  some names are trademarked for merchandise. Before adding a set, check the work is public
+  domain in the US, and say so in the pull request. Never add characters from works still under
+  copyright, renamed or not.
+- A card's id is its name slugified (`winnie_the_pooh`) and is what gets saved. Renaming or
   removing a card orphans owned copies, so add a migration when that matters.
 - Booster structure: packs are lists of slots (`Packs.luau`). Sell prices are a share of the set's
   Booster price (`Cards.Rarities[...].sell`); the cards in an average pack must sell for well

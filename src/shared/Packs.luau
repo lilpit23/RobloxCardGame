@@ -16,28 +16,23 @@ local BOOSTER_SLOTS = { COMMON, COMMON, COMMON, UNCOMMON, RARE }
 local ELITE_SLOTS = { UNCOMMON, UNCOMMON, RARE, RARE, EPIC }
 local ELITE_PRICE = 8 -- an Elite pack costs this many times its set's Booster
 
--- Store tier needed and colour for each set's packs (the Booster price lives on the set, in Cards).
--- image (optional) = "rbxassetid://..." cover art; upload assets/packs/<pack id>.png to get an id.
-local SET_PACKS = {
-	pirate = { storeTier = 1, color = Color3.fromRGB(70, 120, 220) },
-	ninja = { storeTier = 2, color = Color3.fromRGB(240, 90, 200) },
-	dragon = { storeTier = 3, color = Color3.fromRGB(240, 150, 50) },
-	demon = { storeTier = 4, color = Color3.fromRGB(90, 110, 235) },
-}
+-- Store tier needed to buy each set's packs. Price and colour live on the set, in Cards.
+-- A pack can have image = "rbxassetid://..." cover art; upload assets/packs/<pack id>.png.
+local SET_TIER = { storybook = 1, seas = 2, west = 3, midnight = 4 }
 
 Packs.List = {}
 
 for _, setId in ipairs(Cards.SetOrder) do
 	local set = Cards.Sets[setId]
-	local info = SET_PACKS[setId]
+	local storeTier = SET_TIER[setId] or 1
 	table.insert(Packs.List, {
 		id = setId .. "_booster",
 		name = set.name .. " Booster",
 		currency = "cash",
 		cost = set.packCost,
-		storeTier = info.storeTier,
+		storeTier = storeTier,
 		sets = { setId },
-		color = info.color,
+		color = set.color,
 		slots = BOOSTER_SLOTS,
 	})
 	table.insert(Packs.List, {
@@ -45,9 +40,9 @@ for _, setId in ipairs(Cards.SetOrder) do
 		name = set.name .. " Elite",
 		currency = "cash",
 		cost = set.packCost * ELITE_PRICE,
-		storeTier = info.storeTier,
+		storeTier = storeTier,
 		sets = { setId },
-		color = info.color:Lerp(Color3.new(0, 0, 0), 0.35),
+		color = set.color:Lerp(Color3.new(0, 0, 0), 0.35),
 		slots = ELITE_SLOTS,
 	})
 end
@@ -79,14 +74,14 @@ for _, pack in ipairs(Packs.List) do
 end
 
 -- The pack new players get for free.
-Packs.StarterId = "pirate_booster"
+Packs.StarterId = "storybook_booster"
 
 -- Each luck level makes upgrades and special variants 10% more likely.
 function Packs.luckMultiplier(luckLevel)
 	return 1 + 0.1 * (luckLevel or 0)
 end
 
--- "Uno Price", "Noodle Ninja" or "All sets"
+-- "Storybook Friends", "High Seas" or "All sets"
 function Packs.setsText(pack)
 	if pack.sets == nil then
 		return "All sets"

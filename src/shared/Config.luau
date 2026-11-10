@@ -8,6 +8,9 @@ return {
 	BaseSlots = 4, -- display stands a new store starts with
 	MaxSlots = 16,
 	SellMultiplier = 20, -- sell price = card income per second * this
+	FuseCount = 3, -- copies of the same card needed to fuse into the next variant
+	OfflineRate = 0.25, -- share of normal income earned while offline
+	OfflineMaxSeconds = 4 * 60 * 60,
 	AuraPullBonus = 30, -- instant aura on pulling an aura card = its aura/sec * this
 
 	PlotCount = 8, -- set the experience's max players to this

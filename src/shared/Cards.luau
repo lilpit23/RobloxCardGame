@@ -104,6 +104,16 @@ function Cards.parse(key)
 	return def, variantId, variant
 end
 
+-- The variant one step up (normal -> holo -> gold -> prism), or nil at the top.
+function Cards.nextVariant(variantId)
+	for index, id in ipairs(Cards.VariantOrder) do
+		if id == variantId then
+			return Cards.VariantOrder[index + 1]
+		end
+	end
+	return nil
+end
+
 function Cards.getIncome(key)
 	local def, _, variant = Cards.parse(key)
 	if def == nil then

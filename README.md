@@ -12,7 +12,9 @@ Rare cards also radiate **aura**, a second currency for Aura Packs and luck upgr
 4. Each stand builds up cash; walk over the green pad in front of it to collect.
 5. Spend cash on better packs, more stands, and store upgrades (income multiplier + new packs).
 6. Epic and better cards earn aura every second and a burst of aura when pulled.
-7. Other players can steal a displayed card by holding the prompt on it and running it back to
+7. Three copies of the same card fuse into its next variant (Holo → Gold → Prismatic), and your
+   store keeps earning a share of its income for up to 4 hours while you are offline.
+8. Other players can steal a displayed card by holding the prompt on it and running it back to
    their own store. Catch them (get close) to take it back, or step on the red pad to lock your store.
 
 ## Setup
@@ -53,3 +55,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 
 Cards show an emoji as placeholder art. To use real art, upload an image and add
 `image = "rbxassetid://123456"` to that card's row in `Cards.luau`.
+
+## Working on the game
+
+`CLAUDE.md` has the project rules and `docs/AGENT_PLAN.md` is the task backlog.

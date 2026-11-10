@@ -530,7 +530,7 @@ panels.Cards = function()
 	titleLabel.Text = "🃏 My Cards  (" .. used .. "/" .. state.slotCount .. " on display)"
 	actionButton.Text = "Display Best"
 	actionButton.Visible = true
-	useGrid(120, 205)
+	useGrid(120, 241)
 
 	local order = 0
 	for index = 1, state.slotCount do
@@ -581,6 +581,15 @@ panels.Cards = function()
 		newButton(cell, "Sell " .. Format.cash(Cards.getSellValue(key, Config.SellMultiplier)), UDim2.new(0.5, 2, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.bad, function()
 			Remotes.SellCard:FireServer(key, 1)
 		end).TextSize = 11
+
+		local _, variantId = Cards.parse(key)
+		local nextVariant = Cards.nextVariant(variantId)
+		if nextVariant and state.inventory[key] >= Config.FuseCount then
+			local fuseText = "Fuse " .. Config.FuseCount .. " → " .. Cards.Variants[nextVariant].name
+			newButton(cell, fuseText, UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32), Color3.fromRGB(200, 70, 180), function()
+				Remotes.FuseCard:FireServer(key)
+			end).TextSize = 12
+		end
 	end
 
 	if order == 0 then

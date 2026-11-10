@@ -1,5 +1,6 @@
 -- Aura Packs — main server script. All game rules live here; the client only asks.
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -38,6 +39,7 @@ local SellCardRemote = newRemote("RemoteEvent", "SellCard")
 local EquipBestRemote = newRemote("RemoteEvent", "EquipBest")
 local BuyUpgradeRemote = newRemote("RemoteEvent", "BuyUpgrade")
 local RequestStateRemote = newRemote("RemoteEvent", "RequestState")
+local FuseCardRemote = newRemote("RemoteEvent", "FuseCard")
 
 remotes.Parent = ReplicatedStorage
 
@@ -46,6 +48,30 @@ remotes.Parent = ReplicatedStorage
 ---------------------------------------------------------------------
 -- [player] = { plot, pending = {[slot] = cash}, rev, dirty, carrying, shieldOn, shieldUntil, cooldownUntil, ... }
 local sessions = {}
+
+-- Token-bucket rate limit, per player and per remote. First line of every remote handler.
+local buckets = {}
+
+local function allow(player, key, ratePerSec, burst)
+	local now = os.clock()
+	local playerBuckets = buckets[player]
+	if playerBuckets == nil then
+		playerBuckets = {}
+		buckets[player] = playerBuckets
+	end
+	local bucket = playerBuckets[key]
+	if bucket == nil then
+		bucket = { tokens = burst, last = now }
+		playerBuckets[key] = bucket
+	end
+	bucket.tokens = math.min(burst, bucket.tokens + (now - bucket.last) * ratePerSec)
+	bucket.last = now
+	if bucket.tokens < 1 then
+		return false
+	end
+	bucket.tokens = bucket.tokens - 1
+	return true
+end
 
 local function notify(player, text, kind)
 	NotifyRemote:FireClient(player, text, kind or "info")
@@ -150,6 +176,9 @@ local function spend(data, currency, cost)
 end
 
 RequestStateRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "RequestState", 1, 3) then
+		return
+	end
 	pushState(player)
 end)
 
@@ -164,11 +193,9 @@ BuyPackRemote.OnServerInvoke = function(player, packId)
 		return { ok = false, error = "Something went wrong." }
 	end
 
-	local now = os.clock()
-	if now - (session.lastPack or 0) < 0.25 then
+	if not allow(player, "BuyPack", 4, 6) then
 		return { ok = false, error = "Slow down!" }
 	end
-	session.lastPack = now
 
 	if data.upgrades.store + 1 < pack.storeTier then
 		return { ok = false, error = "Upgrade your store to " .. Upgrades.StoreTiers[pack.storeTier].name .. " first." }
@@ -244,14 +271,23 @@ local function removeCard(player, index)
 end
 
 PlaceCardRemote.OnServerEvent:Connect(function(player, key, index)
+	if not allow(player, "PlaceCard", 8, 16) then
+		return
+	end
 	placeCard(player, key, index)
 end)
 
 RemoveCardRemote.OnServerEvent:Connect(function(player, index)
+	if not allow(player, "RemoveCard", 8, 16) then
+		return
+	end
 	removeCard(player, index)
 end)
 
 SellCardRemote.OnServerEvent:Connect(function(player, key, amount)
+	if not allow(player, "SellCard", 8, 16) then
+		return
+	end
 	local data = PlayerData.get(player)
 	if data == nil or Cards.parse(key) == nil then
 		return
@@ -269,7 +305,35 @@ SellCardRemote.OnServerEvent:Connect(function(player, key, amount)
 	touch(player, true)
 end)
 
+-- Fuse: FuseCount copies of the same card + variant become one copy of the next variant up.
+FuseCardRemote.OnServerEvent:Connect(function(player, key)
+	if not allow(player, "FuseCard", 8, 16) then
+		return
+	end
+	local data = PlayerData.get(player)
+	local def, variantId = Cards.parse(key)
+	if data == nil or def == nil then
+		return
+	end
+	local nextVariant = Cards.nextVariant(variantId)
+	if nextVariant == nil then
+		notify(player, "Prismatic cards can't be fused any further.", "error")
+		return
+	end
+	if not takeCard(data, key, Config.FuseCount) then
+		notify(player, "You need " .. Config.FuseCount .. " copies to fuse.", "error")
+		return
+	end
+	local newKey = Cards.makeKey(def.id, nextVariant)
+	addCard(data, newKey, 1)
+	notify(player, "Fused into " .. Cards.getDisplayName(newKey) .. "!", "good")
+	touch(player, true)
+end)
+
 EquipBestRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "EquipBest", 1, 3) then
+		return
+	end
 	local session = sessions[player]
 	local data = PlayerData.get(player)
 	if session == nil or data == nil then
@@ -320,6 +384,9 @@ end)
 -- Upgrades
 ---------------------------------------------------------------------
 BuyUpgradeRemote.OnServerEvent:Connect(function(player, upgradeId)
+	if not allow(player, "BuyUpgrade", 5, 10) then
+		return
+	end
 	local session = sessions[player]
 	local data = PlayerData.get(player)
 	local def = type(upgradeId) == "string" and Upgrades.Defs[upgradeId] or nil
@@ -625,7 +692,12 @@ local function onPlayerAdded(player)
 		return
 	end
 
-	local data = PlayerData.load(player)
+	local data, loadError = PlayerData.load(player)
+	if data == nil then
+		Plots.release(player)
+		player:Kick(loadError or "Your data could not be loaded. Please rejoin.")
+		return
+	end
 	if player.Parent == nil then
 		-- left while their data was loading
 		Plots.release(player)
@@ -675,6 +747,18 @@ local function onPlayerAdded(player)
 		task.spawn(onCharacterAdded, player, player.Character)
 	end
 
+	-- Offline earnings: a share of what the displayed cards would have made while away.
+	if data.lastSeen > 0 then
+		local away = math.clamp(os.time() - data.lastSeen, 0, Config.OfflineMaxSeconds)
+		local income = totals(data)
+		local earned = math.floor(income * away * Config.OfflineRate)
+		if earned >= 1 then
+			data.cash = data.cash + earned
+			notify(player, "Welcome back! Your store earned " .. Format.cash(earned) .. " while you were away.", "good")
+		end
+	end
+	data.lastSeen = os.time()
+
 	pushState(player)
 end
 
@@ -691,6 +775,7 @@ local function onPlayerRemoving(player)
 		end
 	end
 	sessions[player] = nil
+	buckets[player] = nil
 	Plots.release(player)
 	PlayerData.release(player)
 end
@@ -701,18 +786,38 @@ for _, player in ipairs(Players:GetPlayers()) do
 	task.spawn(onPlayerAdded, player)
 end
 
+-- Autosave: one player at a time so saves are spread out.
 task.spawn(function()
 	while true do
 		task.wait(Config.AutosaveInterval)
+		local list = {}
 		for player in pairs(sessions) do
-			PlayerData.save(player)
+			table.insert(list, player)
+		end
+		for _, player in ipairs(list) do
+			if sessions[player] then
+				PlayerData.save(player, false)
+				task.wait(1)
+			end
 		end
 	end
 end)
 
+-- Server shutdown: final save for everyone, in parallel, then wait for them to land.
 game:BindToClose(function()
+	local remaining = 0
 	for _, player in ipairs(Players:GetPlayers()) do
-		task.spawn(onPlayerRemoving, player)
+		remaining = remaining + 1
+		task.spawn(function()
+			onPlayerRemoving(player)
+			remaining = remaining - 1
+		end)
 	end
-	task.wait(2)
+	if RunService:IsStudio() then
+		return
+	end
+	local deadline = os.clock() + 25
+	while remaining > 0 and os.clock() < deadline do
+		task.wait(0.1)
+	end
 end)

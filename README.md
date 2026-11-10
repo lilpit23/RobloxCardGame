@@ -20,7 +20,11 @@ Rare cards also radiate **aura**, a second currency for Aura Packs and luck upgr
    beforehand survive the reset, so you start the next run with them.
 9. Quality of life: open 3 or 10 packs at once, buy the Auto Collector (aura) so you never walk
    over pads again, and earn +1% income for every card you discover in the collection book.
-10. Other players can steal a displayed card by holding the prompt on it and running it back to
+10. **Two card sets:** Dojo Legends and Neon Arcade (55 cards, 220 with variants), each with its
+    own line of packs, plus the Omega Pack and Aura Pack that pull from both.
+11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
+    earn cash) pay aura, and a login streak reward grows up to day 7.
+12. Other players can steal a displayed card by holding the prompt on it and running it back to
    their own store. Catch them (get close) to take it back, or step on the red pad to lock your store.
 
 ## Setup
@@ -62,6 +66,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Cards.luau` | Card list, rarities, variants (Holo / Gold / Prismatic), aura rates |
 | `src/shared/Packs.luau` | Pack prices and odds |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |
+| `src/shared/Quests.luau` | Quest types, goals and rewards, daily reward size |
 | `src/shared/Rebirth.luau` | Rebirth requirements (cash, aura, cards), bonuses, vault size |
 
 Cards show an emoji as placeholder art. To use real art, upload an image and add

@@ -62,18 +62,18 @@ income bonus, first-minute hints.
   the balance simulator (T4), a rebirth animation, rebirth count on the leaderboard.
 - [ ] **G3 Collection rewards.** Partly done: +1% income per discovered card. Still to do: bigger
   one-off rewards for completing a whole rarity or every variant of a card.
-- [ ] **G4 Daily reward + playtime rewards.** A 7-day streak calendar and a free pack every
-  15 minutes of play.
-- [ ] **G5 Quests.** Three rotating goals (open N packs, pull an Epic, steal a card, collect $X)
-  that pay aura.
+- [ ] **G4 Playtime rewards.** Daily login streak is done. Still to do: a free pack every 15 minutes
+  of play.
+- [x] **G5 Quests.** Done: three daily quests paid in aura (`src/shared/Quests.luau`). Follow-up: a
+  steal quest that only appears when other players are in the server.
 - [x] **G6 Auto-collect upgrade.** Done (Auto Collector, bought with aura).
 - [ ] **G7 Auto-sell filter.** Player picks rarities to sell automatically when pulled.
 - [ ] **G8 Trading.** Two-sided trade window with confirm + 5-second lock-in, fully server-held.
   High dupe risk: needs S2 done first and its own review.
 - [ ] **G9 Limited-time packs and luck events.** A server-wide "2x luck for 10 minutes" event and a
   weekend-only pack, driven by a schedule table.
-- [ ] **G10 More cards.** Grow to ~60 cards with a second themed set; keep names and characters
-  original (no characters from existing anime).
+- [x] **G10 More cards.** Done: Neon Arcade set (24 cards) with Neon, Arcade and Glitch packs, plus the
+  Omega Pack. Follow-up: a set filter in the collection book, and rebirths that need Neon cards.
 
 ## Track U — interface and feel
 

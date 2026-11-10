@@ -4,6 +4,7 @@ local Cards = require(script.Parent.Cards)
 local Packs = {}
 
 -- weights = relative odds per rarity. storeTier = store level needed to buy it.
+-- sets = card sets the pack pulls from (nil = every set).
 Packs.List = {
 	{
 		id = "starter",
@@ -11,6 +12,7 @@ Packs.List = {
 		currency = "cash",
 		cost = 25,
 		storeTier = 1,
+		sets = { "dojo" },
 		color = Color3.fromRGB(90, 160, 110),
 		weights = { Common = 70, Uncommon = 25, Rare = 4.5, Epic = 0.5 },
 	},
@@ -20,8 +22,19 @@ Packs.List = {
 		currency = "cash",
 		cost = 500,
 		storeTier = 1,
+		sets = { "dojo" },
 		color = Color3.fromRGB(70, 120, 220),
 		weights = { Common = 40, Uncommon = 40, Rare = 17, Epic = 2.8, Legendary = 0.2 },
+	},
+	{
+		id = "neon",
+		name = "Neon Pack",
+		currency = "cash",
+		cost = 3000,
+		storeTier = 2,
+		sets = { "neon" },
+		color = Color3.fromRGB(40, 200, 210),
+		weights = { Common = 45, Uncommon = 38, Rare = 14.5, Epic = 2.4, Legendary = 0.1 },
 	},
 	{
 		id = "shogun",
@@ -29,8 +42,19 @@ Packs.List = {
 		currency = "cash",
 		cost = 10000,
 		storeTier = 2,
+		sets = { "dojo" },
 		color = Color3.fromRGB(150, 80, 220),
 		weights = { Uncommon = 45, Rare = 40, Epic = 13, Legendary = 1.9, Mythic = 0.1 },
+	},
+	{
+		id = "arcade",
+		name = "Arcade Pack",
+		currency = "cash",
+		cost = 75000,
+		storeTier = 3,
+		sets = { "neon" },
+		color = Color3.fromRGB(240, 90, 200),
+		weights = { Uncommon = 40, Rare = 42, Epic = 15.5, Legendary = 2.4, Mythic = 0.1 },
 	},
 	{
 		id = "celestial",
@@ -38,8 +62,28 @@ Packs.List = {
 		currency = "cash",
 		cost = 250000,
 		storeTier = 3,
+		sets = { "dojo" },
 		color = Color3.fromRGB(240, 170, 50),
 		weights = { Rare = 50, Epic = 38, Legendary = 10.5, Mythic = 1.4, Secret = 0.1 },
+	},
+	{
+		id = "glitch",
+		name = "Glitch Pack",
+		currency = "cash",
+		cost = 5000000,
+		storeTier = 4,
+		sets = { "neon" },
+		color = Color3.fromRGB(110, 230, 90),
+		weights = { Rare = 45, Epic = 40, Legendary = 13, Mythic = 1.85, Secret = 0.15 },
+	},
+	{
+		id = "omega",
+		name = "Omega Pack",
+		currency = "cash",
+		cost = 150000000,
+		storeTier = 5,
+		color = Color3.fromRGB(245, 245, 250),
+		weights = { Epic = 55, Legendary = 36, Mythic = 8.5, Secret = 0.5 },
 	},
 	{
 		id = "aura",
@@ -60,6 +104,18 @@ end
 -- Each luck level makes Rare+ rarities and special variants 10% more likely.
 function Packs.luckMultiplier(luckLevel)
 	return 1 + 0.1 * (luckLevel or 0)
+end
+
+-- "Dojo Legends", "Neon Arcade" or "All sets"
+function Packs.setsText(pack)
+	if pack.sets == nil then
+		return "All sets"
+	end
+	local names = {}
+	for _, setId in ipairs(pack.sets) do
+		table.insert(names, Cards.Sets[setId].name)
+	end
+	return table.concat(names, " + ")
 end
 
 function Packs.adjustedWeight(pack, rarityName, luckLevel)
@@ -93,7 +149,7 @@ function Packs.roll(pack, luckLevel, rng)
 		end
 	end
 
-	local pool = Cards.ByRarity[chosenRarity]
+	local pool = Cards.pool(chosenRarity, pack.sets)
 	local def = pool[rng:NextInteger(1, #pool)]
 
 	-- Rarest variant is checked first.

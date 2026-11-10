@@ -64,6 +64,45 @@ Cards.List = {
 
 	{ id = "finalboss", name = "The Final Boss", rarity = "Secret", income = 250000, glyph = "👁️" },
 	{ id = "sensei", name = "Dev-sensei", rarity = "Secret", income = 400000, glyph = "💻" },
+
+	-- Set 2: Neon Arcade
+	{ id = "chip", set = "neon", name = "Arcade Rat Chip", rarity = "Common", income = 2, glyph = "🐭" },
+	{ id = "soda", set = "neon", name = "Vending Bot Soda", rarity = "Common", income = 2, glyph = "🥤" },
+	{ id = "bitsy", set = "neon", name = "Pixel Pup Bitsy", rarity = "Common", income = 3, glyph = "🐶" },
+	{ id = "juno", set = "neon", name = "Street Skater Juno", rarity = "Common", income = 4, glyph = "🛹" },
+
+	{ id = "mako", set = "neon", name = "Synth DJ Mako", rarity = "Uncommon", income = 9, glyph = "🎧" },
+	{ id = "vex", set = "neon", name = "Drone Racer Vex", rarity = "Uncommon", income = 11, glyph = "🚁" },
+	{ id = "dash", set = "neon", name = "Neon Courier Dash", rarity = "Uncommon", income = 13, glyph = "🛵" },
+	{ id = "mimi", set = "neon", name = "Hologram Cat Mimi", rarity = "Uncommon", income = 17, glyph = "😺" },
+
+	{ id = "rin", set = "neon", name = "Laser Duelist Rin", rarity = "Rare", income = 55, glyph = "💠" },
+	{ id = "oto", set = "neon", name = "Cyber Monk Oto", rarity = "Rare", income = 70, glyph = "📿" },
+	{ id = "nix", set = "neon", name = "Glitch Witch Nix", rarity = "Rare", income = 85, glyph = "🔮" },
+	{ id = "rokku", set = "neon", name = "Turbo Biker Rokku", rarity = "Rare", income = 100, glyph = "🏍️" },
+
+	{ id = "aiko", set = "neon", name = "Mecha Pilot Aiko", rarity = "Epic", income = 420, glyph = "🦾" },
+	{ id = "byte", set = "neon", name = "Data Dragon Byte", rarity = "Epic", income = 520, glyph = "💾" },
+	{ id = "shiro", set = "neon", name = "Neon Ronin Shiro", rarity = "Epic", income = 600, glyph = "🌃" },
+	{ id = "pixie", set = "neon", name = "Arcade Queen Pixie", rarity = "Epic", income = 720, glyph = "🕹️" },
+
+	{ id = "kitsu", set = "neon", name = "Quantum Fox Kitsu", rarity = "Legendary", income = 3600, glyph = "🌀" },
+	{ id = "goliath", set = "neon", name = "Titan Mech Goliath", rarity = "Legendary", income = 4500, glyph = "🏗️" },
+	{ id = "nova", set = "neon", name = "Starship Captain Nova", rarity = "Legendary", income = 5600, glyph = "🚀" },
+
+	{ id = "aria", set = "neon", name = "Singularity Idol Aria", rarity = "Mythic", income = 24000, glyph = "🎶" },
+	{ id = "volt", set = "neon", name = "Overclock Oni Volt", rarity = "Mythic", income = 34000, glyph = "⚙️" },
+	{ id = "zero", set = "neon", name = "Void Hacker Zero", rarity = "Mythic", income = 46000, glyph = "🕶️" },
+
+	{ id = "glitch", set = "neon", name = "The Glitch", rarity = "Secret", income = 300000, glyph = "👾" },
+	{ id = "lumina", set = "neon", name = "Server Goddess Lumina", rarity = "Secret", income = 500000, glyph = "🌐" },
+}
+
+-- Card sets. A card without a "set" field belongs to "dojo". Packs can be limited to sets.
+Cards.SetOrder = { "dojo", "neon" }
+Cards.Sets = {
+	dojo = { name = "Dojo Legends" },
+	neon = { name = "Neon Arcade" },
 }
 
 Cards.ById = {}
@@ -73,8 +112,29 @@ for _, rarityName in ipairs(Cards.RarityOrder) do
 end
 for index, def in ipairs(Cards.List) do
 	def.index = index
+	def.set = def.set or "dojo"
 	Cards.ById[def.id] = def
 	table.insert(Cards.ByRarity[def.rarity], def)
+end
+
+-- Cards of one rarity, optionally limited to a list of set ids (nil = every set).
+local poolCache = {}
+function Cards.pool(rarityName, sets)
+	if sets == nil then
+		return Cards.ByRarity[rarityName]
+	end
+	local cacheKey = rarityName .. "|" .. table.concat(sets, ",")
+	local pool = poolCache[cacheKey]
+	if pool == nil then
+		pool = {}
+		for _, def in ipairs(Cards.ByRarity[rarityName]) do
+			if table.find(sets, def.set) then
+				table.insert(pool, def)
+			end
+		end
+		poolCache[cacheKey] = pool
+	end
+	return pool
 end
 
 function Cards.makeKey(id, variantId)

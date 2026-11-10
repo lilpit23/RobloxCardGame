@@ -10,6 +10,7 @@ local Packs = require(Shared:WaitForChild("Packs"))
 local Upgrades = require(Shared:WaitForChild("Upgrades"))
 local Format = require(Shared:WaitForChild("Format"))
 local Rebirth = require(Shared:WaitForChild("Rebirth"))
+local Quests = require(Shared:WaitForChild("Quests"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
@@ -44,6 +45,8 @@ local FuseCardRemote = newRemote("RemoteEvent", "FuseCard")
 local RebirthRemote = newRemote("RemoteEvent", "Rebirth")
 local VaultStoreRemote = newRemote("RemoteEvent", "VaultStore")
 local VaultTakeRemote = newRemote("RemoteEvent", "VaultTake")
+local QuestClaimRemote = newRemote("RemoteEvent", "QuestClaim")
+local DailyClaimRemote = newRemote("RemoteEvent", "DailyClaim")
 
 remotes.Parent = ReplicatedStorage
 
@@ -137,6 +140,10 @@ local function pushState(player)
 		vault = data.vault,
 		vaultSlots = Rebirth.vaultSlots(data.rebirths),
 		luck = luckLevel(data),
+		quests = data.quests,
+		questRev = session.questRev,
+		daily = data.daily,
+		today = Quests.today(),
 		slotCount = slotCount(data),
 		incomePerSec = income,
 		auraPerSec = aura,
@@ -158,6 +165,36 @@ local function touch(player, structural)
 		session.rev = session.rev + 1
 	end
 	pushState(player)
+end
+
+-- Rolls new quests when the (UTC) day changes. Returns true if they changed.
+local function ensureQuests(player, data)
+	local day = Quests.today()
+	if data.quests.day == day and type(data.quests.list) == "table" then
+		return false
+	end
+	local income = totals(data)
+	data.quests = { day = day, list = Quests.generate(day, player.UserId, income) }
+	return true
+end
+
+-- Adds progress to today's quests of one type.
+local function questProgress(player, questType, amount)
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil or amount <= 0 then
+		return
+	end
+	for _, quest in ipairs(data.quests.list) do
+		if quest.type == questType and quest.progress < quest.goal then
+			quest.progress = math.min(quest.goal, quest.progress + amount)
+			session.questRev = session.questRev + 1
+			session.dirty = true
+			if quest.progress >= quest.goal then
+				notify(player, "🎯 Quest complete! Claim your aura in Quests.", "good")
+			end
+		end
+	end
 end
 
 local function addCard(data, key, amount)
@@ -247,8 +284,13 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 	end
 
 	local pulled = {}
+	local rareCount = 0
 	for _ = 1, Config.CardsPerPack * count do
 		local key = Packs.roll(pack, luckLevel(data), rng)
+		local def = Cards.parse(key)
+		if def and Cards.Rarities[def.rarity].order >= 3 then
+			rareCount = rareCount + 1
+		end
 		local isNew = data.collection[key] == nil
 		addCard(data, key, 1)
 		local auraBonus = Cards.getAura(key) * Config.AuraPullBonus
@@ -256,6 +298,8 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 		table.insert(pulled, { key = key, isNew = isNew, auraBonus = auraBonus })
 	end
 	data.packsOpened = data.packsOpened + count
+	questProgress(player, "open_packs", count)
+	questProgress(player, "pull_rare", rareCount)
 
 	touch(player, true)
 	return { ok = true, cards = pulled }
@@ -341,6 +385,7 @@ SellCardRemote.OnServerEvent:Connect(function(player, key, amount)
 	local value = Cards.getSellValue(key, Config.SellMultiplier) * amount
 	data.cash = data.cash + value
 	notify(player, "Sold for " .. Format.cash(value), "cash")
+	questProgress(player, "sell", amount)
 	touch(player, true)
 end)
 
@@ -366,6 +411,7 @@ FuseCardRemote.OnServerEvent:Connect(function(player, key)
 	local newKey = Cards.makeKey(def.id, nextVariant)
 	addCard(data, newKey, 1)
 	notify(player, "Fused into " .. Cards.getDisplayName(newKey) .. "!", "good")
+	questProgress(player, "fuse", 1)
 	touch(player, true)
 end)
 
@@ -454,6 +500,61 @@ BuyUpgradeRemote.OnServerEvent:Connect(function(player, upgradeId)
 		notify(player, def.name .. " upgraded!", "good")
 	end
 	touch(player, true)
+end)
+
+---------------------------------------------------------------------
+-- Quests and daily reward
+---------------------------------------------------------------------
+QuestClaimRemote.OnServerEvent:Connect(function(player, index)
+	if not allow(player, "QuestClaim", 4, 8) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil or type(index) ~= "number" or index % 1 ~= 0 then
+		return
+	end
+	local quest = data.quests.list[index]
+	if quest == nil or quest.claimed or quest.progress < quest.goal then
+		return
+	end
+	quest.claimed = true
+	local aura = Quests.reward(data.rebirths)
+	data.aura = data.aura + aura
+	session.questRev = session.questRev + 1
+	notify(player, "Quest reward: +" .. Format.short(aura) .. " aura", "good")
+	touch(player, false)
+end)
+
+DailyClaimRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "DailyClaim", 1, 3) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil then
+		return
+	end
+	local day = Quests.today()
+	local daily = data.daily
+	if daily.lastDay >= day then
+		notify(player, "You already claimed today's reward. Come back tomorrow!", "error")
+		return
+	end
+	if daily.lastDay == day - 1 then
+		daily.streak = daily.streak + 1
+	else
+		daily.streak = 1
+	end
+	daily.lastDay = day
+	local aura = Quests.dailyAura(daily.streak, data.rebirths)
+	local income = totals(data)
+	local cash = 100 + math.floor(income * 120)
+	data.aura = data.aura + aura
+	data.cash = data.cash + cash
+	session.questRev = session.questRev + 1
+	notify(player, "Day " .. daily.streak .. " reward: +" .. Format.short(aura) .. " aura and " .. Format.cash(cash), "good")
+	touch(player, false)
 end)
 
 ---------------------------------------------------------------------
@@ -703,6 +804,7 @@ Plots.init({
 		end
 		session.pending[index] = 0
 		data.cash = data.cash + amount
+		questProgress(player, "collect", amount)
 		Plots.setPending(plot, index, 0)
 		touch(player, false)
 	end,
@@ -762,6 +864,7 @@ task.spawn(function()
 				-- Auto Collector upgrade: bank everything straight away.
 				if data.upgrades.auto >= 1 and pendingTotal >= 1 then
 					data.cash = data.cash + pendingTotal
+					questProgress(player, "collect", pendingTotal)
 					for index = 1, slotCount(data) do
 						if (session.pending[index] or 0) > 0 then
 							session.pending[index] = 0
@@ -772,6 +875,11 @@ task.spawn(function()
 				end
 				if auraGain > 0 then
 					data.aura = data.aura + auraGain
+					session.dirty = true
+				end
+
+				if ensureQuests(player, data) then
+					session.questRev = session.questRev + 1
 					session.dirty = true
 				end
 
@@ -841,6 +949,7 @@ local function onPlayerAdded(player)
 		plot = plot,
 		pending = {},
 		rev = 1,
+		questRev = 0,
 		dirty = true,
 		carrying = nil,
 		shieldOn = false,
@@ -889,6 +998,7 @@ local function onPlayerAdded(player)
 		end
 	end
 	data.lastSeen = os.time()
+	ensureQuests(player, data)
 
 	pushState(player)
 end

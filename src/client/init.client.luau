@@ -11,6 +11,7 @@ local Upgrades = require(Shared:WaitForChild("Upgrades"))
 local Format = require(Shared:WaitForChild("Format"))
 local CardView = require(Shared:WaitForChild("CardView"))
 local Rebirth = require(Shared:WaitForChild("Rebirth"))
+local Quests = require(Shared:WaitForChild("Quests"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local player = Players.LocalPlayer
@@ -29,6 +30,10 @@ local state = {
 	vault = {},
 	vaultSlots = 1,
 	luck = 0,
+	quests = { day = 0, list = {} },
+	questRev = 0,
+	daily = { lastDay = 0, streak = 0 },
+	today = 0,
 	slotCount = Config.BaseSlots,
 	incomePerSec = 0,
 	auraPerSec = 0,
@@ -128,7 +133,7 @@ local hud = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0, 0.5),
 	Position = UDim2.new(0, 12, 0.5, 0),
-	Size = UDim2.new(0, 210, 0, 380),
+	Size = UDim2.new(0, 210, 0, 480),
 }, screen)
 addScale(hud)
 make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
@@ -579,7 +584,7 @@ panels.Packs = function()
 		round(swatch, 6)
 		newLabel(swatch, "🎴", UDim2.new(), UDim2.new(1, 0, 1, 0), { TextSize = 26, TextXAlignment = Enum.TextXAlignment.Center })
 
-		newLabel(row, pack.name .. "  (" .. Config.CardsPerPack .. " cards)", UDim2.new(0, 68, 0, 8), UDim2.new(1, -240, 0, 24), {
+		newLabel(row, pack.name .. "  ·  " .. Packs.setsText(pack), UDim2.new(0, 68, 0, 8), UDim2.new(1, -240, 0, 24), {
 			Font = Enum.Font.FredokaOne,
 			TextSize = 20,
 		})
@@ -909,6 +914,98 @@ panels.Rebirth = function()
 	end
 end
 
+-- Quests + daily reward ----------------------------------------------------------
+local renderedQuestRev = -1
+
+-- True when there is something to claim (used for the "!" on the menu button).
+local function hasClaimable()
+	if state.today > 0 and state.daily.lastDay < state.today then
+		return true
+	end
+	for _, quest in ipairs(state.quests.list) do
+		if not quest.claimed and quest.progress >= quest.goal then
+			return true
+		end
+	end
+	return false
+end
+
+panels.Quests = function()
+	titleLabel.Text = "🎯 Daily Quests"
+	renderedQuestRev = state.questRev
+	useList()
+	local buttonPosition = UDim2.new(1, -160, 0, 14)
+	local buttonSize = UDim2.new(0, 148, 0, 44)
+
+	-- Daily login reward
+	local dailyRow = newRow(1, 72)
+	local claimedToday = state.daily.lastDay >= state.today
+	local streak = state.daily.streak
+	if not claimedToday and state.daily.lastDay ~= state.today - 1 then
+		streak = 0 -- streak was broken
+	end
+	local nextStreak = claimedToday and streak or streak + 1
+	newLabel(dailyRow, "📅 Daily Reward  ·  day " .. math.max(nextStreak, 1) .. " streak", UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 19,
+	})
+	newLabel(dailyRow, "+" .. Format.short(Quests.dailyAura(math.max(nextStreak, 1), state.rebirths)) .. " aura and some cash. Grows every day up to day 7.", UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 30), {
+		TextSize = 13,
+		TextColor3 = COLORS.dim,
+		TextYAlignment = Enum.TextYAlignment.Top,
+	})
+	if claimedToday then
+		newButton(dailyRow, "Tomorrow", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
+	else
+		newButton(dailyRow, "Claim", buttonPosition, buttonSize, COLORS.good, function()
+			Remotes.DailyClaim:FireServer()
+		end)
+	end
+
+	for index, quest in ipairs(state.quests.list) do
+		local row = newRow(1 + index, 72)
+		local done = quest.progress >= quest.goal
+		newLabel(row, Quests.describe(quest), UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 18,
+		})
+		local bar = make("Frame", {
+			Position = UDim2.new(0, 14, 0, 40),
+			Size = UDim2.new(1, -190, 0, 18),
+			BackgroundColor3 = Color3.fromRGB(25, 25, 35),
+			BorderSizePixel = 0,
+		}, row)
+		round(bar, 6)
+		local fill = make("Frame", {
+			Size = UDim2.new(math.clamp(quest.progress / math.max(quest.goal, 1), 0, 1), 0, 1, 0),
+			BackgroundColor3 = done and COLORS.good or COLORS.button,
+			BorderSizePixel = 0,
+		}, bar)
+		round(fill, 6)
+		newLabel(bar, Quests.progressText(quest) .. "   ·   +" .. Format.short(Quests.reward(state.rebirths)) .. " aura", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			ZIndex = 2,
+		})
+		if quest.claimed then
+			newButton(row, "Claimed ✓", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
+		elseif done then
+			newButton(row, "Claim", buttonPosition, buttonSize, COLORS.good, function()
+				Remotes.QuestClaim:FireServer(index)
+			end)
+		else
+			newButton(row, "In progress", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
+		end
+	end
+
+	local footer = newRow(10, 30)
+	footer.BackgroundTransparency = 1
+	newLabel(footer, "New quests every day.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
+		TextSize = 13,
+		TextColor3 = COLORS.dim,
+	})
+end
+
 local function renderPanel()
 	if currentPanel == nil then
 		return
@@ -945,11 +1042,13 @@ end)
 
 -- HUD menu buttons
 local packsButton = nil
+local questsButton = nil
 local MENU = {
 	{ "Packs", "🎴 Packs", Color3.fromRGB(225, 80, 120) },
 	{ "Cards", "🃏 My Cards", COLORS.button },
 	{ "Book", "📖 Collection", Color3.fromRGB(150, 95, 230) },
 	{ "Upgrades", "🏪 Upgrades", COLORS.good },
+	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50) },
 	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50) },
 }
 for index, entry in ipairs(MENU) do
@@ -959,6 +1058,8 @@ for index, entry in ipairs(MENU) do
 	button.LayoutOrder = 10 + index
 	if entry[1] == "Packs" then
 		packsButton = button
+	elseif entry[1] == "Quests" then
+		questsButton = button
 	end
 end
 
@@ -1000,6 +1101,7 @@ local function refreshHud()
 	end
 	rateLabel.Text = rate
 	packsButton.Text = state.freePacks > 0 and "🎁 FREE PACK!" or "🎴 Packs"
+	questsButton.Text = hasClaimable() and "🎯 Quests  ❗" or "🎯 Quests"
 end
 
 Remotes.State.OnClientEvent:Connect(function(newState)
@@ -1009,7 +1111,8 @@ Remotes.State.OnClientEvent:Connect(function(newState)
 	refreshHud()
 	-- The rebirth checklist also refreshes when cash / aura crosses a requirement.
 	local rebirthChanged = currentPanel == "Rebirth" and rebirthSignature() ~= renderedRebirthSignature
-	if currentPanel and (state.rev ~= renderedRev or rebirthChanged) then
+	local questsChanged = currentPanel == "Quests" and state.questRev ~= renderedQuestRev
+	if currentPanel and (state.rev ~= renderedRev or rebirthChanged or questsChanged) then
 		renderPanel()
 	end
 end)

@@ -52,6 +52,12 @@ local function baseFrame(color, strokeColor)
 	return frame, stroke
 end
 
+-- "DJL 007/038 ★" — set code, card number and rarity mark, like the corner of a real card.
+local function numberLine(def)
+	local set = Cards.Sets[def.set]
+	return set.code .. " " .. def.numberText .. " " .. Cards.Rarities[def.rarity].symbol
+end
+
 -- Full card face for a card key.
 function CardView.new(key)
 	local def, variantId, variant = Cards.parse(key)
@@ -68,27 +74,27 @@ function CardView.new(key)
 		rainbow.Parent = stroke
 	end
 
-	addLabel(frame, def.name, 0.03, 0.17)
+	addLabel(frame, def.name, 0.02, 0.15)
 
 	if def.image then
 		local image = Instance.new("ImageLabel")
 		image.BackgroundTransparency = 1
-		image.Position = UDim2.new(0.1, 0, 0.21, 0)
-		image.Size = UDim2.new(0.8, 0, 0.42, 0)
+		image.Position = UDim2.new(0.1, 0, 0.18, 0)
+		image.Size = UDim2.new(0.8, 0, 0.38, 0)
 		image.ScaleType = Enum.ScaleType.Fit
 		image.Image = def.image
 		image.Parent = frame
 	else
-		addLabel(frame, def.glyph or "?", 0.21, 0.42)
+		addLabel(frame, def.glyph or "?", 0.18, 0.38)
 	end
 
 	local typeInfo = Cards.Types[def.type]
-	local rarityLabel = addLabel(frame, typeInfo.icon .. " " .. string.upper(def.rarity), 0.64, 0.09, Enum.Font.GothamBlack)
+	local rarityLabel = addLabel(frame, typeInfo.icon .. " " .. string.upper(def.rarity), 0.57, 0.08, Enum.Font.GothamBlack)
 	if def.rarity == "Secret" then
 		rarityLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
 	end
 
-	local income = addLabel(frame, Format.cash(Cards.getIncome(key)) .. "/s", 0.74, 0.12, Enum.Font.GothamBlack)
+	local income = addLabel(frame, Format.cash(Cards.getIncome(key)) .. "/s", 0.66, 0.11, Enum.Font.GothamBlack)
 	income.TextColor3 = Color3.fromRGB(150, 255, 160)
 
 	local bottom = {}
@@ -100,25 +106,30 @@ function CardView.new(key)
 		table.insert(bottom, "+" .. Format.short(aura) .. " aura/s")
 	end
 	if #bottom > 0 then
-		local bottomLabel = addLabel(frame, table.concat(bottom, "  "), 0.87, 0.09)
+		local bottomLabel = addLabel(frame, table.concat(bottom, "  "), 0.78, 0.08)
 		bottomLabel.TextColor3 = Color3.fromRGB(255, 190, 240)
 	end
+
+	local number = addLabel(frame, numberLine(def), 0.89, 0.07)
+	number.TextColor3 = Color3.fromRGB(230, 230, 240)
 
 	return frame
 end
 
--- Face-down / undiscovered card. def may be nil.
+-- Face-down / undiscovered card (an empty binder slot). def may be nil.
 function CardView.newUnknown(def)
 	local frame = baseFrame(Color3.fromRGB(45, 45, 55), Color3.fromRGB(20, 20, 25))
-	local question = addLabel(frame, "?", 0.2, 0.45, Enum.Font.GothamBlack)
+	local question = addLabel(frame, "?", 0.18, 0.42, Enum.Font.GothamBlack)
 	question.TextColor3 = Color3.fromRGB(120, 120, 135)
 	if def then
 		local rarity = Cards.Rarities[def.rarity]
-		local label = addLabel(frame, string.upper(def.rarity), 0.72, 0.1, Enum.Font.GothamBlack)
+		local label = addLabel(frame, string.upper(def.rarity), 0.66, 0.1, Enum.Font.GothamBlack)
 		label.TextColor3 = rarity.color
 		if def.rarity == "Secret" then
 			label.TextColor3 = Color3.fromRGB(255, 80, 80)
 		end
+		local number = addLabel(frame, numberLine(def), 0.89, 0.07)
+		number.TextColor3 = Color3.fromRGB(150, 150, 165)
 	end
 	return frame
 end

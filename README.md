@@ -7,7 +7,7 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
 ## The loop
 
 1. You spawn at your own store plot with one free Starter Pack.
-2. Open it (🎴 Packs button, or the Pack Shop counter in your store) — 3 cards per pack.
+2. Open it (🎴 Packs button, or the Pack Shop counter in your store) — 5 cards per booster.
 3. Put cards on your display stands (🃏 My Cards → Display, or "Display Best").
 4. Each stand builds up cash; walk over the green pad in front of it to collect.
 5. Spend cash on better packs, more stands, and store upgrades (income multiplier + new packs).
@@ -20,8 +20,12 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
    beforehand survive the reset, so you start the next run with them.
 9. Quality of life: open 3 or 10 packs at once, buy the Auto Collector (aura) so you never walk
    over pads again, and earn +1% income for every card you discover in the collection book.
-10. **Two card sets:** Dojo Legends and Neon Arcade (55 cards, 220 with variants), each with its
-    own line of packs, plus the Omega Pack and Aura Pack that pull from both.
+10. **Sets and booster packs, like a real card game.** Four numbered sets parodying anime
+    genres — Uno Price (pirates), Noodle Ninja, Dragon Bowl and Demon Sweeper — 37 cards each
+    (148 cards, 592 with variants). Every set has a 5-card **Booster** (3 commons, 1 uncommon, 1
+    guaranteed rare-or-better) and a pricier **Elite** pack. Later sets cost more and earn more.
+    The collection book is a binder page per set with card numbers (secret cards are numbered
+    past the set size), and completing a set gives +25% income.
 11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
     earn cash) pay aura, and a login streak reward grows up to day 7.
 12. **Card types and synergies:** every card is a Warrior, Beast, Mystic, Tech or Star. Display
@@ -71,8 +75,8 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | File | What it controls |
 | --- | --- |
 | `src/shared/Config.luau` | Slots, pack size, sell price, market and trade limits, events, sounds |
-| `src/shared/Cards.luau` | Card list, rarities, variants (Holo / Gold / Prismatic), aura rates |
-| `src/shared/Packs.luau` | Pack prices and odds |
+| `src/shared/Cards.luau` | Sets and their card lists, rarities, variants, sell prices, aura rates |
+| `src/shared/Packs.luau` | Pack slots and odds, which store tier unlocks each set |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |
 | `src/shared/Perks.luau` | Aura Shrine perks: prices, levels, effects |
 | `src/shared/Synergy.luau` | Display synergy thresholds and bonuses |

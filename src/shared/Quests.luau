@@ -8,7 +8,7 @@ Quests.PerDay = 3
 -- goals = possible targets, one is picked at random. cash = target scales with the player's income.
 Quests.Types = {
 	open_packs = { text = "Open %s packs", goals = { 5, 10, 20 } },
-	pull_rare = { text = "Pull %s Rare or better cards", goals = { 3, 6, 10 } },
+	pull_rare = { text = "Pull %s Epic or better cards", goals = { 1, 2, 4 } },
 	sell = { text = "Sell %s cards", goals = { 5, 10, 20 } },
 	fuse = { text = "Fuse cards %s times", goals = { 1, 2, 3 } },
 	collect = { text = "Earn %s from your display stands", cash = true },

@@ -19,7 +19,7 @@ local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
 
 local rng = Random.new()
-local STARTER = Packs.ById.starter
+local STARTER = Packs.ById[Packs.StarterId]
 
 ---------------------------------------------------------------------
 -- Remotes
@@ -116,7 +116,8 @@ end
 local function storeMult(data)
 	local collectionBonus = 1 + Config.CollectionBonusPerCard * collectionCount(data)
 	local synergy = Synergy.compute(data.slots)
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * synergy
+	local setBonus = 1 + Config.SetCompleteBonus * Cards.completedSets(data.collection)
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * synergy * setBonus
 end
 
 local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
@@ -316,12 +317,18 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 		return { ok = false, error = "Not enough " .. pack.currency .. "." }
 	end
 
+	local keys = {}
+	for _ = 1, count do
+		for _, key in ipairs(Packs.open(pack, luckLevel(data), rng)) do
+			table.insert(keys, key)
+		end
+	end
+
 	local pulled = {}
-	local rareCount = 0
-	for _ = 1, Config.CardsPerPack * count do
-		local key = Packs.roll(pack, luckLevel(data), rng)
+	local rareCount = 0 -- Epic or better, for the quest
+	for _, key in ipairs(keys) do
 		local def = Cards.parse(key)
-		if def and Cards.Rarities[def.rarity].order >= 3 then
+		if def and Cards.Rarities[def.rarity].order >= 4 then
 			rareCount = rareCount + 1
 		end
 		local isNew = data.collection[key] == nil
@@ -415,7 +422,7 @@ SellCardRemote.OnServerEvent:Connect(function(player, key, amount)
 	if amount < 1 or not takeCard(data, key, amount) then
 		return
 	end
-	local value = Cards.getSellValue(key, Config.SellMultiplier) * amount
+	local value = Cards.getSellValue(key) * amount
 	data.cash = data.cash + value
 	notify(player, "Sold for " .. Format.cash(value), "cash")
 	questProgress(player, "sell", amount)

@@ -4,17 +4,20 @@ const { chromium } = require('playwright');
 const path = require('path');
 const out = path.join(__dirname, '..', 'assets');
 
-const PACKS = [
-  ['starter', 'Starter Pack', '初', '#5aa06e'],
-  ['dojo', 'Dojo Pack', '道', '#4678dc'],
-  ['neon', 'Neon Pack', '電', '#28c8d2'],
-  ['shogun', 'Shogun Pack', '将', '#9650dc'],
-  ['arcade', 'Arcade Pack', '遊', '#f05ac8'],
-  ['celestial', 'Celestial Pack', '天', '#f0aa32'],
-  ['glitch', 'Glitch Pack', '乱', '#6ee65a'],
-  ['omega', 'Omega Pack', '終', '#cfd3e6'],
-  ['aura', 'Aura Pack', '気', '#e63c6e'],
+const SETS = [
+  ['pirate', 'Uno Price', '海', '#4678dc'],
+  ['ninja', 'Noodle Ninja', '忍', '#f05ac8'],
+  ['dragon', 'Dragon Bowl', '龍', '#f09632'],
+  ['demon', 'Demon Sweeper', '鬼', '#5a6eeb'],
 ];
+// One Booster and one (darker) Elite cover per set, plus the two special packs.
+const PACKS = [];
+for (const [id, name, kanji, color] of SETS) {
+  PACKS.push([id + '_booster', name + ' Booster', kanji, color, 5]);
+  PACKS.push([id + '_elite', name + ' Elite', kanji, `color-mix(in srgb, ${color} 62%, #000)`, 5]);
+}
+PACKS.push(['champion', 'Champion Pack', '王', '#cfd3e6', 5]);
+PACKS.push(['aura', 'Aura Pack', '気', '#e63c6e', 3]);
 
 const base = `
   * { box-sizing: border-box; margin: 0; }
@@ -71,9 +74,9 @@ const thumb = `<style>${base}
   .chip:nth-child(2) { background: #ff7ac0; } .chip:nth-child(3) { background: #7fd6ff; }
 </style><div class="bg" style="background-position: 30% 0"></div>${fan(38)}
 <div class="title">Aura<br>Packs</div><div class="tag">Open packs. Build your store. Collect them all.</div>
-<div class="chips"><div class="chip">55 cards</div><div class="chip">Rebirths</div><div class="chip">Battle Tower</div></div>`;
+<div class="chips"><div class="chip">4 sets · 148 cards</div><div class="chip">Rebirths</div><div class="chip">Battle Tower</div></div>`;
 
-const pack = (name, kanji, color) => `<style>${base}
+const pack = (name, kanji, color, count) => `<style>${base}
   body { background: transparent; }
   .pack { position: absolute; inset: 18px 36px; border-radius: 14px; overflow: hidden;
     background: linear-gradient(160deg, color-mix(in srgb, ${color} 70%, #fff), ${color} 40%, color-mix(in srgb, ${color} 55%, #000));
@@ -85,13 +88,13 @@ const pack = (name, kanji, color) => `<style>${base}
   .seal { position: absolute; left: 50%; top: 150px; width: 260px; height: 260px; margin-left: -130px; border-radius: 50%;
     background: rgba(20,10,35,.82); border: 8px solid rgba(255,255,255,.85); display: flex; align-items: center; justify-content: center; }
   .seal .kanji { font-size: 170px; }
-  .name { position: absolute; left: 0; right: 0; top: 440px; text-align: center; font-weight: 900; font-style: italic; font-size: 58px;
-    line-height: .95; text-transform: uppercase; color: #fff; -webkit-text-stroke: 3px #1a0b2e; paint-order: stroke fill;
+  .name { position: absolute; left: 0; right: 0; top: 430px; text-align: center; font-weight: 900; font-style: italic; font-size: 46px;
+    line-height: .98; text-transform: uppercase; color: #fff; -webkit-text-stroke: 3px #1a0b2e; paint-order: stroke fill;
     filter: drop-shadow(0 4px 0 #1a0b2e); padding: 0 20px; }
   .count { position: absolute; left: 0; right: 0; bottom: 70px; text-align: center; font-weight: 800; font-size: 30px; color: rgba(20,10,35,.85); letter-spacing: .12em; }
 </style><div class="pack"><div class="crimp top"></div><div class="crimp bottom"></div>
-<div class="seal"><div class="kanji">${kanji}</div></div><div class="name">${name.replace(' ', '<br>')}</div>
-<div class="count">3 CARDS</div><div class="shine"></div></div>`;
+<div class="seal"><div class="kanji">${kanji}</div></div><div class="name">${name.replace(/ /g, '<br>')}</div>
+<div class="count">${count} CARDS</div><div class="shine"></div></div>`;
 
 (async () => {
   const browser = await chromium.launch();
@@ -103,6 +106,6 @@ const pack = (name, kanji, color) => `<style>${base}
   };
   await shot(icon, 512, 512, 'icon.png');
   await shot(thumb, 1920, 1080, 'thumbnail.png');
-  for (const [id, name, kanji, color] of PACKS) await shot(pack(name, kanji, color), 512, 716, `packs/${id}.png`, true);
+  for (const [id, name, kanji, color, count] of PACKS) await shot(pack(name, kanji, color, count), 512, 716, `packs/${id}.png`, true);
   await browser.close();
 })();

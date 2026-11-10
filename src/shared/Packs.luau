@@ -1,113 +1,92 @@
--- Pack definitions and the pull roll.
+-- Booster packs. Every set has its own Booster and Elite pack, and a pack is a fixed list of
+-- SLOTS: each slot is one card, rolled from that slot's rarity odds — commons in the common
+-- slots, a guaranteed rare-or-better in the last slot, like a real booster pack.
 local Cards = require(script.Parent.Cards)
 
 local Packs = {}
 
--- weights = relative odds per rarity. storeTier = store level needed to buy it.
--- sets = card sets the pack pulls from (nil = every set).
--- image (optional) = "rbxassetid://..." cover art; upload assets/packs/<id>.png to get an id.
-Packs.List = {
-	{
-		id = "starter",
-		name = "Starter Pack",
-		currency = "cash",
-		cost = 25,
-		storeTier = 1,
-		sets = { "dojo" },
-		color = Color3.fromRGB(90, 160, 110),
-		weights = { Common = 70, Uncommon = 25, Rare = 4.5, Epic = 0.5 },
-	},
-	{
-		id = "dojo",
-		name = "Dojo Pack",
-		currency = "cash",
-		cost = 500,
-		storeTier = 1,
-		sets = { "dojo" },
-		color = Color3.fromRGB(70, 120, 220),
-		weights = { Common = 40, Uncommon = 40, Rare = 17, Epic = 2.8, Legendary = 0.2 },
-	},
-	{
-		id = "neon",
-		name = "Neon Pack",
-		currency = "cash",
-		cost = 3000,
-		storeTier = 2,
-		sets = { "neon" },
-		color = Color3.fromRGB(40, 200, 210),
-		weights = { Common = 45, Uncommon = 38, Rare = 14.5, Epic = 2.4, Legendary = 0.1 },
-	},
-	{
-		id = "shogun",
-		name = "Shogun Pack",
-		currency = "cash",
-		cost = 10000,
-		storeTier = 2,
-		sets = { "dojo" },
-		color = Color3.fromRGB(150, 80, 220),
-		weights = { Uncommon = 45, Rare = 40, Epic = 13, Legendary = 1.9, Mythic = 0.1 },
-	},
-	{
-		id = "arcade",
-		name = "Arcade Pack",
-		currency = "cash",
-		cost = 75000,
-		storeTier = 3,
-		sets = { "neon" },
-		color = Color3.fromRGB(240, 90, 200),
-		weights = { Uncommon = 40, Rare = 42, Epic = 15.5, Legendary = 2.4, Mythic = 0.1 },
-	},
-	{
-		id = "celestial",
-		name = "Celestial Pack",
-		currency = "cash",
-		cost = 250000,
-		storeTier = 3,
-		sets = { "dojo" },
-		color = Color3.fromRGB(240, 170, 50),
-		weights = { Rare = 50, Epic = 38, Legendary = 10.5, Mythic = 1.4, Secret = 0.1 },
-	},
-	{
-		id = "glitch",
-		name = "Glitch Pack",
-		currency = "cash",
-		cost = 5000000,
-		storeTier = 4,
-		sets = { "neon" },
-		color = Color3.fromRGB(110, 230, 90),
-		weights = { Rare = 45, Epic = 40, Legendary = 13, Mythic = 1.85, Secret = 0.15 },
-	},
-	{
-		id = "omega",
-		name = "Omega Pack",
-		currency = "cash",
-		cost = 150000000,
-		storeTier = 5,
-		color = Color3.fromRGB(245, 245, 250),
-		weights = { Epic = 55, Legendary = 36, Mythic = 8.5, Secret = 0.5 },
-	},
-	{
-		id = "aura",
-		name = "Aura Pack",
-		currency = "aura",
-		cost = 1500,
-		storeTier = 1,
-		color = Color3.fromRGB(230, 60, 110),
-		weights = { Epic = 60, Legendary = 32, Mythic = 7, Secret = 1 },
-	},
+-- Slot types: rarity -> relative odds.
+local COMMON = { Common = 100 }
+local UNCOMMON = { Uncommon = 85, Rare = 15 }
+local RARE = { Rare = 80, Epic = 16, Legendary = 3.3, Mythic = 0.6, Secret = 0.1 }
+local EPIC = { Epic = 75, Legendary = 20, Mythic = 4.3, Secret = 0.7 }
+local CHAMPION = { Epic = 55, Legendary = 36, Mythic = 8.5, Secret = 0.5 }
+
+local BOOSTER_SLOTS = { COMMON, COMMON, COMMON, UNCOMMON, RARE }
+local ELITE_SLOTS = { UNCOMMON, UNCOMMON, RARE, RARE, EPIC }
+local ELITE_PRICE = 8 -- an Elite pack costs this many times its set's Booster
+
+-- Store tier needed and colour for each set's packs (the Booster price lives on the set, in Cards).
+-- image (optional) = "rbxassetid://..." cover art; upload assets/packs/<pack id>.png to get an id.
+local SET_PACKS = {
+	pirate = { storeTier = 1, color = Color3.fromRGB(70, 120, 220) },
+	ninja = { storeTier = 2, color = Color3.fromRGB(240, 90, 200) },
+	dragon = { storeTier = 3, color = Color3.fromRGB(240, 150, 50) },
+	demon = { storeTier = 4, color = Color3.fromRGB(90, 110, 235) },
 }
+
+Packs.List = {}
+
+for _, setId in ipairs(Cards.SetOrder) do
+	local set = Cards.Sets[setId]
+	local info = SET_PACKS[setId]
+	table.insert(Packs.List, {
+		id = setId .. "_booster",
+		name = set.name .. " Booster",
+		currency = "cash",
+		cost = set.packCost,
+		storeTier = info.storeTier,
+		sets = { setId },
+		color = info.color,
+		slots = BOOSTER_SLOTS,
+	})
+	table.insert(Packs.List, {
+		id = setId .. "_elite",
+		name = set.name .. " Elite",
+		currency = "cash",
+		cost = set.packCost * ELITE_PRICE,
+		storeTier = info.storeTier,
+		sets = { setId },
+		color = info.color:Lerp(Color3.new(0, 0, 0), 0.35),
+		slots = ELITE_SLOTS,
+	})
+end
+
+-- Special packs that pull from every set (sets = nil).
+table.insert(Packs.List, {
+	id = "champion",
+	name = "Champion Pack",
+	currency = "cash",
+	cost = 500000000,
+	storeTier = 5,
+	color = Color3.fromRGB(245, 245, 250),
+	slots = { CHAMPION, CHAMPION, CHAMPION, CHAMPION, CHAMPION },
+})
+table.insert(Packs.List, {
+	id = "aura",
+	name = "Aura Pack",
+	currency = "aura",
+	cost = 1500,
+	storeTier = 1,
+	color = Color3.fromRGB(230, 60, 110),
+	slots = { EPIC, EPIC, EPIC },
+})
 
 Packs.ById = {}
 for _, pack in ipairs(Packs.List) do
+	pack.size = #pack.slots
 	Packs.ById[pack.id] = pack
 end
 
--- Each luck level makes Rare+ rarities and special variants 10% more likely.
+-- The pack new players get for free.
+Packs.StarterId = "pirate_booster"
+
+-- Each luck level makes upgrades and special variants 10% more likely.
 function Packs.luckMultiplier(luckLevel)
 	return 1 + 0.1 * (luckLevel or 0)
 end
 
--- "Dojo Legends", "Neon Arcade" or "All sets"
+-- "Uno Price", "Noodle Ninja" or "All sets"
 function Packs.setsText(pack)
 	if pack.sets == nil then
 		return "All sets"
@@ -119,28 +98,36 @@ function Packs.setsText(pack)
 	return table.concat(names, " + ")
 end
 
-function Packs.adjustedWeight(pack, rarityName, luckLevel)
-	local weight = pack.weights[rarityName]
+local function lowestOrder(slot)
+	local lowest = math.huge
+	for rarityName in pairs(slot) do
+		lowest = math.min(lowest, Cards.Rarities[rarityName].order)
+	end
+	return lowest
+end
+
+-- Odds of one rarity in one slot. Luck boosts everything above the slot's lowest rarity.
+function Packs.slotWeight(slot, rarityName, luckLevel)
+	local weight = slot[rarityName]
 	if weight == nil then
 		return 0
 	end
-	if Cards.Rarities[rarityName].order >= 3 then
+	if Cards.Rarities[rarityName].order > lowestOrder(slot) then
 		weight = weight * Packs.luckMultiplier(luckLevel)
 	end
 	return weight
 end
 
--- Returns a card key. rng is a Random object.
-function Packs.roll(pack, luckLevel, rng)
+local function rollSlot(pack, slot, luckLevel, rng)
 	local total = 0
 	for _, rarityName in ipairs(Cards.RarityOrder) do
-		total = total + Packs.adjustedWeight(pack, rarityName, luckLevel)
+		total = total + Packs.slotWeight(slot, rarityName, luckLevel)
 	end
 
 	local pick = rng:NextNumber() * total
 	local chosenRarity = nil
 	for _, rarityName in ipairs(Cards.RarityOrder) do
-		local weight = Packs.adjustedWeight(pack, rarityName, luckLevel)
+		local weight = Packs.slotWeight(slot, rarityName, luckLevel)
 		if weight > 0 then
 			chosenRarity = rarityName
 			if pick < weight then
@@ -165,6 +152,52 @@ function Packs.roll(pack, luckLevel, rng)
 	end
 
 	return Cards.makeKey(def.id, variantId)
+end
+
+-- Opens one pack: returns an array of card keys, one per slot. rng is a Random object.
+function Packs.open(pack, luckLevel, rng)
+	local keys = {}
+	for index, slot in ipairs(pack.slots) do
+		keys[index] = rollSlot(pack, slot, luckLevel, rng)
+	end
+	return keys
+end
+
+local function percentText(percent)
+	if percent >= 99.95 then
+		return "100%"
+	elseif percent >= 10 then
+		return string.format("%d%%", math.floor(percent + 0.5))
+	end
+	return string.format("%.2g%%", percent)
+end
+
+-- Human-readable odds, one line per kind of slot:
+-- { "3 cards: Common 100%", "1 card: Uncommon 85% · Rare 15%", ... }
+function Packs.oddsLines(pack, luckLevel)
+	local lines = {}
+	local index = 1
+	while index <= #pack.slots do
+		local slot = pack.slots[index]
+		local count = 1
+		while pack.slots[index + count] == slot do
+			count = count + 1
+		end
+		local total = 0
+		for _, rarityName in ipairs(Cards.RarityOrder) do
+			total = total + Packs.slotWeight(slot, rarityName, luckLevel)
+		end
+		local parts = {}
+		for _, rarityName in ipairs(Cards.RarityOrder) do
+			local weight = Packs.slotWeight(slot, rarityName, luckLevel)
+			if weight > 0 then
+				table.insert(parts, rarityName .. " " .. percentText(weight / total * 100))
+			end
+		end
+		table.insert(lines, count .. (count == 1 and " card: " or " cards: ") .. table.concat(parts, " · "))
+		index = index + count
+	end
+	return lines
 end
 
 return Packs

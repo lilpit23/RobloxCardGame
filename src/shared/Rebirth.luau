@@ -9,12 +9,12 @@ local Rebirth = {}
 -- Levels[n] = what it takes to go from rebirth n-1 to rebirth n.
 -- cards = card ids you must own (any variant; display, inventory or vault all count).
 Rebirth.Levels = {
-	{ cash = 100000, aura = 500, cards = { "kage", "noir" } },
-	{ cash = 2000000, aura = 5000, cards = { "yuki", "zeta", "ren" } },
-	{ cash = 25000000, aura = 40000, cards = { "raika", "hinode" } },
-	{ cash = 250000000, aura = 250000, cards = { "ryuma", "kuro", "tenryu" } },
-	{ cash = 2500000000, aura = 1500000, cards = { "chrona", "zenith" } },
-	{ cash = 25000000000, aura = 10000000, cards = { "eclipse", "gorath" } },
+	{ cash = 100000, aura = 500, cards = { "green_swordsman", "stretch_pirate" } }, -- Uno Price
+	{ cash = 2000000, aura = 5000, cards = { "kicking_cook", "flame_brother", "masked_teacher" } }, -- + Noodle Ninja
+	{ cash = 25000000, aura = 40000, cards = { "orange_prankster_ninja", "proud_warrior_prince" } }, -- + Dragon Bowl
+	{ cash = 250000000, aura = 250000, cards = { "yellow_flash_leader", "monkey_tailed_hero", "flame_blade_master" } }, -- + Demon Sweeper
+	{ cash = 2500000000, aura = 1500000, cards = { "fused_warrior", "first_sun_dancer" } },
+	{ cash = 25000000000, aura = 10000000, cards = { "wish_dragon", "demon_king_in_white" } },
 }
 
 Rebirth.IncomePerRebirth = 0.5 -- +50% income per rebirth

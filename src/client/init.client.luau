@@ -490,7 +490,7 @@ local function revealGrid(pulled, pack)
 		return a.key < b.key
 	end)
 
-	revealTitle.Text = pack.name .. " x" .. math.floor(#pulled / Config.CardsPerPack)
+	revealTitle.Text = pack.name .. " x" .. math.floor(#pulled / pack.size)
 	revealTitle.TextColor3 = COLORS.text
 	local summary = newCount .. " new"
 	if auraTotal > 0 then
@@ -554,7 +554,7 @@ local function buyPack(pack, count)
 	end)
 	buying = false
 	if ok and type(result) == "table" and result.ok then
-		if #result.cards > Config.CardsPerPack then
+		if #result.cards > pack.size then
 			revealGrid(result.cards, pack)
 		else
 			revealCards(result.cards, pack)
@@ -612,50 +612,39 @@ local function currencyText(currency, amount)
 end
 
 -- Packs ---------------------------------------------------------------
-local function oddsText(pack)
-	local total = 0
-	for _, rarityName in ipairs(Cards.RarityOrder) do
-		total = total + Packs.adjustedWeight(pack, rarityName, state.luck)
-	end
-	local parts = {}
-	for _, rarityName in ipairs(Cards.RarityOrder) do
-		local weight = Packs.adjustedWeight(pack, rarityName, state.luck)
-		if weight > 0 then
-			local percent = weight / total * 100
-			local text = percent >= 10 and string.format("%d%%", math.floor(percent + 0.5)) or string.format("%.2g%%", percent)
-			table.insert(parts, rarityName .. " " .. text)
-		end
-	end
-	return table.concat(parts, "  ·  ")
-end
-
 panels.Packs = function()
 	titleLabel.Text = "🎴 Pack Shop"
 	useList()
 	local tier = state.upgrades.store + 1
 	for order, pack in ipairs(Packs.List) do
-		local row = newRow(order, 84)
+		local row = newRow(order, 100)
 		local swatch = make("Frame", {
-			Position = UDim2.new(0, 10, 0, 10),
-			Size = UDim2.new(0, 46, 0, 64),
+			Position = UDim2.new(0, 10, 0, 12),
+			Size = UDim2.new(0, 54, 0, 76),
 			BackgroundColor3 = pack.color,
 			BorderSizePixel = 0,
 		}, row)
 		round(swatch, 6)
-		newLabel(swatch, "🎴", UDim2.new(), UDim2.new(1, 0, 1, 0), { TextSize = 26, TextXAlignment = Enum.TextXAlignment.Center })
+		newLabel(swatch, "🎴", UDim2.new(), UDim2.new(1, 0, 1, 0), { TextSize = 28, TextXAlignment = Enum.TextXAlignment.Center })
 		addPackImage(swatch, pack)
 
-		newLabel(row, pack.name .. "  ·  " .. Packs.setsText(pack), UDim2.new(0, 68, 0, 8), UDim2.new(1, -240, 0, 24), {
+		local title = pack.name .. "  ·  " .. pack.size .. " cards"
+		if pack.sets == nil then
+			title = title .. "  ·  all sets"
+		end
+		newLabel(row, title, UDim2.new(0, 76, 0, 6), UDim2.new(1, -248, 0, 24), {
 			Font = Enum.Font.FredokaOne,
-			TextSize = 20,
+			TextSize = 19,
+			TextWrapped = false,
+			TextTruncate = Enum.TextTruncate.AtEnd,
 		})
-		newLabel(row, oddsText(pack), UDim2.new(0, 68, 0, 34), UDim2.new(1, -240, 0, 42), {
+		newLabel(row, table.concat(Packs.oddsLines(pack, state.luck), "\n"), UDim2.new(0, 76, 0, 32), UDim2.new(1, -248, 0, 64), {
 			TextSize = 12,
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
 		})
 
-		local buttonPosition = UDim2.new(1, -160, 0, 8)
+		local buttonPosition = UDim2.new(1, -160, 0, 14)
 		local buttonSize = UDim2.new(0, 148, 0, 40)
 		if tier >= pack.storeTier then
 			-- bulk buttons under the main one
@@ -663,7 +652,7 @@ panels.Packs = function()
 			local x = -160
 			for _, size in ipairs(Config.PackBulkSizes) do
 				if size > 1 then
-					newButton(row, "x" .. size, UDim2.new(1, x, 0, 52), UDim2.new(0, 72, 0, 26), bulkColor, function()
+					newButton(row, "x" .. size, UDim2.new(1, x, 0, 60), UDim2.new(0, 72, 0, 26), bulkColor, function()
 						buyPack(pack, size)
 					end).TextSize = 14
 					x = x + 76
@@ -674,7 +663,7 @@ panels.Packs = function()
 			local locked = newButton(row, "🔒 " .. Upgrades.StoreTiers[pack.storeTier].name, buttonPosition, buttonSize, COLORS.locked, nil)
 			locked.TextSize = 13
 			locked.AutoButtonColor = false
-		elseif pack.id == "starter" and state.freePacks > 0 then
+		elseif pack.id == Packs.StarterId and state.freePacks > 0 then
 			newButton(row, "FREE!", buttonPosition, buttonSize, COLORS.good, function()
 				buyPack(pack)
 			end)
@@ -760,7 +749,7 @@ panels.Cards = function()
 		newButton(cell, "Display", UDim2.new(0, 4, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.button, function()
 			Remotes.PlaceCard:FireServer(key)
 		end).TextSize = 13
-		newButton(cell, "Sell " .. Format.cash(Cards.getSellValue(key, Config.SellMultiplier)), UDim2.new(0.5, 2, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.bad, function()
+		newButton(cell, "Sell " .. Format.cash(Cards.getSellValue(key)), UDim2.new(0.5, 2, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.bad, function()
 			Remotes.SellCard:FireServer(key, 1)
 		end).TextSize = 11
 
@@ -798,42 +787,92 @@ panels.Cards = function()
 	end
 end
 
--- Collection book --------------------------------------------------------
+-- Collection book: one binder page per set ---------------------------------
+local bookSet = Cards.SetOrder[1]
+
 panels.Book = function()
-	useGrid(120, 190)
-	local found, total = 0, 0
-	for order, def in ipairs(Cards.List) do
+	useList()
+
+	-- overall progress (every card and variant counts toward the income bonus)
+	local discovered = 0
+	for _ in pairs(state.collection) do
+		discovered = discovered + 1
+	end
+	local bonus = math.floor(discovered * Config.CollectionBonusPerCard * 100 + 0.5)
+	titleLabel.Text = "📖 Collection  ·  +" .. bonus .. "% income"
+
+	-- set tabs
+	local tabs = newRow(1, 40)
+	tabs.BackgroundTransparency = 1
+	local tabWidth = math.floor(640 / #Cards.SetOrder) - 6
+	for index, setId in ipairs(Cards.SetOrder) do
+		local set = Cards.Sets[setId]
+		local found, total = Cards.setProgress(state.collection, setId)
+		local label = set.name .. (found >= total and "  ✓" or "")
+		newButton(tabs, label, UDim2.new(0, (index - 1) * (tabWidth + 6), 0, 2), UDim2.new(0, tabWidth, 0, 36), bookSet == setId and COLORS.button or COLORS.row, function()
+			bookSet = setId
+			renderPanel()
+		end).TextSize = 13
+	end
+
+	local set = Cards.Sets[bookSet]
+	local found, total = Cards.setProgress(state.collection, bookSet)
+	local info = newRow(2, 38)
+	local complete = found >= total
+	local bonusPercent = math.floor(Config.SetCompleteBonus * 100 + 0.5)
+	local progress = set.code .. "  ·  " .. found .. "/" .. total .. " cards  ·  "
+	if complete then
+		progress = progress .. "SET COMPLETE: +" .. bonusPercent .. "% income!"
+	else
+		progress = progress .. "complete the set for +" .. bonusPercent .. "% income"
+	end
+	newLabel(info, progress, UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+		TextSize = 14,
+		TextColor3 = complete and Color3.fromRGB(255, 215, 90) or COLORS.text,
+	})
+
+	-- the binder page: every card of the set in number order
+	local page = make("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -12, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 3,
+	}, body)
+	make("UIGridLayout", {
+		CellSize = UDim2.new(0, 116, 0, 184),
+		CellPadding = UDim2.new(0, 8, 0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, page)
+	for order, def in ipairs(set.cards) do
 		local best = nil
 		local variantsFound = 0
 		for _, variantId in ipairs(Cards.VariantOrder) do
-			total = total + 1
 			local key = Cards.makeKey(def.id, variantId)
 			if state.collection[key] then
-				found = found + 1
 				variantsFound = variantsFound + 1
 				best = key
 			end
 		end
 
-		local cell = make("Frame", { BackgroundTransparency = 1, LayoutOrder = order }, body)
+		local cell = make("Frame", { BackgroundTransparency = 1, LayoutOrder = order }, page)
 		local holder = make("Frame", {
 			BackgroundTransparency = 1,
 			Position = UDim2.new(0, 4, 0, 4),
-			Size = UDim2.new(1, -8, 0, 157),
+			Size = UDim2.new(1, -8, 0, 151),
 		}, cell)
 		if best then
 			CardView.new(best).Parent = holder
 		else
 			CardView.newUnknown(def).Parent = holder
 		end
-		newLabel(cell, "Variants " .. variantsFound .. "/" .. #Cards.VariantOrder, UDim2.new(0, 0, 0, 166), UDim2.new(1, 0, 0, 18), {
-			TextSize = 12,
+		-- one mark per variant collected: Normal, Holo, Gold, Prismatic
+		local dots = string.rep("◆", variantsFound) .. string.rep("◇", #Cards.VariantOrder - variantsFound)
+		newLabel(cell, dots, UDim2.new(0, 0, 0, 160), UDim2.new(1, 0, 0, 18), {
+			TextSize = 13,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextColor3 = variantsFound == #Cards.VariantOrder and Color3.fromRGB(255, 215, 90) or COLORS.dim,
 		})
 	end
-	local bonus = math.floor(found * Config.CollectionBonusPerCard * 100 + 0.5)
-	titleLabel.Text = "📖 Collection  (" .. found .. "/" .. total .. ")  +" .. bonus .. "% income"
 end
 
 -- Upgrades -----------------------------------------------------------------
@@ -1555,7 +1594,7 @@ local function tutorialHint()
 	if owned and not displayed then
 		return "🃏 Open My Cards and tap Display Best to start earning"
 	end
-	if displayed and discovered < 8 and state.upgrades.auto < 1 and state.cash < 25 then
+	if displayed and discovered < 8 and state.upgrades.auto < 1 and state.cash < 100 then
 		return "💵 Walk over the green pads in your store to collect cash"
 	end
 	return ""

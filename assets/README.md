@@ -7,7 +7,7 @@ to change colours, text or sizes.
 | --- | --- | --- |
 | `icon.png` | 512×512 | Game icon (Creator Dashboard → Configure → Basic settings) |
 | `thumbnail.png` | 1920×1080 | Game thumbnail |
-| `packs/<id>.png` | 512×716 | Pack cover art, one per pack in `src/shared/Packs.luau` |
+| `packs/<id>.png` | 512×716 | Pack cover art, named by pack id (`<set>_booster`, `<set>_elite`, `champion`, `aura`) |
 
 To use a pack cover in the game: upload the PNG as an Image on the Creator Dashboard, copy its
 asset id, and add `image = "rbxassetid://<id>"` to that pack in `src/shared/Packs.luau`.

@@ -27,6 +27,22 @@ vault that carries cards into the next run, CI, bulk pack opening, auto collecto
 income bonus, first-minute hints, Neon Arcade set, daily quests and login reward, card types with
 display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds, trading and an in-server market (stealing was removed).
 
+## Track C — cards and sets (trading-card-game structure)
+
+Done: four numbered sets (Uno Price, Noodle Ninja, Dragon Bowl, Demon Sweeper; 37 cards each),
+Booster and Elite packs built from slots, binder-style collection book, set completion bonus.
+
+- [ ] **C1 New sets.** Add a fifth and sixth set (hero school, giant-walls, sorcery school themes)
+  with their own boosters; extend store tiers or rebirth gating so they unlock later.
+- [ ] **C2 Bigger sets.** Grow each set toward 60+ cards; keep the slot odds and re-run the
+  sell-back check (cards in an average pack must sell for well under the pack price).
+- [ ] **C3 Card art.** Original illustrations per card via the image field. Must be original
+  designs, not lookalikes of existing characters.
+- [ ] **C4 Special card treatments.** Full-art and alternate-art versions as extra secret numbers.
+- [ ] **C5 Set rotation / limited sets.** A time-limited promo set tied to events.
+- [ ] **C6 Balance pass.** Early game is fast now that every booster holds a rare; tune set
+  multipliers, pack prices and stand costs with the simulator (T4).
+
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 
 - [x] **T1 Toolchain + CI.** Done: selene, `luau-lsp analyze` and `rojo build` run in GitHub

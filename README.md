@@ -8,9 +8,9 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
 
 1. You spawn at your own store plot with one free Starter Pack.
 2. Open it (🎴 Packs button, or the Pack Shop counter in your store) — 5 cards per booster.
-3. Put cards on your display stands (🃏 My Cards → Display, or "Display Best").
-4. Each stand builds up cash; walk over the green pad in front of it to collect.
-5. Spend cash on better packs, more stands, and store upgrades (income multiplier + new packs).
+3. Put cards in your active deck (🃏 Deck & Cards → To deck, or "Auto-fill Deck").
+4. The deck earns cash into the register at the front of your store; walk over it to collect.
+5. Spend cash on better packs, more deck slots, and store upgrades (income multiplier + new packs).
 6. Epic and better cards earn aura every second and a burst of aura when pulled.
 7. Three copies of the same card fuse into its next variant (Holo → Gold → Prismatic), and your
    store keeps earning a share of its income for up to 4 hours while you are offline.
@@ -31,8 +31,16 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
     a set gives +25% income.
 11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
     earn cash) pay aura, and a login streak reward grows up to day 7.
-12. **Card types and synergies:** every card is a Warrior, Beast, Mystic, Tech or Star. Display
-    3, 5 or 8 of one type for +15%, +35% or +60% income.
+12. **Active deck and combos.** Your deck is the set of cards that earn. It starts with 4 slots
+    and grows to 64. Cash piles up at the cash register in your store. Combos add bonuses on top:
+    several cards of one type (Warrior, Beast, Mystic, Tech, Star), several from one set, several
+    with the same effect, and **story combos** such as Pooh + Piglet + Eeyore + Tigger or Holmes +
+    Watson + Mrs. Hudson + Lestrade. Combos pay in cash, aura or luck.
+    **Card effects:** a pulled card can be Shiny (x2), Slimy (x1.5, +2% deck cash), Lucky (x1.5,
+    +0.5 luck), Shadow (x3, +2 aura/s), Golden (x5) or Prismatic (x20, deck cash and luck).
+    **Luck** is a stat with many sources: Lucky Charms (cash), Aura Luck (aura), the Fortune perk,
+    rebirths, completed sets, tower floors, deck combos and lucky events. Each level makes better
+    rarities 10% more likely.
 13. **Battle Tower:** your three strongest cards fight a 50-floor tower for aura and cash. Each
     type deals +30% damage to the next one in the cycle.
 14. **Aura Shrine:** permanent perks bought with aura that survive rebirth (starting cash, cheaper
@@ -82,7 +90,8 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Packs.luau` | Pack slots and odds, which store tier unlocks each set |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |
 | `src/shared/Perks.luau` | Aura Shrine perks: prices, levels, effects |
-| `src/shared/Synergy.luau` | Display synergy thresholds and bonuses |
+| `src/shared/Combos.luau` | Deck combos: type, set, effect and story combos and their bonuses |
+| `src/shared/Luck.luau` | Every source of the Luck stat |
 | `src/shared/Battle.luau` | Battle rules, tower enemy strength, tower rewards |
 | `src/shared/Quests.luau` | Quest types, goals and rewards, daily reward size |
 | `src/shared/Rebirth.luau` | Rebirth requirements (cash, aura, cards), bonuses, vault size |

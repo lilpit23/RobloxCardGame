@@ -14,7 +14,8 @@ local CardView = require(Shared:WaitForChild("CardView"))
 local Rebirth = require(Shared:WaitForChild("Rebirth"))
 local Quests = require(Shared:WaitForChild("Quests"))
 local Perks = require(Shared:WaitForChild("Perks"))
-local Synergy = require(Shared:WaitForChild("Synergy"))
+local Combos = require(Shared:WaitForChild("Combos"))
+local Luck = require(Shared:WaitForChild("Luck"))
 local Battle = require(Shared:WaitForChild("Battle"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -28,7 +29,7 @@ local state = {
 	inventory = {},
 	slots = {},
 	collection = {},
-	upgrades = { store = 0, slots = 0, luck = 0, auto = 0 },
+	upgrades = { store = 0, slots = 0, luck = 0, auto = 0, charm = 0 },
 	freePacks = 0,
 	rebirths = 0,
 	vault = {},
@@ -163,7 +164,7 @@ end
 
 local cashLabel = newPill(1, COLORS.cash)
 local auraLabel = newPill(2, COLORS.aura)
-local rateLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 50), {
+local rateLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 52), {
 	TextYAlignment = Enum.TextYAlignment.Top,
 	LayoutOrder = 3,
 	TextSize = 13,
@@ -676,12 +677,12 @@ panels.Packs = function()
 	end
 end
 
--- Cards (inventory) ----------------------------------------------------
-local function newCardCell(key, order)
+-- Deck + cards ----------------------------------------------------------
+local function newCardCell(parent, key, order)
 	local cell = make("Frame", {
 		BackgroundTransparency = 1,
 		LayoutOrder = order,
-	}, body)
+	}, parent)
 	local holder = make("Frame", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 4, 0, 4),
@@ -691,6 +692,17 @@ local function newCardCell(key, order)
 	return cell
 end
 
+-- "Shiny: x2 cash   ·   Slimy: x1.5 cash, +2% deck cash   ·   ..."
+local function effectsGuide()
+	local parts = {}
+	for _, variantId in ipairs(Cards.VariantOrder) do
+		if variantId ~= "normal" then
+			table.insert(parts, Cards.Variants[variantId].name .. ": " .. Cards.effectText(variantId))
+		end
+	end
+	return table.concat(parts, "   ·   ")
+end
+
 panels.Cards = function()
 	local used = 0
 	for index = 1, state.slotCount do
@@ -698,25 +710,77 @@ panels.Cards = function()
 			used = used + 1
 		end
 	end
-	titleLabel.Text = "🃏 My Cards  (" .. used .. "/" .. state.slotCount .. " on display)"
-	actionButton.Text = "Display Best"
+	titleLabel.Text = "🃏 Active Deck  (" .. used .. "/" .. state.slotCount .. " slots)"
+	actionButton.Text = "Auto-fill Deck"
 	actionButton.Visible = true
-	useGrid(120, 241)
+	useList()
+
+	-- Combos: what the current deck switches on, and story combos that are close
+	local combos = Combos.evaluate(state.slots)
+	local lines = {}
+	for _, combo in ipairs(combos.active) do
+		table.insert(lines, "✅ " .. combo.name .. "   " .. combo.text)
+	end
+	if #lines == 0 then
+		table.insert(lines, "No combos yet. Put 3 cards of one type, 4 from one set, or a story group in your deck.")
+	end
+	for index = 1, math.min(3, #combos.progress) do
+		local entry = combos.progress[index]
+		table.insert(lines, "▫️ " .. entry.name .. "  " .. entry.have .. "/" .. entry.need .. "   (" .. entry.text .. ")")
+	end
+	local comboRow = newRow(1, 40 + #lines * 18)
+	local summary = "Combos:  x" .. string.format("%.2f", combos.income) .. " cash"
+	if combos.aura > 1 then
+		summary = summary .. "  ·  x" .. string.format("%.2f", combos.aura) .. " aura"
+	end
+	if combos.luck > 0 then
+		summary = summary .. "  ·  +" .. combos.luck .. " luck"
+	end
+	newLabel(comboRow, summary, UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 18,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+	})
+	newLabel(comboRow, table.concat(lines, "\n"), UDim2.new(0, 14, 0, 32), UDim2.new(1, -28, 0, #lines * 18), {
+		TextSize = 13,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextWrapped = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+
+	local guideRow = newRow(2, 58)
+	newLabel(guideRow, "Card effects  —  " .. effectsGuide(), UDim2.new(0, 14, 0, 4), UDim2.new(1, -28, 1, -8), {
+		TextSize = 12,
+		TextColor3 = COLORS.dim,
+	})
+
+	-- the deck first, then the rest of the collection
+	local page = make("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -12, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 3,
+	}, body)
+	make("UIGridLayout", {
+		CellSize = UDim2.new(0, 120, 0, 241),
+		CellPadding = UDim2.new(0, 6, 0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, page)
 
 	local order = 0
 	for index = 1, state.slotCount do
 		local key = state.slots[tostring(index)]
 		if key then
 			order = order + 1
-			local cell = newCardCell(key, order)
-			newLabel(cell, "ON DISPLAY", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 16), {
+			local cell = newCardCell(page, key, order)
+			newLabel(cell, "IN DECK", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 16), {
 				TextSize = 11,
 				TextXAlignment = Enum.TextXAlignment.Center,
 				BackgroundTransparency = 0,
 				BackgroundColor3 = COLORS.good,
 				ZIndex = 3,
 			})
-			newButton(cell, "Remove", UDim2.new(0, 4, 0, 167), UDim2.new(1, -8, 0, 32), COLORS.locked, function()
+			newButton(cell, "Take out", UDim2.new(0, 4, 0, 167), UDim2.new(1, -8, 0, 32), COLORS.locked, function()
 				Remotes.RemoveCard:FireServer(index)
 			end).TextSize = 14
 		end
@@ -738,7 +802,7 @@ panels.Cards = function()
 
 	for _, key in ipairs(keys) do
 		order = order + 1
-		local cell = newCardCell(key, order)
+		local cell = newCardCell(page, key, order)
 		newLabel(cell, "x" .. state.inventory[key], UDim2.new(1, -44, 0, 0), UDim2.new(0, 44, 0, 18), {
 			TextSize = 13,
 			TextXAlignment = Enum.TextXAlignment.Center,
@@ -746,7 +810,7 @@ panels.Cards = function()
 			BackgroundColor3 = Color3.fromRGB(20, 20, 28),
 			ZIndex = 3,
 		})
-		newButton(cell, "Display", UDim2.new(0, 4, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.button, function()
+		newButton(cell, "To deck", UDim2.new(0, 4, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.button, function()
 			Remotes.PlaceCard:FireServer(key)
 		end).TextSize = 13
 		newButton(cell, "Sell " .. Format.cash(Cards.getSellValue(key)), UDim2.new(0.5, 2, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.bad, function()
@@ -778,8 +842,8 @@ panels.Cards = function()
 	end
 
 	if order == 0 then
-		body:ClearAllChildren()
-		newLabel(body, "No cards yet — open a pack from the Pack Shop!", UDim2.new(0, 0, 0, 20), UDim2.new(1, 0, 0, 40), {
+		page:Destroy()
+		newLabel(newRow(3, 60), "No cards yet — open a pack from the Pack Shop!", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
 			TextSize = 18,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextColor3 = COLORS.dim,
@@ -973,7 +1037,7 @@ panels.Rebirth = function()
 
 	local vaultLines = math.ceil(state.vaultSlots / 5)
 	local vaultRow = newRow(3, 40 + vaultLines * 222)
-	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Add cards from My Cards.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Add cards from Deck & Cards.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
 		TextSize = 14,
 	})
 	local strip = make("Frame", {
@@ -1111,6 +1175,26 @@ end
 local renderStoreUpgrades = panels.Upgrades
 panels.Upgrades = function()
 	renderStoreUpgrades()
+
+	-- Luck stat and where it comes from
+	local sources = Luck.sources(state, state.luckEventEndsAt > os.time())
+	local parts = {}
+	for _, source in ipairs(sources) do
+		table.insert(parts, source.name .. " +" .. source.levels)
+	end
+	local luckRow = newRow(0, 74)
+	luckRow.BackgroundColor3 = Color3.fromRGB(30, 70, 50)
+	newLabel(luckRow, "🍀 Luck " .. Luck.percentText(state.luck) .. "   (" .. state.luck .. " levels)", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 24), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 20,
+		TextColor3 = Color3.fromRGB(150, 255, 170),
+	})
+	local breakdown = #parts > 0 and table.concat(parts, "   ·   ") or "No luck yet. Buy Lucky Charms, finish sets, climb the tower or build luck combos."
+	newLabel(luckRow, "Each level makes better rarities 10% more likely.  " .. breakdown, UDim2.new(0, 14, 0, 32), UDim2.new(1, -28, 0, 38), {
+		TextSize = 12,
+		TextColor3 = COLORS.dim,
+		TextYAlignment = Enum.TextYAlignment.Top,
+	})
 	local header = newRow(20, 44)
 	header.BackgroundColor3 = Color3.fromRGB(70, 35, 80)
 	newLabel(header, "✨ Aura Shrine — permanent perks that survive rebirth", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
@@ -1554,7 +1638,7 @@ local packsButton = nil
 local questsButton = nil
 local MENU = {
 	{ "Packs", "🎴 Packs", Color3.fromRGB(225, 80, 120) },
-	{ "Cards", "🃏 My Cards", COLORS.button },
+	{ "Cards", "🃏 Deck & Cards", COLORS.button },
 	{ "Book", "📖 Collection", Color3.fromRGB(150, 95, 230) },
 	{ "Upgrades", "🏪 Upgrades", COLORS.good },
 	{ "Trade", "🤝 Trade", Color3.fromRGB(40, 170, 160) },
@@ -1592,10 +1676,10 @@ local function tutorialHint()
 		return "🎁 Open your free pack — tap the FREE PACK button!"
 	end
 	if owned and not displayed then
-		return "🃏 Open My Cards and tap Display Best to start earning"
+		return "🃏 Open Deck & Cards and tap Auto-fill Deck to start earning"
 	end
 	if displayed and discovered < 8 and state.upgrades.auto < 1 and state.cash < 100 then
-		return "💵 Walk over the green pads in your store to collect cash"
+		return "💵 Walk over the green cash register in your store to collect"
 	end
 	return ""
 end
@@ -1610,9 +1694,10 @@ local function refreshHud()
 	if state.auraPerSec > 0 then
 		rate = rate .. "   +" .. Format.short(state.auraPerSec) .. " aura/s"
 	end
-	local synergy = Synergy.describe(state.slots)
-	if synergy ~= "" then
-		rate = rate .. "\nSynergy:  " .. synergy
+	local combos = Combos.evaluate(state.slots)
+	rate = rate .. "\n🍀 Luck " .. Luck.percentText(state.luck)
+	if #combos.active > 0 then
+		rate = rate .. "   ·   " .. #combos.active .. " combos"
 	end
 	local eventLeft = state.luckEventEndsAt - os.time()
 	if eventLeft > 0 then

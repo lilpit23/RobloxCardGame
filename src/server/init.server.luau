@@ -12,7 +12,8 @@ local Format = require(Shared:WaitForChild("Format"))
 local Rebirth = require(Shared:WaitForChild("Rebirth"))
 local Quests = require(Shared:WaitForChild("Quests"))
 local Perks = require(Shared:WaitForChild("Perks"))
-local Synergy = require(Shared:WaitForChild("Synergy"))
+local Combos = require(Shared:WaitForChild("Combos"))
+local Luck = require(Shared:WaitForChild("Luck"))
 local Battle = require(Shared:WaitForChild("Battle"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
@@ -69,7 +70,7 @@ remotes.Parent = ReplicatedStorage
 ---------------------------------------------------------------------
 -- Session state (not saved)
 ---------------------------------------------------------------------
--- [player] = { plot, pending = {[slot] = cash}, rev, questRev, dirty, ... }
+-- [player] = { plot, pending = uncollected cash at the register, rev, questRev, dirty, ... }
 local sessions = {}
 
 -- Token-bucket rate limit, per player and per remote. First line of every remote handler.
@@ -112,23 +113,25 @@ local function collectionCount(data)
 	return count
 end
 
--- Total income multiplier: store tier x rebirth bonus x collection book bonus x display synergies.
+-- Total income multiplier: store tier x rebirth bonus x collection book bonus x deck combos
+-- x completed sets.
 local function storeMult(data)
 	local collectionBonus = 1 + Config.CollectionBonusPerCard * collectionCount(data)
-	local synergy = Synergy.compute(data.slots)
+	local combos = Combos.evaluate(data.slots)
 	local setBonus = 1 + Config.SetCompleteBonus * Cards.completedSets(data.collection)
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * synergy * setBonus
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus
+end
+
+-- Aura multiplier: Aura Magnet perk x deck combos.
+local function auraMult(data)
+	return Perks.auraMult(data.perks) * Combos.evaluate(data.slots).aura
 end
 
 local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
 
--- Bought luck levels, plus the free ones from rebirths, plus the lucky event.
+-- The player's total Luck stat, from every source (see Luck.luau).
 local function luckLevel(data)
-	local level = data.upgrades.luck + Rebirth.luckBonus(data.rebirths)
-	if os.time() < luckEventEndsAt then
-		level = level + Config.LuckEvent.BonusLevels
-	end
-	return level
+	return Luck.total(data, os.time() < luckEventEndsAt)
 end
 
 local function vaultSlots(data)
@@ -144,7 +147,7 @@ local function totals(data)
 			aura = aura + Cards.getAura(key)
 		end
 	end
-	return income * storeMult(data), aura * Perks.auraMult(data.perks)
+	return income * storeMult(data), aura * auraMult(data)
 end
 
 local function pushState(player)
@@ -357,7 +360,7 @@ local function placeCard(player, key, index)
 	if index == nil then
 		index = firstEmptySlot(data)
 		if index == nil then
-			notify(player, "All display stands are full. Buy more stands or remove a card.", "error")
+			notify(player, "Your deck is full. Buy more deck slots or take a card out.", "error")
 			return
 		end
 	end
@@ -531,7 +534,7 @@ BuyUpgradeRemote.OnServerEvent:Connect(function(player, upgradeId)
 
 	if upgradeId == "slots" then
 		Plots.setSlotCount(session.plot, slotCount(data))
-		notify(player, "New display stand built!", "good")
+		notify(player, "New deck slot unlocked!", "good")
 	elseif upgradeId == "store" then
 		Plots.setTier(session.plot, data.upgrades.store + 1)
 		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths)
@@ -730,9 +733,10 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	data.aura = 0
 	data.inventory = {}
 	data.slots = {}
-	data.upgrades = { store = 0, slots = 0, luck = 0, auto = 0 }
+	data.upgrades = { store = 0, slots = 0, luck = 0, auto = 0, charm = 0 }
 	data.freePacks = 1
-	session.pending = {}
+	session.pending = 0
+	Plots.setPending(session.plot, 0)
 
 	Plots.resetStands(session.plot, slotCount(data))
 	Plots.setTier(session.plot, 1)
@@ -1054,20 +1058,20 @@ end
 -- Plot callbacks
 ---------------------------------------------------------------------
 Plots.init({
-	onCollect = function(plot, index, player)
+	onCollect = function(plot, player)
 		local session = sessions[player]
 		local data = PlayerData.get(player)
 		if session == nil or data == nil then
 			return
 		end
-		local amount = session.pending[index] or 0
+		local amount = session.pending
 		if amount < 1 then
 			return
 		end
-		session.pending[index] = 0
+		session.pending = 0
 		data.cash = data.cash + amount
 		questProgress(player, "collect", amount)
-		Plots.setPending(plot, index, 0)
+		Plots.setPending(plot, 0)
 		touch(player, false)
 	end,
 
@@ -1096,35 +1100,34 @@ task.spawn(function()
 		for player, session in pairs(sessions) do
 			local data = PlayerData.get(player)
 			if data then
-				local mult = storeMult(data)
-				local auraGain = 0
-				local pendingTotal = 0
+				-- The active deck earns cash into the register and radiates aura.
+				local income, auraGain = 0, 0
 				local hasCards = next(data.inventory) ~= nil
 				for index = 1, slotCount(data) do
 					local key = data.slots[tostring(index)]
 					if key then
 						hasCards = true
-						session.pending[index] = (session.pending[index] or 0) + Cards.getIncome(key) * mult
+						income = income + Cards.getIncome(key)
 						auraGain = auraGain + Cards.getAura(key)
-						Plots.setPending(session.plot, index, session.pending[index])
 					end
-					pendingTotal = pendingTotal + (session.pending[index] or 0)
+				end
+				if income > 0 then
+					session.pending = session.pending + income * storeMult(data)
+					if data.upgrades.auto < 1 then
+						Plots.setPending(session.plot, session.pending)
+					end
 				end
 
 				-- Auto Collector upgrade: bank everything straight away.
-				if data.upgrades.auto >= 1 and pendingTotal >= 1 then
-					data.cash = data.cash + pendingTotal
-					questProgress(player, "collect", pendingTotal)
-					for index = 1, slotCount(data) do
-						if (session.pending[index] or 0) > 0 then
-							session.pending[index] = 0
-							Plots.setPending(session.plot, index, 0)
-						end
-					end
+				if data.upgrades.auto >= 1 and session.pending >= 1 then
+					data.cash = data.cash + session.pending
+					questProgress(player, "collect", session.pending)
+					session.pending = 0
+					Plots.setPending(session.plot, 0)
 					session.dirty = true
 				end
 				if auraGain > 0 then
-					data.aura = data.aura + auraGain * Perks.auraMult(data.perks)
+					data.aura = data.aura + auraGain * auraMult(data)
 					session.dirty = true
 				end
 
@@ -1134,7 +1137,7 @@ task.spawn(function()
 				end
 
 				-- Never let a player get stuck with no cards and no money.
-				if not hasCards and data.freePacks < 1 and data.cash + pendingTotal < STARTER.cost then
+				if not hasCards and data.freePacks < 1 and data.cash + session.pending < STARTER.cost then
 					data.freePacks = 1
 					session.rev = session.rev + 1
 					session.dirty = true
@@ -1210,7 +1213,7 @@ local function onPlayerAdded(player)
 
 	local session = {
 		plot = plot,
-		pending = {},
+		pending = 0,
 		rev = 1,
 		questRev = 0,
 		dirty = true,
@@ -1263,9 +1266,8 @@ local function onPlayerRemoving(player)
 	local data = PlayerData.get(player)
 	if session and data then
 		-- bank uncollected cash so nothing is lost
-		for _, amount in pairs(session.pending) do
-			data.cash = data.cash + amount
-		end
+		data.cash = data.cash + session.pending
+		session.pending = 0
 	end
 	local trade = trades[player]
 	if trade then

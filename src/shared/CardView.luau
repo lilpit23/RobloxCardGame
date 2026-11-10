@@ -94,6 +94,19 @@ function CardView.new(key)
 		rainbow.Parent = stroke
 	end
 
+	if variant.tint then
+		-- effect colour wash (Slimy green, Shadow dark, Golden gold, ...)
+		local wash = Instance.new("Frame")
+		wash.Name = "EffectTint"
+		wash.BorderSizePixel = 0
+		wash.Size = UDim2.new(1, 0, 1, 0)
+		wash.BackgroundColor3 = variant.tint
+		wash.BackgroundTransparency = 0.55
+		wash.Parent = frame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.07, 0)
+		corner.Parent = wash
+	end
 	addSetBands(frame, def, 0.1)
 	addLabel(frame, def.name, 0.02, 0.15)
 

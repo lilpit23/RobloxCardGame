@@ -6,7 +6,7 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
 ## Layout
 
 - `src/shared/` → `ReplicatedStorage.Shared`. Data tables and pure logic used by both sides:
-  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Synergy`, `Battle`, `Format`, `CardView` (builds a card's GUI).
+  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Battle`, `Format`, `CardView` (builds a card's GUI).
 - `src/server/` → `ServerScriptService.Server`. `init.server.luau` holds the remotes and game
   rules; `PlayerData.luau` is the only code that touches DataStores; `Plots.luau` builds the map
   and each player's store out of parts.
@@ -37,6 +37,10 @@ way so the repo stays the whole game.
   copyright, renamed or not.
 - A card's id is its name slugified (`winnie_the_pooh`) and is what gets saved. Renaming or
   removing a card orphans owned copies, so add a migration when that matters.
+- The active deck is `data.slots` (4 to 64 slots, shown as rows of cards in the store). Its cash
+  goes to one register per store (`session.pending`). Deck bonuses come only from `Combos.evaluate`
+  and luck only from `Luck.sources`; add new bonus sources there so server and client agree.
+- Card effects are `Cards.Variants` (Shiny, Slimy, Lucky, Shadow, Golden, Prismatic).
 - Booster structure: packs are lists of slots (`Packs.luau`). Sell prices are a share of the set's
   Booster price (`Cards.Rarities[...].sell`); the cards in an average pack must sell for well
   under the pack price, including at maximum luck and discount.

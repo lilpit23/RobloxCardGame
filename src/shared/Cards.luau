@@ -13,21 +13,87 @@ Cards.Rarities = {
 	Common = { order = 1, color = Color3.fromRGB(140, 150, 165), aura = 0, income = 1, symbol = "●", sell = 0.015 },
 	Uncommon = { order = 2, color = Color3.fromRGB(70, 185, 95), aura = 0, income = 5, symbol = "◆", sell = 0.04 },
 	Rare = { order = 3, color = Color3.fromRGB(55, 130, 235), aura = 0, income = 15, symbol = "★", sell = 0.08 },
-	Epic = { order = 4, color = Color3.fromRGB(160, 75, 230), aura = 1, income = 120, symbol = "★★", sell = 0.25 },
-	Legendary = { order = 5, color = Color3.fromRGB(245, 170, 40), aura = 5, income = 900, symbol = "★★★", sell = 0.9 },
-	Mythic = { order = 6, color = Color3.fromRGB(235, 55, 95), aura = 25, income = 8000, symbol = "✦", sell = 3.5 },
-	Secret = { order = 7, color = Color3.fromRGB(35, 35, 45), aura = 150, income = 80000, symbol = "✪", sell = 15 },
+	Epic = { order = 4, color = Color3.fromRGB(160, 75, 230), aura = 1, income = 120, symbol = "★★", sell = 0.2 },
+	Legendary = { order = 5, color = Color3.fromRGB(245, 170, 40), aura = 5, income = 900, symbol = "★★★", sell = 0.7 },
+	Mythic = { order = 6, color = Color3.fromRGB(235, 55, 95), aura = 25, income = 8000, symbol = "✦", sell = 2.5 },
+	Secret = { order = 7, color = Color3.fromRGB(35, 35, 45), aura = 150, income = 80000, symbol = "✪", sell = 10 },
 }
 
--- Variants multiply income and aura. "chance" is rolled per card pulled.
-Cards.VariantOrder = { "normal", "holo", "gold", "prism" }
+-- Card EFFECTS (called "variants" in code). A pulled card can come with one effect.
+--   mult       = cash multiplier for that card
+--   chance     = base chance per card pulled (luck raises it)
+--   deckIncome = while in the deck, adds this much cash bonus to the WHOLE deck
+--   deckLuck   = while in the deck, adds this many luck levels
+--   auraFlat   = extra aura per second, even on cards that normally give none
+--   auraMult   = aura multiplier (defaults to mult)
+--   tint       = colour wash over the card face
+Cards.VariantOrder = { "normal", "holo", "slimy", "lucky", "shadow", "gold", "prism" }
 
 Cards.Variants = {
 	normal = { name = "", mult = 1, chance = 0, color = Color3.fromRGB(25, 25, 30) },
-	holo = { name = "Holo", mult = 2, chance = 0.08, color = Color3.fromRGB(120, 235, 255) },
-	gold = { name = "Gold", mult = 5, chance = 0.02, color = Color3.fromRGB(255, 205, 60) },
-	prism = { name = "Prismatic", mult = 20, chance = 0.003, color = Color3.fromRGB(255, 255, 255) },
+	holo = { name = "Shiny", mult = 2, chance = 0.07, color = Color3.fromRGB(120, 235, 255) },
+	slimy = {
+		name = "Slimy",
+		mult = 1.5,
+		chance = 0.04,
+		deckIncome = 0.02,
+		color = Color3.fromRGB(110, 230, 90),
+		tint = Color3.fromRGB(90, 220, 70),
+	},
+	lucky = {
+		name = "Lucky",
+		mult = 1.5,
+		chance = 0.03,
+		deckLuck = 0.5,
+		color = Color3.fromRGB(60, 200, 120),
+		tint = Color3.fromRGB(40, 180, 110),
+	},
+	shadow = {
+		name = "Shadow",
+		mult = 3,
+		chance = 0.02,
+		auraFlat = 2,
+		color = Color3.fromRGB(120, 60, 200),
+		tint = Color3.fromRGB(20, 0, 45),
+	},
+	gold = {
+		name = "Golden",
+		mult = 5,
+		chance = 0.015,
+		color = Color3.fromRGB(255, 205, 60),
+		tint = Color3.fromRGB(255, 200, 40),
+	},
+	prism = {
+		name = "Prismatic",
+		mult = 20,
+		chance = 0.003,
+		deckIncome = 0.05,
+		deckLuck = 1,
+		color = Color3.fromRGB(255, 255, 255),
+	},
 }
+
+-- Effects are rolled rarest first; the first one that hits is kept.
+Cards.RollOrder = { "prism", "gold", "shadow", "lucky", "slimy", "holo" }
+
+-- Fusing 3 copies moves a card one step along this chain. Other effects are pull-only.
+Cards.FuseOrder = { "normal", "holo", "gold", "prism" }
+
+-- "x3 cash, +2 aura/s" — what an effect does, for the effects guide.
+function Cards.effectText(variantId)
+	local variant = Cards.Variants[variantId]
+	local parts = { "x" .. variant.mult .. " cash" }
+	if variant.auraFlat then
+		table.insert(parts, "+" .. variant.auraFlat .. " aura/s")
+	end
+	if variant.deckIncome then
+		table.insert(parts, "+" .. math.floor(variant.deckIncome * 100 + 0.5) .. "% deck cash")
+	end
+	if variant.deckLuck then
+		table.insert(parts, "+" .. variant.deckLuck .. " luck")
+	end
+	return table.concat(parts, ", ")
+end
 
 -- Card types. Used for display synergies and battles: each type beats the next one in
 -- TypeOrder (and the last beats the first).
@@ -459,11 +525,12 @@ function Cards.completedSets(collection)
 	return completed
 end
 
--- The variant one step up (normal -> holo -> gold -> prism), or nil at the top.
+-- The next step when fusing (normal -> Shiny -> Golden -> Prismatic), or nil if the effect
+-- cannot be fused further.
 function Cards.nextVariant(variantId)
-	for index, id in ipairs(Cards.VariantOrder) do
+	for index, id in ipairs(Cards.FuseOrder) do
 		if id == variantId then
-			return Cards.VariantOrder[index + 1]
+			return Cards.FuseOrder[index + 1]
 		end
 	end
 	return nil
@@ -482,7 +549,7 @@ function Cards.getAura(key)
 	if def == nil then
 		return 0
 	end
-	return Cards.Rarities[def.rarity].aura * variant.mult
+	return Cards.Rarities[def.rarity].aura * (variant.auraMult or variant.mult) + (variant.auraFlat or 0)
 end
 
 -- Cash for selling a card: a share of its set's Booster price, by rarity and variant.

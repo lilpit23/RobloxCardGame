@@ -7,7 +7,7 @@ local Perks = {}
 
 local START_CASH = { 500, 5000, 50000, 500000, 5000000 }
 
-Perks.Order = { "startCash", "discount", "aura", "offline", "vault" }
+Perks.Order = { "startCash", "discount", "fortune", "aura", "offline", "vault" }
 
 Perks.Defs = {
 	startCash = {
@@ -31,6 +31,16 @@ Perks.Defs = {
 		end,
 		describe = function(level)
 			return "Cash packs cost " .. (level * 5) .. "% less  (+5% per level)"
+		end,
+	},
+	fortune = {
+		name = "Fortune",
+		max = 5,
+		cost = function(level)
+			return 4000 * 3 ^ level
+		end,
+		describe = function(level)
+			return "+" .. level .. " luck, forever  (+1 per level)"
 		end,
 	},
 	aura = {

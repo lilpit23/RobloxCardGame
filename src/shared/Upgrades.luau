@@ -12,7 +12,7 @@ Upgrades.StoreTiers = {
 	{ name = "Aura Tower", cost = 25000000, mult = 7 },
 }
 
-Upgrades.Order = { "store", "slots", "luck", "auto" }
+Upgrades.Order = { "store", "slots", "charm", "luck", "auto" }
 
 Upgrades.Defs = {
 	store = {
@@ -32,14 +32,25 @@ Upgrades.Defs = {
 		end,
 	},
 	slots = {
-		name = "Display Stand",
+		name = "Deck Slot",
 		currency = "cash",
 		max = Config.MaxSlots - Config.BaseSlots,
 		cost = function(level)
-			return math.floor(150 * 2.4 ^ level)
+			return math.floor(150 * 1.35 ^ level)
 		end,
 		describe = function(level)
-			return (Config.BaseSlots + level) .. " / " .. Config.MaxSlots .. " stands — each stand shows one card that earns cash"
+			return (Config.BaseSlots + level) .. " / " .. Config.MaxSlots .. " deck slots — each slot holds one active card that earns cash"
+		end,
+	},
+	charm = {
+		name = "Lucky Charms",
+		currency = "cash",
+		max = 10,
+		cost = function(level)
+			return math.floor(2500 * 4 ^ level)
+		end,
+		describe = function(level)
+			return "+" .. level .. " luck  (each luck level: +10% better pulls)"
 		end,
 	},
 	luck = {
@@ -50,7 +61,7 @@ Upgrades.Defs = {
 			return math.floor(250 * 2 ^ level)
 		end,
 		describe = function(level)
-			return "+" .. (level * 10) .. "% chance for Rare+ cards and Holo / Gold / Prismatic variants"
+			return "+" .. level .. " luck  (each luck level: +10% better pulls)"
 		end,
 	},
 	auto = {

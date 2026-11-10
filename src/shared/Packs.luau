@@ -76,9 +76,14 @@ end
 -- The pack new players get for free.
 Packs.StarterId = "storybook_booster"
 
--- Each luck level makes upgrades and special variants 10% more likely.
+-- Each luck level makes better rarities 10% more likely.
 function Packs.luckMultiplier(luckLevel)
 	return 1 + 0.1 * (luckLevel or 0)
+end
+
+-- Each luck level makes card effects (Shiny, Slimy, ...) 3% more likely.
+function Packs.effectLuckMultiplier(luckLevel)
+	return 1 + 0.03 * (luckLevel or 0)
 end
 
 -- "Storybook Friends", "High Seas" or "All sets"
@@ -135,12 +140,11 @@ local function rollSlot(pack, slot, luckLevel, rng)
 	local pool = Cards.pool(chosenRarity, pack.sets)
 	local def = pool[rng:NextInteger(1, #pool)]
 
-	-- Rarest variant is checked first.
+	-- Card effect: rarest first, the first hit is kept. Luck helps a little.
 	local variantId = "normal"
-	local luck = Packs.luckMultiplier(luckLevel)
-	for index = #Cards.VariantOrder, 2, -1 do
-		local candidate = Cards.VariantOrder[index]
-		if rng:NextNumber() < Cards.Variants[candidate].chance * luck then
+	local effectLuck = Packs.effectLuckMultiplier(luckLevel)
+	for _, candidate in ipairs(Cards.RollOrder) do
+		if rng:NextNumber() < Cards.Variants[candidate].chance * effectLuck then
 			variantId = candidate
 			break
 		end

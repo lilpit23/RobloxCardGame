@@ -25,7 +25,7 @@ collection book, session-locked saving with retries, remote rate limits,
 card fusion (3 copies → next variant), offline earnings, rebirth with card requirements and a
 vault that carries cards into the next run, CI, bulk pack opening, auto collector, collection
 income bonus, first-minute hints, Neon Arcade set, daily quests and login reward, card types with
-display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds, trading and an in-server market (stealing was removed).
+display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds, trading and an in-server market (stealing was removed), 64-slot deck, card effects, combos, Luck stat.
 
 ## Track C — cards and sets (trading-card-game structure)
 
@@ -45,6 +45,23 @@ and Elite packs built from slots, binder-style collection book, set completion b
 - [ ] **C5 Limited sets.** A time-limited promo set tied to events.
 - [ ] **C6 Balance pass.** Early game is fast now that every booster holds a rare; tune set
   multipliers, pack prices and stand costs with the simulator (T4).
+
+## Track D — deck, effects, combos and luck
+
+Done: 4-to-64-slot active deck with one cash register, six card effects with their own bonuses,
+type / set / effect / story combos (`Combos.luau`), a Luck stat with eight sources (`Luck.luau`).
+
+- [ ] **D1 Smarter auto-fill.** "Auto-fill Deck" picks the highest earners; make it account for
+  combos (try completing story and type combos when that earns more).
+- [ ] **D2 More effects.** Frozen (earns while offline), Fiery (bonus that ramps the longer it
+  stays in the deck), Cursed (big cash, lowers luck). Each needs a distinct trade-off.
+- [ ] **D3 Combo book.** A panel listing every story combo, which cards it needs, and which you
+  own, so players can chase them.
+- [ ] **D4 Deck layouts.** Save and swap named decks (cash deck, aura deck, luck deck for opening
+  packs).
+- [ ] **D5 Stand visuals.** Effect particles on deck cards in the store (slime drips, shadow
+  smoke, gold sparkle); check performance with 64 slots x 8 players.
+- [ ] **D6 Balance.** Deck slot prices, combo sizes and the luck cap all need playtest tuning.
 
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 

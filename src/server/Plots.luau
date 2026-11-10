@@ -14,8 +14,11 @@ local Plots = {}
 
 local SIZE = Config.PlotSize
 local HALF = SIZE / 2
-local COLUMNS = { -21, -7, 7, 21 }
-local ROWS = { -12, 0, 12, 24 }
+-- The active deck is shown as rows of cards: 8 across, up to 8 rows (64 slots).
+local STAND_COLUMNS = 8
+local STAND_SPACING_X = 7
+local STAND_FIRST_Z = -14
+local STAND_SPACING_Z = 6
 
 local TIER_STYLE = {
 	{ floor = Color3.fromRGB(150, 110, 75), material = Enum.Material.WoodPlanks, accent = Color3.fromRGB(230, 200, 150) },
@@ -90,9 +93,10 @@ local function playerFromHit(hit)
 end
 
 local function slotPosition(index)
-	local row = math.floor((index - 1) / 4) + 1
-	local column = (index - 1) % 4 + 1
-	return COLUMNS[column], ROWS[row]
+	local row = math.floor((index - 1) / STAND_COLUMNS)
+	local column = (index - 1) % STAND_COLUMNS
+	local x = (column - (STAND_COLUMNS - 1) / 2) * STAND_SPACING_X
+	return x, STAND_FIRST_Z + row * STAND_SPACING_Z
 end
 
 local function buildStand(plot, index)
@@ -101,26 +105,23 @@ local function buildStand(plot, index)
 	folder.Name = "Stand" .. index
 	folder.Parent = plot.standsFolder
 
-	newPart(folder, "Pedestal", Vector3.new(5, 1, 2), plot.cframe * CFrame.new(x, 1.5, z), Color3.fromRGB(60, 60, 70))
+	newPart(folder, "Pedestal", Vector3.new(4.4, 0.6, 1.2), plot.cframe * CFrame.new(x, 1.3, z), Color3.fromRGB(60, 60, 70))
 
-	local card = newPart(folder, "Card", Vector3.new(4, 5.6, 0.3), plot.cframe * CFrame.new(x, 4.8, z), Color3.fromRGB(20, 20, 25))
+	local card = newPart(folder, "Card", Vector3.new(4, 5.6, 0.3), plot.cframe * CFrame.new(x, 4.4, z), Color3.fromRGB(20, 20, 25))
 	card.Transparency = 0.8
 
-	local guis = {}
-	for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
-		local gui = Instance.new("SurfaceGui")
-		gui.Face = face
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 50
-		gui.Parent = card
-		table.insert(guis, gui)
-	end
+	-- one face only (toward the street): 64 slots per store adds up
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 50
+	gui.Parent = card
 
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Take down"
+	prompt.ActionText = "Take out of deck"
 	prompt.ObjectText = "Card"
 	prompt.HoldDuration = 0.5
-	prompt.MaxActivationDistance = 9
+	prompt.MaxActivationDistance = 7
 	prompt.RequiresLineOfSight = false
 	prompt.Enabled = false
 	prompt.Parent = card
@@ -130,17 +131,7 @@ local function buildStand(plot, index)
 		end
 	end)
 
-	local pad = newPart(folder, "CollectPad", Vector3.new(5, 0.2, 3), plot.cframe * CFrame.new(x, 1.1, z - 3.5), Color3.fromRGB(70, 220, 110), Enum.Material.Neon)
-	local pendingLabel = newBillboard(pad, "", 1.2, 5, 1.2)
-	pendingLabel.TextColor3 = Color3.fromRGB(150, 255, 160)
-	pad.Touched:Connect(function(hit)
-		local player = playerFromHit(hit)
-		if player and player == plot.owner and callbacks.onCollect then
-			callbacks.onCollect(plot, index, player)
-		end
-	end)
-
-	plot.stands[index] = { folder = folder, card = card, guis = guis, prompt = prompt, pendingLabel = pendingLabel }
+	plot.stands[index] = { folder = folder, card = card, guis = { gui }, prompt = prompt }
 end
 
 local function buildDecor(plot)
@@ -222,6 +213,17 @@ local function buildPlot(index, cframe, parent)
 	shopPrompt.Triggered:Connect(function(player)
 		if callbacks.onShop then
 			callbacks.onShop(plot, player)
+		end
+	end)
+
+	-- Cash register: everything the deck earns piles up here; walk over it to collect
+	local register = newPart(folder, "CashRegister", Vector3.new(9, 0.2, 4), cframe * CFrame.new(0, 1.1, -28), Color3.fromRGB(70, 220, 110), Enum.Material.Neon)
+	plot.registerLabel = newBillboard(register, "💵 Cash register", 2.4, 10, 1.5)
+	plot.registerLabel.TextColor3 = Color3.fromRGB(150, 255, 160)
+	register.Touched:Connect(function(hit)
+		local player = playerFromHit(hit)
+		if player and player == plot.owner and callbacks.onCollect then
+			callbacks.onCollect(plot, player)
 		end
 	end)
 
@@ -353,6 +355,7 @@ function Plots.release(player)
 			plot.stands = {}
 			Plots.setTier(plot, 1)
 			Plots.setSign(plot, "Unclaimed")
+			Plots.setPending(plot, 0)
 		end
 	end
 end
@@ -387,15 +390,12 @@ function Plots.setCard(plot, index, key)
 	end
 end
 
-function Plots.setPending(plot, index, amount)
-	local stand = plot.stands[index]
-	if stand == nil then
-		return
-	end
+-- Uncollected cash waiting at the cash register.
+function Plots.setPending(plot, amount)
 	if amount >= 1 then
-		stand.pendingLabel.Text = Format.cash(amount)
+		plot.registerLabel.Text = "💵 Collect " .. Format.cash(amount)
 	else
-		stand.pendingLabel.Text = ""
+		plot.registerLabel.Text = "💵 Cash register"
 	end
 end
 
@@ -431,7 +431,7 @@ function Plots.contains(plot, position)
 end
 
 function Plots.getSpawnCFrame(plot)
-	return plot.cframe * CFrame.new(0, 5, -22) * CFrame.Angles(0, math.pi, 0)
+	return plot.cframe * CFrame.new(0, 5, -21) * CFrame.Angles(0, math.pi, 0)
 end
 
 return Plots

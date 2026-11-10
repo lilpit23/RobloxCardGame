@@ -18,14 +18,20 @@ Rare cards also radiate **aura**, a second currency for Aura Packs and luck upgr
    for, you can reset your run (cash, aura, cards, stands, luck, store) for permanent bonuses:
    +50% income, +10% luck and one more vault slot each time. Cards you put in the **vault**
    beforehand survive the reset, so you start the next run with them.
-9. Other players can steal a displayed card by holding the prompt on it and running it back to
+9. Quality of life: open 3 or 10 packs at once, buy the Auto Collector (aura) so you never walk
+   over pads again, and earn +1% income for every card you discover in the collection book.
+10. Other players can steal a displayed card by holding the prompt on it and running it back to
    their own store. Catch them (get close) to take it back, or step on the red pad to lock your store.
 
 ## Setup
 
 Everything — map, plots, UI — is created by the scripts. There is nothing to build in Studio.
 
-**With Rojo** (recommended):
+**Easiest — download the built place:** every push builds the game. On GitHub open **Actions**,
+pick the latest green **CI** run, download the **AuraPacks** artifact, unzip it and open
+`AuraPacks.rbxlx` in Roblox Studio.
+
+**With Rojo:**
 
 ```bash
 rojo build -o AuraPacks.rbxlx

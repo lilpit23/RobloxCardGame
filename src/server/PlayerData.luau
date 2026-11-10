@@ -41,6 +41,8 @@ local function newData()
 		packsOpened = 0,
 		rebirths = 0,
 		vault = {}, -- array of cardKeys that survive a rebirth
+		perks = {}, -- Aura Shrine levels, kept through rebirths: [perkId] = level
+		tower = 0, -- highest battle tower floor cleared
 		quests = { day = 0, list = {} }, -- today's quests, see Quests.luau
 		daily = { lastDay = 0, streak = 0 }, -- daily login reward
 		lastSeen = 0, -- os.time() of the last save, for offline earnings

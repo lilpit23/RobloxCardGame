@@ -24,7 +24,14 @@ Rare cards also radiate **aura**, a second currency for Aura Packs and luck upgr
     own line of packs, plus the Omega Pack and Aura Pack that pull from both.
 11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
     earn cash) pay aura, and a login streak reward grows up to day 7.
-12. Other players can steal a displayed card by holding the prompt on it and running it back to
+12. **Card types and synergies:** every card is a Warrior, Beast, Mystic, Tech or Star. Display
+    3, 5 or 8 of one type for +15%, +35% or +60% income.
+13. **Battle Tower:** your three strongest cards fight a 50-floor tower for aura and cash. Each
+    type deals +30% damage to the next one in the cycle.
+14. **Aura Shrine:** permanent perks bought with aura that survive rebirth (starting cash, cheaper
+    packs, more aura, better offline earnings, extra vault slots).
+15. **Lucky events:** every 20 minutes the whole server gets better pack odds for 5 minutes.
+16. Other players can steal a displayed card by holding the prompt on it and running it back to
    their own store. Catch them (get close) to take it back, or step on the red pad to lock your store.
 
 ## Setup
@@ -66,6 +73,9 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Cards.luau` | Card list, rarities, variants (Holo / Gold / Prismatic), aura rates |
 | `src/shared/Packs.luau` | Pack prices and odds |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |
+| `src/shared/Perks.luau` | Aura Shrine perks: prices, levels, effects |
+| `src/shared/Synergy.luau` | Display synergy thresholds and bonuses |
+| `src/shared/Battle.luau` | Battle rules, tower enemy strength, tower rewards |
 | `src/shared/Quests.luau` | Quest types, goals and rewards, daily reward size |
 | `src/shared/Rebirth.luau` | Rebirth requirements (cash, aura, cards), bonuses, vault size |
 

@@ -11,6 +11,9 @@ local Upgrades = require(Shared:WaitForChild("Upgrades"))
 local Format = require(Shared:WaitForChild("Format"))
 local Rebirth = require(Shared:WaitForChild("Rebirth"))
 local Quests = require(Shared:WaitForChild("Quests"))
+local Perks = require(Shared:WaitForChild("Perks"))
+local Synergy = require(Shared:WaitForChild("Synergy"))
+local Battle = require(Shared:WaitForChild("Battle"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
@@ -47,6 +50,8 @@ local VaultStoreRemote = newRemote("RemoteEvent", "VaultStore")
 local VaultTakeRemote = newRemote("RemoteEvent", "VaultTake")
 local QuestClaimRemote = newRemote("RemoteEvent", "QuestClaim")
 local DailyClaimRemote = newRemote("RemoteEvent", "DailyClaim")
+local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
+local BattleRemote = newRemote("RemoteFunction", "Battle")
 
 remotes.Parent = ReplicatedStorage
 
@@ -96,15 +101,26 @@ local function collectionCount(data)
 	return count
 end
 
--- Total income multiplier: store tier x rebirth bonus x collection book bonus.
+-- Total income multiplier: store tier x rebirth bonus x collection book bonus x display synergies.
 local function storeMult(data)
 	local collectionBonus = 1 + Config.CollectionBonusPerCard * collectionCount(data)
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus
+	local synergy = Synergy.compute(data.slots)
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * synergy
 end
 
--- Bought luck levels plus the free ones from rebirths.
+local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
+
+-- Bought luck levels, plus the free ones from rebirths, plus the lucky event.
 local function luckLevel(data)
-	return data.upgrades.luck + Rebirth.luckBonus(data.rebirths)
+	local level = data.upgrades.luck + Rebirth.luckBonus(data.rebirths)
+	if os.time() < luckEventEndsAt then
+		level = level + Config.LuckEvent.BonusLevels
+	end
+	return level
+end
+
+local function vaultSlots(data)
+	return Rebirth.vaultSlots(data.rebirths) + Perks.vaultBonus(data.perks)
 end
 
 local function totals(data)
@@ -116,7 +132,7 @@ local function totals(data)
 			aura = aura + Cards.getAura(key)
 		end
 	end
-	return income * storeMult(data), aura
+	return income * storeMult(data), aura * Perks.auraMult(data.perks)
 end
 
 local function pushState(player)
@@ -138,7 +154,10 @@ local function pushState(player)
 		freePacks = data.freePacks,
 		rebirths = data.rebirths,
 		vault = data.vault,
-		vaultSlots = Rebirth.vaultSlots(data.rebirths),
+		vaultSlots = vaultSlots(data),
+		perks = data.perks,
+		tower = data.tower,
+		luckEventEndsAt = luckEventEndsAt,
 		luck = luckLevel(data),
 		quests = data.quests,
 		questRev = session.questRev,
@@ -279,7 +298,7 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 
 	if count == 1 and pack.id == STARTER.id and data.freePacks > 0 then
 		data.freePacks = data.freePacks - 1
-	elseif not spend(data, pack.currency, pack.cost * count) then
+	elseif not spend(data, pack.currency, Perks.packCost(pack, data.perks) * count) then
 		return { ok = false, error = "Not enough " .. pack.currency .. "." }
 	end
 
@@ -503,6 +522,73 @@ BuyUpgradeRemote.OnServerEvent:Connect(function(player, upgradeId)
 end)
 
 ---------------------------------------------------------------------
+-- Aura Shrine (permanent perks)
+---------------------------------------------------------------------
+BuyPerkRemote.OnServerEvent:Connect(function(player, perkId)
+	if not allow(player, "BuyPerk", 5, 10) then
+		return
+	end
+	local data = PlayerData.get(player)
+	local def = type(perkId) == "string" and Perks.Defs[perkId] or nil
+	if data == nil or def == nil then
+		return
+	end
+	local level = Perks.level(data.perks, perkId)
+	if level >= def.max then
+		notify(player, def.name .. " is maxed out.", "error")
+		return
+	end
+	if not spend(data, "aura", def.cost(level)) then
+		notify(player, "Not enough aura.", "error")
+		return
+	end
+	data.perks[perkId] = level + 1
+	notify(player, def.name .. " is now level " .. (level + 1) .. " — permanently!", "good")
+	touch(player, true)
+end)
+
+---------------------------------------------------------------------
+-- Battle tower (PvE)
+---------------------------------------------------------------------
+-- The server picks the player's strongest team, runs the whole fight, and returns the log
+-- for the client to play back.
+BattleRemote.OnServerInvoke = function(player)
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil then
+		return { ok = false, error = "Something went wrong." }
+	end
+	local now = os.clock()
+	if not allow(player, "Battle", 1, 2) or now - (session.lastBattle or 0) < Config.BattleCooldown then
+		return { ok = false, error = "Your team is catching its breath. Try again in a moment." }
+	end
+	local floor = data.tower + 1
+	if floor > Battle.MaxFloor then
+		return { ok = false, error = "You have cleared the whole tower!" }
+	end
+	local team = Battle.bestTeam(data)
+	if #team == 0 then
+		return { ok = false, error = "You need at least one card to battle." }
+	end
+	session.lastBattle = now
+
+	local enemies = Battle.enemyTeam(floor)
+	local win, log = Battle.simulate(team, enemies, rng)
+
+	local result = { ok = true, win = win, floor = floor, team = team, enemies = enemies, log = log }
+	if win then
+		local aura, cash = Battle.reward(floor)
+		data.tower = floor
+		data.aura = data.aura + aura
+		data.cash = data.cash + cash
+		result.aura = aura
+		result.cash = cash
+		touch(player, false)
+	end
+	return result
+end
+
+---------------------------------------------------------------------
 -- Quests and daily reward
 ---------------------------------------------------------------------
 QuestClaimRemote.OnServerEvent:Connect(function(player, index)
@@ -569,7 +655,7 @@ VaultStoreRemote.OnServerEvent:Connect(function(player, key)
 	if data == nil or Cards.parse(key) == nil then
 		return
 	end
-	if #data.vault >= Rebirth.vaultSlots(data.rebirths) then
+	if #data.vault >= vaultSlots(data) then
 		notify(player, "Your vault is full. Rebirth to unlock more vault slots.", "error")
 		return
 	end
@@ -621,7 +707,7 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 
 	-- Reset the run. Kept: rebirths, vault, collection book, packsOpened.
 	data.rebirths = data.rebirths + 1
-	data.cash = 0
+	data.cash = Perks.startCash(data.perks)
 	data.aura = 0
 	data.inventory = {}
 	data.slots = {}
@@ -874,7 +960,7 @@ task.spawn(function()
 					session.dirty = true
 				end
 				if auraGain > 0 then
-					data.aura = data.aura + auraGain
+					data.aura = data.aura + auraGain * Perks.auraMult(data.perks)
 					session.dirty = true
 				end
 
@@ -906,6 +992,30 @@ task.spawn(function()
 				end
 			end
 		end
+	end
+end)
+
+---------------------------------------------------------------------
+-- Lucky event: bonus luck for the whole server every so often
+---------------------------------------------------------------------
+local function markAllDirty()
+	for _, session in pairs(sessions) do
+		session.rev = session.rev + 1 -- pack odds changed, so open panels rebuild
+		session.dirty = true
+	end
+end
+
+task.spawn(function()
+	local settings = Config.LuckEvent
+	while true do
+		task.wait(settings.Interval)
+		luckEventEndsAt = os.time() + settings.Duration
+		markAllDirty()
+		for player in pairs(sessions) do
+			notify(player, "🍀 LUCKY EVENT! Better pack odds for everyone for " .. math.floor(settings.Duration / 60) .. " minutes!", "good")
+		end
+		task.wait(settings.Duration)
+		markAllDirty()
 	end
 end)
 
@@ -991,7 +1101,7 @@ local function onPlayerAdded(player)
 	if data.lastSeen > 0 then
 		local away = math.clamp(os.time() - data.lastSeen, 0, Config.OfflineMaxSeconds)
 		local income = totals(data)
-		local earned = math.floor(income * away * Config.OfflineRate)
+		local earned = math.floor(income * away * Config.OfflineRate * Perks.offlineMult(data.perks))
 		if earned >= 1 then
 			data.cash = data.cash + earned
 			notify(player, "Welcome back! Your store earned " .. Format.cash(earned) .. " while you were away.", "good")

@@ -24,7 +24,8 @@ Done so far: core loop (packs → display → collect → buy), aura, 5 store ti
 collection book, stealing + store lock, session-locked saving with retries, remote rate limits,
 card fusion (3 copies → next variant), offline earnings, rebirth with card requirements and a
 vault that carries cards into the next run, CI, bulk pack opening, auto collector, collection
-income bonus, first-minute hints.
+income bonus, first-minute hints, Neon Arcade set, daily quests and login reward, card types with
+display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds.
 
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 
@@ -70,15 +71,33 @@ income bonus, first-minute hints.
 - [ ] **G7 Auto-sell filter.** Player picks rarities to sell automatically when pulled.
 - [ ] **G8 Trading.** Two-sided trade window with confirm + 5-second lock-in, fully server-held.
   High dupe risk: needs S2 done first and its own review.
-- [ ] **G9 Limited-time packs and luck events.** A server-wide "2x luck for 10 minutes" event and a
-  weekend-only pack, driven by a schedule table.
+- [ ] **G9 Limited-time packs.** Lucky events are done. Still to do: a weekend-only pack driven by a
+  schedule table, and a Golden Pack that drops in the street for whoever reaches it first.
 - [x] **G10 More cards.** Done: Neon Arcade set (24 cards) with Neon, Arcade and Glitch packs, plus the
   Omega Pack. Follow-up: a set filter in the collection book, and rebirths that need Neon cards.
 
+## Track B — battles (PvE is in; PvP is the goal)
+
+Done: card types with a five-way advantage cycle, `Battle.simulate` (pure, server-run), a 50-floor
+PvE tower that auto-picks the player's three strongest cards, playback UI.
+
+- [ ] **B1 Team picker.** Let the player choose and save a three-card battle team instead of the
+  automatic strongest three, so type matchups become a decision. Validate ownership on the server.
+- [ ] **B2 PvP duels.** Challenge another player in the server: request → accept → the server runs
+  `Battle.simulate` with both saved teams → both clients play the same log. Start with no stakes.
+- [ ] **B3 Staked duels.** Each side puts up aura or a card; winner takes both. High dupe risk:
+  escrow the stakes on the server before the fight and do S2 first.
+- [ ] **B4 Abilities.** One simple ability per type (Warrior: first hit doubles; Beast: heals on
+  KO; Mystic: hits the back row; Tech: shield; Star: buffs allies) to give fights more texture.
+- [ ] **B5 Bosses and raids.** Every tenth tower floor is a boss with a unique card reward; a
+  server-wide raid boss everyone attacks during an event.
+- [ ] **B6 Ranked ladder.** Rating, seasons and a leaderboard once B2 is solid.
+
 ## Track U — interface and feel
 
-- [ ] **U1 Sound and effects.** Pack rip, card flip, rarity stingers, cash collect; particle burst
-  and camera shake on Legendary and better; floating "+$" text when collecting.
+- [ ] **U1 Sound and effects.** Partly done: screen flash on Legendary+ pulls and four built-in
+  sounds (`Config.Sounds`, not yet heard in Studio). Still to do: proper sound assets, particles,
+  camera shake, floating "+$" text when collecting.
 - [ ] **U2 First-minute tutorial.** Partly done: text hints at the top of the screen. Still to do:
   arrows pointing at the button / pad the hint is about.
 - [ ] **U3 Phone layout.** Check every panel at 667×375; touch targets at least 44 px; HUD must not

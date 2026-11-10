@@ -82,7 +82,8 @@ function CardView.new(key)
 		addLabel(frame, def.glyph or "?", 0.21, 0.42)
 	end
 
-	local rarityLabel = addLabel(frame, string.upper(def.rarity), 0.64, 0.09, Enum.Font.GothamBlack)
+	local typeInfo = Cards.Types[def.type]
+	local rarityLabel = addLabel(frame, typeInfo.icon .. " " .. string.upper(def.rarity), 0.64, 0.09, Enum.Font.GothamBlack)
 	if def.rarity == "Secret" then
 		rarityLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
 	end

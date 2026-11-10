@@ -105,6 +105,41 @@ Cards.Sets = {
 	neon = { name = "Neon Arcade" },
 }
 
+-- Card types. Used for display synergies and battles: each type beats the next one in
+-- TypeOrder (and the last beats the first).
+Cards.TypeOrder = { "warrior", "beast", "mystic", "tech", "star" }
+Cards.Types = {
+	warrior = { name = "Warrior", icon = "⚔️" },
+	beast = { name = "Beast", icon = "🐾" },
+	mystic = { name = "Mystic", icon = "🔮" },
+	tech = { name = "Tech", icon = "⚙️" },
+	star = { name = "Star", icon = "⭐" },
+}
+
+local TYPE_MEMBERS = {
+	warrior = { "taro", "jun", "sora", "akane", "kage", "gantz", "ren", "hinode", "shiro", "rin", "juno" },
+	beast = { "pip", "nyanko", "kiri", "ryuma", "tenryu", "gorath", "chip", "bitsy", "mimi", "byte", "kitsu" },
+	mystic = { "hana", "lune", "nami", "yuki", "raika", "kuro", "chrona", "eclipse", "zenith", "oto", "nix", "finalboss", "lumina" },
+	tech = { "bolt", "zeta", "soda", "vex", "dash", "rokku", "aiko", "goliath", "nova", "volt", "zero", "glitch", "sensei" },
+	star = { "miko", "raizo", "hoshi", "noir", "mako", "pixie", "aria" },
+}
+
+local typeOfId = {}
+for typeId, ids in pairs(TYPE_MEMBERS) do
+	for _, id in ipairs(ids) do
+		typeOfId[id] = typeId
+	end
+end
+
+function Cards.typeBeats(attackerType, targetType)
+	for index, typeId in ipairs(Cards.TypeOrder) do
+		if typeId == attackerType then
+			return Cards.TypeOrder[index % #Cards.TypeOrder + 1] == targetType
+		end
+	end
+	return false
+end
+
 Cards.ById = {}
 Cards.ByRarity = {}
 for _, rarityName in ipairs(Cards.RarityOrder) do
@@ -113,6 +148,7 @@ end
 for index, def in ipairs(Cards.List) do
 	def.index = index
 	def.set = def.set or "dojo"
+	def.type = def.type or typeOfId[def.id] or "warrior"
 	Cards.ById[def.id] = def
 	table.insert(Cards.ByRarity[def.rarity], def)
 end

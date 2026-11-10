@@ -2,6 +2,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -12,6 +13,9 @@ local Format = require(Shared:WaitForChild("Format"))
 local CardView = require(Shared:WaitForChild("CardView"))
 local Rebirth = require(Shared:WaitForChild("Rebirth"))
 local Quests = require(Shared:WaitForChild("Quests"))
+local Perks = require(Shared:WaitForChild("Perks"))
+local Synergy = require(Shared:WaitForChild("Synergy"))
+local Battle = require(Shared:WaitForChild("Battle"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local player = Players.LocalPlayer
@@ -34,6 +38,9 @@ local state = {
 	questRev = 0,
 	daily = { lastDay = 0, streak = 0 },
 	today = 0,
+	perks = {},
+	tower = 0,
+	luckEventEndsAt = 0,
 	slotCount = Config.BaseSlots,
 	incomePerSec = 0,
 	auraPerSec = 0,
@@ -133,10 +140,10 @@ local hud = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0, 0.5),
 	Position = UDim2.new(0, 12, 0.5, 0),
-	Size = UDim2.new(0, 210, 0, 480),
+	Size = UDim2.new(0, 210, 0, 520),
 }, screen)
 addScale(hud)
-make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
+make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
 
 local function newPill(order, color)
 	local pill = make("Frame", {
@@ -156,7 +163,8 @@ end
 
 local cashLabel = newPill(1, COLORS.cash)
 local auraLabel = newPill(2, COLORS.aura)
-local rateLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 18), {
+local rateLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 50), {
+	TextYAlignment = Enum.TextYAlignment.Top,
 	LayoutOrder = 3,
 	TextSize = 13,
 	TextColor3 = COLORS.text,
@@ -313,6 +321,37 @@ local skipButton = newButton(revealStage, "Skip", UDim2.new(1, -110, 1, -32), UD
 end)
 skipButton.ZIndex = 5
 
+-- Sounds come from Config.Sounds; a missing or empty id just plays nothing.
+local sounds = {}
+local function playSound(name)
+	local id = Config.Sounds[name]
+	if id == nil or id == "" then
+		return
+	end
+	local sound = sounds[name]
+	if sound == nil then
+		sound = make("Sound", { SoundId = id, Volume = 0.6 }, SoundService)
+		sounds[name] = sound
+	end
+	SoundService:PlayLocalSound(sound)
+end
+
+-- Full-screen colour flash for big pulls.
+local function flashScreen(color)
+	local flash = make("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = color,
+		BackgroundTransparency = 0.15,
+		BorderSizePixel = 0,
+		ZIndex = 10,
+	}, overlay)
+	local tween = TweenService:Create(flash, TweenInfo.new(0.7), { BackgroundTransparency = 1 })
+	tween:Play()
+	tween.Completed:Connect(function()
+		flash:Destroy()
+	end)
+end
+
 local function flipTo(build)
 	local shrink = TweenService:Create(cardHolder, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
 		Size = UDim2.new(0, 0, 0, CARD_H),
@@ -392,6 +431,12 @@ local function revealCards(pulled, pack)
 		revealSub.Text = table.concat(notes, "   ")
 		revealHint.Text = "Tap to continue"
 
+		if rarity.order >= 5 then
+			playSound("bigPull")
+			flashScreen(rarity.color)
+		else
+			playSound("flip")
+		end
 		if rarity.order >= 4 then
 			-- big pull: punch the card
 			cardHolder.Size = UDim2.new(0, CARD_W * 1.25, 0, CARD_H * 1.25)
@@ -511,6 +556,7 @@ end
 -- Panels
 ---------------------------------------------------------------------
 local currentPanel = nil
+local renderPanel -- defined below; panels call it to refresh themselves
 local renderedRev = -1
 local panels = {}
 
@@ -619,7 +665,7 @@ panels.Packs = function()
 			end)
 		else
 			local color = pack.currency == "aura" and Color3.fromRGB(200, 70, 180) or COLORS.button
-			newButton(row, currencyText(pack.currency, pack.cost), buttonPosition, buttonSize, color, function()
+			newButton(row, currencyText(pack.currency, Perks.packCost(pack, state.perks)), buttonPosition, buttonSize, color, function()
 				buyPack(pack)
 			end)
 		end
@@ -871,18 +917,19 @@ panels.Rebirth = function()
 		end)
 	end
 
-	local vaultRow = newRow(3, 262)
+	local vaultLines = math.ceil(state.vaultSlots / 5)
+	local vaultRow = newRow(3, 40 + vaultLines * 222)
 	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Add cards from My Cards.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
 		TextSize = 14,
 	})
 	local strip = make("Frame", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 10, 0, 34),
-		Size = UDim2.new(1, -20, 0, 220),
+		Size = UDim2.new(1, -20, 0, vaultLines * 222),
 	}, vaultRow)
-	make("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		Padding = UDim.new(0, 6),
+	make("UIGridLayout", {
+		CellSize = UDim2.new(0, 118, 0, 216),
+		CellPadding = UDim2.new(0, 6, 0, 6),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, strip)
 	for index = 1, state.vaultSlots do
@@ -1006,7 +1053,192 @@ panels.Quests = function()
 	})
 end
 
-local function renderPanel()
+-- Aura Shrine: permanent perks, shown under the store upgrades ---------------------
+local renderStoreUpgrades = panels.Upgrades
+panels.Upgrades = function()
+	renderStoreUpgrades()
+	local header = newRow(20, 44)
+	header.BackgroundColor3 = Color3.fromRGB(70, 35, 80)
+	newLabel(header, "✨ Aura Shrine — permanent perks that survive rebirth", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 17,
+		TextColor3 = COLORS.aura,
+	})
+	for order, perkId in ipairs(Perks.Order) do
+		local def = Perks.Defs[perkId]
+		local level = Perks.level(state.perks, perkId)
+		local row = newRow(20 + order, 72)
+		newLabel(row, def.name .. "   Lv " .. level .. "/" .. def.max, UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 19,
+		})
+		newLabel(row, def.describe(level), UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 30), {
+			TextSize = 13,
+			TextColor3 = COLORS.dim,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		})
+		local buttonPosition = UDim2.new(1, -160, 0, 14)
+		local buttonSize = UDim2.new(0, 148, 0, 44)
+		if level >= def.max then
+			newButton(row, "MAX", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
+		else
+			newButton(row, currencyText("aura", def.cost(level)), buttonPosition, buttonSize, Color3.fromRGB(200, 70, 180), function()
+				Remotes.BuyPerk:FireServer(perkId)
+			end)
+		end
+	end
+end
+
+-- Battle tower -----------------------------------------------------------------------
+local battling = false
+local renderedTower = -1
+
+local function newUnitBox(parent, unit, column, index)
+	local box = make("Frame", {
+		Position = UDim2.new(column * 0.5, column == 0 and 10 or 5, 0, 8 + (index - 1) * 78),
+		Size = UDim2.new(0.5, -15, 0, 70),
+		BackgroundColor3 = Color3.fromRGB(30, 30, 44),
+		BorderSizePixel = 0,
+	}, parent)
+	round(box, 8)
+	newLabel(box, unit.glyph or "?", UDim2.new(0, 6, 0, 10), UDim2.new(0, 44, 0, 44), {
+		TextScaled = true,
+		TextXAlignment = Enum.TextXAlignment.Center,
+	})
+	newLabel(box, unit.name, UDim2.new(0, 58, 0, 4), UDim2.new(1, -64, 0, 18), {
+		TextSize = 12,
+		TextWrapped = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	local typeInfo = Cards.Types[unit.type]
+	newLabel(box, (typeInfo and (typeInfo.icon .. " " .. typeInfo.name) or "") .. "   ATK " .. Format.short(unit.attack), UDim2.new(0, 58, 0, 22), UDim2.new(1, -64, 0, 16), {
+		TextSize = 11,
+		TextColor3 = COLORS.dim,
+	})
+	local bar = make("Frame", {
+		Position = UDim2.new(0, 58, 0, 44),
+		Size = UDim2.new(1, -68, 0, 16),
+		BackgroundColor3 = Color3.fromRGB(15, 15, 22),
+		BorderSizePixel = 0,
+	}, box)
+	round(bar, 5)
+	local fill = make("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = column == 0 and COLORS.good or COLORS.bad,
+		BorderSizePixel = 0,
+	}, bar)
+	round(fill, 5)
+	local hpLabel = newLabel(bar, Format.short(unit.maxHp) .. " HP", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+		TextSize = 11,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = 2,
+	})
+	return { unit = unit, box = box, fill = fill, hpLabel = hpLabel }
+end
+
+panels.Battle = function()
+	titleLabel.Text = "⚔️ Battle Tower  (" .. state.tower .. "/" .. Battle.MaxFloor .. " floors cleared)"
+	renderedTower = state.tower
+	useList()
+
+	local floor = state.tower + 1
+	local cleared = floor > Battle.MaxFloor
+	local infoRow = newRow(1, 84)
+	local arena = newRow(2, 8 + Battle.TeamSize * 78)
+	local logRow = newRow(3, 40)
+	local logLabel = newLabel(logRow, "", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 14 })
+
+	local viewsA, viewsB = {}, {}
+	local function drawArena(team, enemies)
+		arena:ClearAllChildren()
+		round(arena, 10)
+		viewsA, viewsB = {}, {}
+		for index, unit in ipairs(team) do
+			viewsA[index] = newUnitBox(arena, unit, 0, index)
+		end
+		for index, unit in ipairs(enemies) do
+			viewsB[index] = newUnitBox(arena, unit, 1, index)
+		end
+	end
+	drawArena(Battle.bestTeam(state), cleared and {} or Battle.enemyTeam(floor))
+
+	if cleared then
+		newLabel(infoRow, "You cleared the whole tower. More floors are coming!", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 18,
+		})
+		return
+	end
+
+	local aura, cash = Battle.reward(floor)
+	newLabel(infoRow, "Floor " .. floor .. "   ·   win: +" .. Format.short(aura) .. " aura, " .. Format.cash(cash), UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 19,
+	})
+	newLabel(infoRow, "Your 3 strongest cards fight for you. Type advantage deals +30% damage:\n⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️", UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 44), {
+		TextSize = 12,
+		TextColor3 = COLORS.dim,
+		TextYAlignment = Enum.TextYAlignment.Top,
+	})
+
+	newButton(infoRow, "FIGHT", UDim2.new(1, -160, 0, 20), UDim2.new(0, 148, 0, 44), COLORS.bad, function()
+		if battling then
+			return
+		end
+		battling = true
+		local ok, result = pcall(function()
+			return Remotes.Battle:InvokeServer()
+		end)
+		if not ok or type(result) ~= "table" or not result.ok then
+			battling = false
+			toast(ok and type(result) == "table" and result.error or "Could not start the battle.", "error")
+			return
+		end
+
+		-- Play back the fight the server already decided.
+		for _, unit in ipairs(result.team) do
+			unit.hp = unit.maxHp
+		end
+		for _, unit in ipairs(result.enemies) do
+			unit.hp = unit.maxHp
+		end
+		drawArena(result.team, result.enemies)
+		for _, entry in ipairs(result.log) do
+			if currentPanel ~= "Battle" then
+				break
+			end
+			local attackers = entry.side == "a" and viewsA or viewsB
+			local targets = entry.side == "a" and viewsB or viewsA
+			local attacker, target = attackers[entry.attacker], targets[entry.target]
+			if attacker and target then
+				target.fill.Size = UDim2.new(math.clamp(entry.hpLeft / target.unit.maxHp, 0, 1), 0, 1, 0)
+				target.hpLabel.Text = entry.hpLeft > 0 and (Format.short(entry.hpLeft) .. " HP") or "KO"
+				if entry.hpLeft <= 0 then
+					target.box.BackgroundTransparency = 0.6
+				end
+				logLabel.Text = attacker.unit.name .. " hits " .. target.unit.name .. " for " .. Format.short(entry.damage) .. (entry.strong and "  — type advantage!" or "")
+				playSound("hit")
+			end
+			task.wait(0.3)
+		end
+
+		if result.win then
+			logLabel.Text = "🏆 VICTORY!  +" .. Format.short(result.aura) .. " aura, " .. Format.cash(result.cash)
+			logLabel.TextColor3 = COLORS.cash
+			playSound("bigPull")
+		else
+			logLabel.Text = "💀 Defeat. Pull stronger cards (or better types) and try again."
+			logLabel.TextColor3 = COLORS.bad
+		end
+		task.wait(1.6)
+		battling = false
+		if currentPanel == "Battle" then
+			renderPanel()
+		end
+	end)
+end
+
+function renderPanel()
 	if currentPanel == nil then
 		return
 	end
@@ -1048,11 +1280,12 @@ local MENU = {
 	{ "Cards", "🃏 My Cards", COLORS.button },
 	{ "Book", "📖 Collection", Color3.fromRGB(150, 95, 230) },
 	{ "Upgrades", "🏪 Upgrades", COLORS.good },
+	{ "Battle", "⚔️ Battle", Color3.fromRGB(200, 60, 60) },
 	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50) },
 	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50) },
 }
 for index, entry in ipairs(MENU) do
-	local button = newButton(hud, entry[2], UDim2.new(), UDim2.new(1, 0, 0, 42), entry[3], function()
+	local button = newButton(hud, entry[2], UDim2.new(), UDim2.new(1, 0, 0, 36), entry[3], function()
 		openPanel(entry[1])
 	end)
 	button.LayoutOrder = 10 + index
@@ -1099,6 +1332,14 @@ local function refreshHud()
 	if state.auraPerSec > 0 then
 		rate = rate .. "   +" .. Format.short(state.auraPerSec) .. " aura/s"
 	end
+	local synergy = Synergy.describe(state.slots)
+	if synergy ~= "" then
+		rate = rate .. "\nSynergy:  " .. synergy
+	end
+	local eventLeft = state.luckEventEndsAt - os.time()
+	if eventLeft > 0 then
+		rate = rate .. string.format("\n🍀 Lucky event  %d:%02d", math.floor(eventLeft / 60), eventLeft % 60)
+	end
 	rateLabel.Text = rate
 	packsButton.Text = state.freePacks > 0 and "🎁 FREE PACK!" or "🎴 Packs"
 	questsButton.Text = hasClaimable() and "🎯 Quests  ❗" or "🎯 Quests"
@@ -1112,7 +1353,9 @@ Remotes.State.OnClientEvent:Connect(function(newState)
 	-- The rebirth checklist also refreshes when cash / aura crosses a requirement.
 	local rebirthChanged = currentPanel == "Rebirth" and rebirthSignature() ~= renderedRebirthSignature
 	local questsChanged = currentPanel == "Quests" and state.questRev ~= renderedQuestRev
-	if currentPanel and (state.rev ~= renderedRev or rebirthChanged or questsChanged) then
+	local battleChanged = currentPanel == "Battle" and state.tower ~= renderedTower
+	local busy = currentPanel == "Battle" and battling -- don't rebuild the arena mid-fight
+	if currentPanel and not busy and (state.rev ~= renderedRev or rebirthChanged or questsChanged or battleChanged) then
 		renderPanel()
 	end
 end)
@@ -1129,3 +1372,13 @@ end)
 
 refreshHud()
 Remotes:WaitForChild("RequestState"):FireServer()
+
+-- Keeps the lucky-event countdown ticking.
+task.spawn(function()
+	while true do
+		task.wait(1)
+		if state.luckEventEndsAt - os.time() > -2 then
+			refreshHud()
+		end
+	end
+end)

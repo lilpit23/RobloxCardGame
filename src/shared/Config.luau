@@ -15,6 +15,18 @@ return {
 	OfflineMaxSeconds = 4 * 60 * 60,
 	AuraPullBonus = 30, -- instant aura on pulling an aura card = its aura/sec * this
 
+	-- Server-wide lucky event: everyone gets bonus luck levels for a while.
+	LuckEvent = { Interval = 20 * 60, Duration = 5 * 60, BonusLevels = 5 },
+	BattleCooldown = 5, -- seconds between tower battles
+
+	-- Built-in Roblox sounds. Swap for your own "rbxassetid://..." ids; "" turns a sound off.
+	Sounds = {
+		click = "rbxasset://sounds/clickfast.wav",
+		flip = "rbxasset://sounds/electronicpingshort.wav",
+		bigPull = "rbxasset://sounds/victory.wav",
+		hit = "rbxasset://sounds/swordslash.wav",
+	},
+
 	PlotCount = 8, -- set the experience's max players to this
 	PlotSize = 64,
 

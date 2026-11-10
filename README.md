@@ -14,7 +14,11 @@ Rare cards also radiate **aura**, a second currency for Aura Packs and luck upgr
 6. Epic and better cards earn aura every second and a burst of aura when pulled.
 7. Three copies of the same card fuse into its next variant (Holo → Gold → Prismatic), and your
    store keeps earning a share of its income for up to 4 hours while you are offline.
-8. Other players can steal a displayed card by holding the prompt on it and running it back to
+8. **Rebirth:** once you have enough cash and aura *and* own the specific cards a rebirth asks
+   for, you can reset your run (cash, aura, cards, stands, luck, store) for permanent bonuses:
+   +50% income, +10% luck and one more vault slot each time. Cards you put in the **vault**
+   beforehand survive the reset, so you start the next run with them.
+9. Other players can steal a displayed card by holding the prompt on it and running it back to
    their own store. Catch them (get close) to take it back, or step on the red pad to lock your store.
 
 ## Setup
@@ -52,6 +56,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Cards.luau` | Card list, rarities, variants (Holo / Gold / Prismatic), aura rates |
 | `src/shared/Packs.luau` | Pack prices and odds |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |
+| `src/shared/Rebirth.luau` | Rebirth requirements (cash, aura, cards), bonuses, vault size |
 
 Cards show an emoji as placeholder art. To use real art, upload an image and add
 `image = "rbxassetid://123456"` to that card's row in `Cards.luau`.

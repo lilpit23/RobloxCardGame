@@ -10,6 +10,7 @@ local Packs = require(Shared:WaitForChild("Packs"))
 local Upgrades = require(Shared:WaitForChild("Upgrades"))
 local Format = require(Shared:WaitForChild("Format"))
 local CardView = require(Shared:WaitForChild("CardView"))
+local Rebirth = require(Shared:WaitForChild("Rebirth"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local player = Players.LocalPlayer
@@ -24,6 +25,10 @@ local state = {
 	collection = {},
 	upgrades = { store = 0, slots = 0, luck = 0 },
 	freePacks = 0,
+	rebirths = 0,
+	vault = {},
+	vaultSlots = 1,
+	luck = 0,
 	slotCount = Config.BaseSlots,
 	incomePerSec = 0,
 	auraPerSec = 0,
@@ -123,7 +128,7 @@ local hud = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0, 0.5),
 	Position = UDim2.new(0, 12, 0.5, 0),
-	Size = UDim2.new(0, 210, 0, 330),
+	Size = UDim2.new(0, 210, 0, 380),
 }, screen)
 addScale(hud)
 make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
@@ -447,11 +452,11 @@ end
 local function oddsText(pack)
 	local total = 0
 	for _, rarityName in ipairs(Cards.RarityOrder) do
-		total = total + Packs.adjustedWeight(pack, rarityName, state.upgrades.luck)
+		total = total + Packs.adjustedWeight(pack, rarityName, state.luck)
 	end
 	local parts = {}
 	for _, rarityName in ipairs(Cards.RarityOrder) do
-		local weight = Packs.adjustedWeight(pack, rarityName, state.upgrades.luck)
+		local weight = Packs.adjustedWeight(pack, rarityName, state.luck)
 		if weight > 0 then
 			local percent = weight / total * 100
 			local text = percent >= 10 and string.format("%d%%", math.floor(percent + 0.5)) or string.format("%.2g%%", percent)
@@ -584,10 +589,24 @@ panels.Cards = function()
 
 		local _, variantId = Cards.parse(key)
 		local nextVariant = Cards.nextVariant(variantId)
-		if nextVariant and state.inventory[key] >= Config.FuseCount then
-			local fuseText = "Fuse " .. Config.FuseCount .. " → " .. Cards.Variants[nextVariant].name
-			newButton(cell, fuseText, UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32), Color3.fromRGB(200, 70, 180), function()
+		local canFuse = nextVariant ~= nil and state.inventory[key] >= Config.FuseCount
+		local canVault = #state.vault < state.vaultSlots
+		-- third button row: Fuse and/or Vault share the width
+		local fusePosition, fuseSize = UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32)
+		local vaultPosition, vaultSize = fusePosition, fuseSize
+		if canFuse and canVault then
+			fuseSize = UDim2.new(0.5, -6, 0, 32)
+			vaultPosition, vaultSize = UDim2.new(0.5, 2, 0, 203), UDim2.new(0.5, -6, 0, 32)
+		end
+		if canFuse then
+			local fuseText = "Fuse → " .. Cards.Variants[nextVariant].name
+			newButton(cell, fuseText, fusePosition, fuseSize, Color3.fromRGB(200, 70, 180), function()
 				Remotes.FuseCard:FireServer(key)
+			end).TextSize = 11
+		end
+		if canVault then
+			newButton(cell, "🔐 Vault", vaultPosition, vaultSize, Color3.fromRGB(215, 160, 50), function()
+				Remotes.VaultStore:FireServer(key)
 			end).TextSize = 12
 		end
 	end
@@ -669,6 +688,115 @@ panels.Upgrades = function()
 	end
 end
 
+-- Rebirth + vault -------------------------------------------------------------
+local rebirthConfirmUntil = 0
+local renderedRebirthSignature = ""
+
+-- Which requirements are currently met, as a string like "1101".
+local function rebirthSignature()
+	local _, _, requirements = Rebirth.check(state)
+	local parts = {}
+	for _, requirement in ipairs(requirements) do
+		table.insert(parts, requirement.met and "1" or "0")
+	end
+	return table.concat(parts)
+end
+
+panels.Rebirth = function()
+	titleLabel.Text = "🌟 Rebirth  (" .. state.rebirths .. " so far)"
+	useList()
+	local level, ready, requirements = Rebirth.check(state)
+	renderedRebirthSignature = rebirthSignature()
+
+	local bonusRow = newRow(1, level and 64 or 40)
+	newLabel(bonusRow, "Now:   " .. Rebirth.describeBonuses(state.rebirths), UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 22), {
+		TextSize = 15,
+	})
+	if level then
+		newLabel(bonusRow, "Next:  " .. Rebirth.describeBonuses(state.rebirths + 1), UDim2.new(0, 14, 0, 34), UDim2.new(1, -28, 0, 22), {
+			TextSize = 15,
+			TextColor3 = Color3.fromRGB(255, 215, 90),
+		})
+	end
+
+	if level then
+		local lineHeight = 22
+		local row = newRow(2, 44 + #requirements * lineHeight + 64)
+		newLabel(row, "To rebirth you need:", UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 24), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 19,
+		})
+		for index, requirement in ipairs(requirements) do
+			newLabel(row, (requirement.met and "✅  " or "❌  ") .. requirement.text, UDim2.new(0, 18, 0, 36 + (index - 1) * lineHeight), UDim2.new(1, -36, 0, lineHeight), {
+				TextSize = 14,
+				TextColor3 = requirement.met and COLORS.cash or COLORS.dim,
+			})
+		end
+		local bottom = 44 + #requirements * lineHeight
+		newLabel(row, "Resets cash, aura, cards, stands, luck and your store. Keeps your vault and collection book.", UDim2.new(0, 14, 0, bottom), UDim2.new(1, -200, 0, 52), {
+			TextSize = 12,
+			TextColor3 = COLORS.dim,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		})
+		local button
+		button = newButton(row, ready and "REBIRTH" or "Not ready", UDim2.new(1, -170, 0, bottom), UDim2.new(0, 156, 0, 46), ready and Color3.fromRGB(215, 160, 50) or COLORS.locked, function()
+			if not ready then
+				return
+			end
+			if os.clock() < rebirthConfirmUntil then
+				rebirthConfirmUntil = 0
+				Remotes.Rebirth:FireServer()
+			else
+				rebirthConfirmUntil = os.clock() + 4
+				button.Text = "Tap again to confirm"
+				button.TextSize = 13
+			end
+		end)
+	end
+
+	local vaultRow = newRow(3, 262)
+	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Add cards from My Cards.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+		TextSize = 14,
+	})
+	local strip = make("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 10, 0, 34),
+		Size = UDim2.new(1, -20, 0, 220),
+	}, vaultRow)
+	make("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, strip)
+	for index = 1, state.vaultSlots do
+		local key = state.vault[index]
+		local cell = make("Frame", {
+			BackgroundColor3 = Color3.fromRGB(30, 30, 44),
+			BorderSizePixel = 0,
+			Size = UDim2.new(0, 118, 0, 216),
+			LayoutOrder = index,
+		}, strip)
+		round(cell, 8)
+		if key then
+			local holder = make("Frame", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 5, 0, 5),
+				Size = UDim2.new(1, -10, 0, 151),
+			}, cell)
+			CardView.new(key).Parent = holder
+			newButton(cell, "Take out", UDim2.new(0, 5, 0, 176), UDim2.new(1, -10, 0, 32), COLORS.locked, function()
+				Remotes.VaultTake:FireServer(index)
+			end).TextSize = 13
+		else
+			newLabel(cell, "Empty\nslot", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+				TextSize = 15,
+				TextColor3 = COLORS.dim,
+				TextXAlignment = Enum.TextXAlignment.Center,
+			})
+		end
+	end
+end
+
 local function renderPanel()
 	if currentPanel == nil then
 		return
@@ -710,6 +838,7 @@ local MENU = {
 	{ "Cards", "🃏 My Cards", COLORS.button },
 	{ "Book", "📖 Collection", Color3.fromRGB(150, 95, 230) },
 	{ "Upgrades", "🏪 Upgrades", COLORS.good },
+	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50) },
 }
 for index, entry in ipairs(MENU) do
 	local button = newButton(hud, entry[2], UDim2.new(), UDim2.new(1, 0, 0, 42), entry[3], function()
@@ -741,6 +870,9 @@ Remotes.State.OnClientEvent:Connect(function(newState)
 	end
 	refreshHud()
 	if currentPanel and state.rev ~= renderedRev then
+		renderPanel()
+	elseif currentPanel == "Rebirth" and rebirthSignature() ~= renderedRebirthSignature then
+		-- cash / aura crossed a requirement: refresh the checklist
 		renderPanel()
 	end
 end)

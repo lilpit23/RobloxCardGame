@@ -367,8 +367,19 @@ function Plots.setSign(plot, text)
 	end
 end
 
-function Plots.setOwnerSign(plot, player, storeLevel)
-	Plots.setSign(plot, player.DisplayName .. "'s " .. Upgrades.getStoreTier(storeLevel).name)
+function Plots.setOwnerSign(plot, player, storeLevel, rebirths)
+	local text = player.DisplayName .. "'s " .. Upgrades.getStoreTier(storeLevel).name
+	if rebirths and rebirths > 0 then
+		text = "★" .. rebirths .. "  " .. text
+	end
+	Plots.setSign(plot, text)
+end
+
+-- Tears down every stand and rebuilds `count` empty ones (used by rebirth).
+function Plots.resetStands(plot, count)
+	plot.standsFolder:ClearAllChildren()
+	plot.stands = {}
+	Plots.setSlotCount(plot, count)
 end
 
 function Plots.setShield(plot, enabled)

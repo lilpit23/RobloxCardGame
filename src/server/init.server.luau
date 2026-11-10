@@ -9,6 +9,7 @@ local Cards = require(Shared:WaitForChild("Cards"))
 local Packs = require(Shared:WaitForChild("Packs"))
 local Upgrades = require(Shared:WaitForChild("Upgrades"))
 local Format = require(Shared:WaitForChild("Format"))
+local Rebirth = require(Shared:WaitForChild("Rebirth"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
@@ -40,6 +41,9 @@ local EquipBestRemote = newRemote("RemoteEvent", "EquipBest")
 local BuyUpgradeRemote = newRemote("RemoteEvent", "BuyUpgrade")
 local RequestStateRemote = newRemote("RemoteEvent", "RequestState")
 local FuseCardRemote = newRemote("RemoteEvent", "FuseCard")
+local RebirthRemote = newRemote("RemoteEvent", "Rebirth")
+local VaultStoreRemote = newRemote("RemoteEvent", "VaultStore")
+local VaultTakeRemote = newRemote("RemoteEvent", "VaultTake")
 
 remotes.Parent = ReplicatedStorage
 
@@ -81,8 +85,14 @@ local function slotCount(data)
 	return math.min(Config.BaseSlots + data.upgrades.slots, Config.MaxSlots)
 end
 
+-- Total income multiplier: store tier x rebirth bonus.
 local function storeMult(data)
-	return Upgrades.getStoreTier(data.upgrades.store).mult
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths)
+end
+
+-- Bought luck levels plus the free ones from rebirths.
+local function luckLevel(data)
+	return data.upgrades.luck + Rebirth.luckBonus(data.rebirths)
 end
 
 local function totals(data)
@@ -114,6 +124,10 @@ local function pushState(player)
 		collection = data.collection,
 		upgrades = data.upgrades,
 		freePacks = data.freePacks,
+		rebirths = data.rebirths,
+		vault = data.vault,
+		vaultSlots = Rebirth.vaultSlots(data.rebirths),
+		luck = luckLevel(data),
 		slotCount = slotCount(data),
 		incomePerSec = income,
 		auraPerSec = aura,
@@ -209,7 +223,7 @@ BuyPackRemote.OnServerInvoke = function(player, packId)
 
 	local pulled = {}
 	for _ = 1, Config.CardsPerPack do
-		local key = Packs.roll(pack, data.upgrades.luck, rng)
+		local key = Packs.roll(pack, luckLevel(data), rng)
 		local isNew = data.collection[key] == nil
 		addCard(data, key, 1)
 		local auraBonus = Cards.getAura(key) * Config.AuraPullBonus
@@ -409,11 +423,91 @@ BuyUpgradeRemote.OnServerEvent:Connect(function(player, upgradeId)
 		notify(player, "New display stand built!", "good")
 	elseif upgradeId == "store" then
 		Plots.setTier(session.plot, data.upgrades.store + 1)
-		Plots.setOwnerSign(session.plot, player, data.upgrades.store)
+		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths)
 		notify(player, "Store upgraded to " .. Upgrades.getStoreTier(data.upgrades.store).name .. "!", "good")
 	else
 		notify(player, def.name .. " upgraded!", "good")
 	end
+	touch(player, true)
+end)
+
+---------------------------------------------------------------------
+-- Vault and rebirth
+---------------------------------------------------------------------
+-- Vault cards earn nothing, but they are the only cards that survive a rebirth.
+VaultStoreRemote.OnServerEvent:Connect(function(player, key)
+	if not allow(player, "VaultStore", 8, 16) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or Cards.parse(key) == nil then
+		return
+	end
+	if #data.vault >= Rebirth.vaultSlots(data.rebirths) then
+		notify(player, "Your vault is full. Rebirth to unlock more vault slots.", "error")
+		return
+	end
+	if not takeCard(data, key, 1) then
+		return
+	end
+	table.insert(data.vault, key)
+	touch(player, true)
+end)
+
+VaultTakeRemote.OnServerEvent:Connect(function(player, index)
+	if not allow(player, "VaultTake", 8, 16) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or type(index) ~= "number" or index % 1 ~= 0 then
+		return
+	end
+	if index < 1 or index > #data.vault then
+		return
+	end
+	local key = table.remove(data.vault, index)
+	addCard(data, key, 1)
+	touch(player, true)
+end)
+
+RebirthRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "Rebirth", 0.5, 2) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil then
+		return
+	end
+	if session.carrying then
+		notify(player, "Finish your steal before you rebirth.", "error")
+		return
+	end
+	local level, ready = Rebirth.check(data)
+	if level == nil then
+		notify(player, "You have reached the highest rebirth.", "error")
+		return
+	end
+	if not ready then
+		notify(player, "You don't meet the rebirth requirements yet.", "error")
+		return
+	end
+
+	-- Reset the run. Kept: rebirths, vault, collection book, packsOpened.
+	data.rebirths = data.rebirths + 1
+	data.cash = 0
+	data.aura = 0
+	data.inventory = {}
+	data.slots = {}
+	data.upgrades = { store = 0, slots = 0, luck = 0 }
+	data.freePacks = 1
+	session.pending = {}
+
+	Plots.resetStands(session.plot, slotCount(data))
+	Plots.setTier(session.plot, 1)
+	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths)
+
+	notify(player, "🌟 REBIRTH " .. data.rebirths .. "!  " .. Rebirth.describeBonuses(data.rebirths), "good")
 	touch(player, true)
 end)
 
@@ -730,7 +824,7 @@ local function onPlayerAdded(player)
 
 	Plots.setSlotCount(plot, slotCount(data))
 	Plots.setTier(plot, data.upgrades.store + 1)
-	Plots.setOwnerSign(plot, player, data.upgrades.store)
+	Plots.setOwnerSign(plot, player, data.upgrades.store, data.rebirths)
 	for index = 1, slotCount(data) do
 		Plots.setCard(plot, index, data.slots[tostring(index)])
 	end

@@ -39,6 +39,8 @@ local function newData()
 		upgrades = { store = 0, slots = 0, luck = 0 },
 		freePacks = 1,
 		packsOpened = 0,
+		rebirths = 0,
+		vault = {}, -- array of cardKeys that survive a rebirth
 		lastSeen = 0, -- os.time() of the last save, for offline earnings
 	}
 end

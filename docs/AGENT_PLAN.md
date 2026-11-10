@@ -22,7 +22,8 @@ different tracks can run in parallel.
 
 Done so far: core loop (packs → display → collect → buy), aura, 5 store tiers, stands, luck,
 collection book, stealing + store lock, session-locked saving with retries, remote rate limits,
-card fusion (3 copies → next variant), offline earnings.
+card fusion (3 copies → next variant), offline earnings, rebirth with card requirements and a
+vault that carries cards into the next run.
 
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 
@@ -59,9 +60,8 @@ card fusion (3 copies → next variant), offline earnings.
 
 - [ ] **G1 Open many.** Buy 3 or 10 packs at once; the reveal shows a grid with the best pull
   highlighted. One remote call, one state update.
-- [ ] **G2 Rebirth.** Reset cash, cards on display, stands and store tier in exchange for a
-  permanent income multiplier and a rebirth counter on the store sign. Aura, luck and the
-  collection book are kept.
+- [x] **G2 Rebirth + vault.** Done: `src/shared/Rebirth.luau`. Follow-ups: tune the six levels with
+  the balance simulator (T4), a rebirth animation, rebirth count on the leaderboard.
 - [ ] **G3 Collection rewards.** Completing every card of a rarity (and every variant of a card)
   grants a permanent income bonus, shown in the collection book.
 - [ ] **G4 Daily reward + playtime rewards.** A 7-day streak calendar and a free pack every

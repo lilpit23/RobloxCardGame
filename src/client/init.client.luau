@@ -586,14 +586,6 @@ local function useList()
 	make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, body)
 end
 
-local function useGrid(cellWidth, cellHeight)
-	make("UIGridLayout", {
-		CellSize = UDim2.new(0, cellWidth, 0, cellHeight),
-		CellPadding = UDim2.new(0, 10, 0, 10),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-	}, body)
-end
-
 local function newRow(order, height)
 	local row = make("Frame", {
 		Size = UDim2.new(1, -12, 0, height),

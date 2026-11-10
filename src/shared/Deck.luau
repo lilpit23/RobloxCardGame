@@ -81,10 +81,7 @@ function Deck.autoFill(owned, count)
 				for _, id in ipairs(story.cards) do
 					needed[id] = true
 				end
-				local candidate = {}
-				for index, key in ipairs(deck) do
-					candidate[index] = key
-				end
+				local candidate = table.clone(deck)
 				local swapped = 0
 				for index = #candidate, 1, -1 do
 					if swapped >= #missing then

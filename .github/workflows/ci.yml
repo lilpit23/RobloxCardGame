@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        uses: CompeyDev/setup-rokit@v0.1.2
+
+      - name: Lint
+        run: selene src
+
+      - name: Build place file
+        run: rojo build -o AuraPacks.rbxlx
+
+      - name: Type check
+        run: |
+          curl -fsSL -o globalTypes.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/1.32.0/scripts/globalTypes.d.luau
+          rojo sourcemap default.project.json -o sourcemap.json
+          luau-lsp analyze --definitions=globalTypes.d.luau --sourcemap=sourcemap.json src
+
+      - name: Upload place file
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuraPacks
+          path: AuraPacks.rbxlx

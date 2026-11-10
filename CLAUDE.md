@@ -12,6 +12,10 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
   and each player's store out of parts.
 - `src/client/` → `StarterPlayerScripts.Client`. All UI, built from code.
 
+Map (all in `Plots.luau`, see `docs/map-layout.png`): a cul-de-sac plaza at the origin with the
+plots in a ring facing it, a road along +X, a tunnel through a ridge, then the PvE arena and tower.
+If you change the layout numbers, change them in `tools/make-map.js` too and re-run it.
+
 Nothing is built by hand in Studio: the map, plots and UI are all created by scripts. Keep it that
 way so the repo stays the whole game.
 

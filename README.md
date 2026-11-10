@@ -52,6 +52,15 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
     confirm), or list a card for a cash price so anyone in the server can buy it. There is no
     stealing and no PvP.
 
+## The map
+
+![Top-down map layout](docs/map-layout.png)
+
+Eight stores sit in a ring around a cul-de-sac plaza (one per player, eight players per server).
+One road leaves the plaza and runs through a tunnel in a rocky ridge to the PvE arena, where the
+Battle Tower stands. The whole map is built by `src/server/Plots.luau`; the diagram is drawn from
+the same numbers by `node tools/make-map.js`.
+
 ## Setup
 
 Everything — map, plots, UI — is created by the scripts. There is nothing to build in Studio.

@@ -55,6 +55,7 @@ local DailyClaimRemote = newRemote("RemoteEvent", "DailyClaim")
 local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
 local BattleRemote = newRemote("RemoteFunction", "Battle")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
+local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local MarketStateRemote = newRemote("RemoteEvent", "MarketState") -- server -> client
 local MarketListRemote = newRemote("RemoteEvent", "MarketList")
 local MarketCancelRemote = newRemote("RemoteEvent", "MarketCancel")
@@ -1072,6 +1073,10 @@ Plots.init({
 
 	onTrade = function(_, player)
 		OpenTradeRemote:FireClient(player)
+	end,
+
+	onTower = function(player)
+		OpenBattleRemote:FireClient(player)
 	end,
 })
 

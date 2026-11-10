@@ -1768,6 +1768,12 @@ Remotes.Notify.OnClientEvent:Connect(function(text, kind)
 	toast(tostring(text), kind)
 end)
 
+Remotes.OpenBattle.OnClientEvent:Connect(function()
+	if currentPanel ~= "Battle" or not window.Visible then
+		openPanel("Battle")
+	end
+end)
+
 Remotes.OpenTrade.OnClientEvent:Connect(function()
 	if currentPanel ~= "Trade" or not window.Visible then
 		openPanel("Trade")

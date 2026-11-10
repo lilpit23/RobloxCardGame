@@ -142,8 +142,15 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
 
 ## Track W — world
 
-- [ ] **W1 Street and lobby.** Partly done: road, pavements, lamps, trees, banner over the spawn.
-  Still to do: a plaza with leaderboards (S4) and a public market stall.
+- [x] **W1 Map layout.** Done: cul-de-sac of eight stores around a plaza, road, tunnel through a
+  ridge, PvE arena with the Battle Tower and its gate (`docs/map-layout.png`).
+- [ ] **W4 Tower defense mode.** The arena is ready for it (lane, two monster gates, tower), but
+  the PvE there is still the automatic Battle Tower fight. Build real tower defense: waves walk
+  from the monster gates along lanes to the tower, the player places cards from their deck as
+  defenders on pads, cards attack by type, rewards per wave. Decide solo instances vs shared
+  arena first, and keep it PvE only.
+- [ ] **W5 Map polish.** Terrain or meshes for the ridge instead of blocks, a fast-travel pad
+  between a store and the arena, a public market stall and fountain on the plaza island.
 - [ ] **W2 Store visuals per tier.** Real storefront models per tier instead of walls and pillars;
   shelves, a counter, a neon sign.
 - [ ] **W3 Card stands as 3D display cases** with a glow coloured by rarity and a beam for Mythic

@@ -367,6 +367,19 @@ local function flipTo(build)
 	grow.Completed:Wait()
 end
 
+-- Covers a frame with the pack's cover art when the pack has an image id.
+local function addPackImage(parent, pack)
+	if pack.image then
+		make("ImageLabel", {
+			Size = UDim2.new(1, 0, 1, 0),
+			BackgroundTransparency = 1,
+			Image = pack.image,
+			ScaleType = Enum.ScaleType.Fit,
+			ZIndex = 2,
+		}, parent)
+	end
+end
+
 local function newPackBack(pack)
 	local back = make("Frame", {
 		Size = UDim2.new(1, 0, 1, 0),
@@ -384,6 +397,7 @@ local function newPackBack(pack)
 		TextScaled = true,
 		TextXAlignment = Enum.TextXAlignment.Center,
 	})
+	addPackImage(back, pack)
 	return back
 end
 
@@ -629,6 +643,7 @@ panels.Packs = function()
 		}, row)
 		round(swatch, 6)
 		newLabel(swatch, "🎴", UDim2.new(), UDim2.new(1, 0, 1, 0), { TextSize = 26, TextXAlignment = Enum.TextXAlignment.Center })
+		addPackImage(swatch, pack)
 
 		newLabel(row, pack.name .. "  ·  " .. Packs.setsText(pack), UDim2.new(0, 68, 0, 8), UDim2.new(1, -240, 0, 24), {
 			Font = Enum.Font.FredokaOne,

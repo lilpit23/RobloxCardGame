@@ -5,6 +5,7 @@ local Packs = {}
 
 -- weights = relative odds per rarity. storeTier = store level needed to buy it.
 -- sets = card sets the pack pulls from (nil = every set).
+-- image (optional) = "rbxassetid://..." cover art; upload assets/packs/<id>.png to get an id.
 Packs.List = {
 	{
 		id = "starter",

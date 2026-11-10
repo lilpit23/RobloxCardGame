@@ -46,7 +46,7 @@ display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash
 ## Track S — server structure and safety
 
 - [ ] **S1 Split the server script.** Move `init.server.luau` into modules: `Remotes`, `Economy`
-  (cards, selling, fusion), `PackService`, `UpgradeService`, `StealService`, `IncomeLoop`. No
+  (cards, selling, fusion), `PackService`, `UpgradeService`, `TradeService`, `MarketService`, `IncomeLoop`. No
   behaviour change. Done when: `init.server.luau` only wires modules together.
 - [ ] **S2 Security audit.** Run the `roblox-dev:roblox-reviewer` agent over `src/` and fix every
   confirmed finding. Specific things to check: trades and market purchases (ownership re-checked
@@ -65,8 +65,8 @@ display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash
   one-off rewards for completing a whole rarity or every variant of a card.
 - [ ] **G4 Playtime rewards.** Daily login streak is done. Still to do: a free pack every 15 minutes
   of play.
-- [x] **G5 Quests.** Done: three daily quests paid in aura (`src/shared/Quests.luau`). Follow-up: a
-  steal quest that only appears when other players are in the server.
+- [x] **G5 Quests.** Done: three daily quests paid in aura (`src/shared/Quests.luau`). Follow-up: more
+  quest types (trade a card, win a tower floor, list a card on the market).
 - [x] **G6 Auto-collect upgrade.** Done (Auto Collector, bought with aura).
 - [ ] **G7 Auto-sell filter.** Player picks rarities to sell automatically when pulled.
 - [x] **G8 Trading + market.** Done: two-sided trades with double confirm, and cash listings other

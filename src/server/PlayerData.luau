@@ -41,6 +41,7 @@ local function newData()
 		packsOpened = 0,
 		rebirths = 0,
 		vault = {}, -- array of cardKeys that survive a rebirth
+		listings = {}, -- cards for sale on the market: array of { id, key, price }
 		perks = {}, -- Aura Shrine levels, kept through rebirths: [perkId] = level
 		tower = 0, -- highest battle tower floor cleared
 		quests = { day = 0, list = {} }, -- today's quests, see Quests.luau

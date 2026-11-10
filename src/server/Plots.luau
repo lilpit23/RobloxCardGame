@@ -117,9 +117,9 @@ local function buildStand(plot, index)
 	end
 
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Take"
+	prompt.ActionText = "Take down"
 	prompt.ObjectText = "Card"
-	prompt.HoldDuration = Config.Stealing.HoldTime
+	prompt.HoldDuration = 0.5
 	prompt.MaxActivationDistance = 9
 	prompt.RequiresLineOfSight = false
 	prompt.Enabled = false
@@ -225,30 +225,74 @@ local function buildPlot(index, cframe, parent)
 		end
 	end)
 
-	-- Lock pad + shield
-	local lockPad = newPart(folder, "LockPad", Vector3.new(5, 0.2, 5), cframe * CFrame.new(19, 1.1, -26), Color3.fromRGB(235, 70, 70), Enum.Material.Neon)
-	plot.lockLabel = newBillboard(lockPad, "", 2.5, 9, 1.4)
-	lockPad.Touched:Connect(function(hit)
-		local player = playerFromHit(hit)
-		if player and player == plot.owner and callbacks.onLock then
-			callbacks.onLock(plot, player)
+	-- Trade & market board
+	local board = newPart(folder, "TradeBoard", Vector3.new(10, 3, 3), cframe * CFrame.new(19, 2.5, -26), Color3.fromRGB(40, 170, 160))
+	newBillboard(board, "🤝 TRADE & MARKET", 3.2, 10, 1.6)
+	local tradePrompt = Instance.new("ProximityPrompt")
+	tradePrompt.ActionText = "Open"
+	tradePrompt.ObjectText = "Trade & Market"
+	tradePrompt.MaxActivationDistance = 10
+	tradePrompt.RequiresLineOfSight = false
+	tradePrompt.Parent = board
+	tradePrompt.Triggered:Connect(function(player)
+		if callbacks.onTrade then
+			callbacks.onTrade(plot, player)
 		end
 	end)
-	if not Config.Stealing.Enabled then
-		lockPad.Transparency = 1
-		lockPad.CanCollide = false
-		lockPad.CanTouch = false
-	end
-
-	local shield = newPart(folder, "Shield", Vector3.new(SIZE, 30, SIZE), cframe * CFrame.new(0, 16, 0), Color3.fromRGB(90, 190, 255), Enum.Material.ForceField)
-	shield.Transparency = 1
-	shield.CanCollide = false
-	shield.CanTouch = false
-	shield.CanQuery = false
-	shield.CastShadow = false
-	plot.shield = shield
 
 	return plot
+end
+
+-- Road, pavements, street lamps, trees and the big sign over the spawn.
+local function buildStreet(perRow, spacing)
+	local street = Instance.new("Folder")
+	street.Name = "Street"
+	street.Parent = workspace
+
+	local length = perRow * spacing + 80
+	newPart(street, "Road", Vector3.new(length, 0.2, 22), CFrame.new(0, 0.1, 0), Color3.fromRGB(52, 54, 60), Enum.Material.Asphalt)
+	for _, side in ipairs({ -1, 1 }) do
+		newPart(street, "Pavement", Vector3.new(length, 0.3, 5), CFrame.new(0, 0.15, side * 13.5), Color3.fromRGB(190, 190, 195), Enum.Material.Concrete)
+	end
+	for x = -length / 2 + 8, length / 2 - 8, 16 do
+		newPart(street, "Line", Vector3.new(6, 0.05, 0.6), CFrame.new(x, 0.23, 0), Color3.fromRGB(245, 215, 90), Enum.Material.SmoothPlastic)
+	end
+
+	-- lamps between the plots
+	for column = 0, perRow do
+		local x = (column - perRow / 2) * spacing
+		for _, side in ipairs({ -1, 1 }) do
+			local z = side * 14
+			newPart(street, "LampPost", Vector3.new(0.7, 13, 0.7), CFrame.new(x, 6.5, z), Color3.fromRGB(40, 40, 48), Enum.Material.Metal)
+			local lamp = newPart(street, "Lamp", Vector3.new(2.4, 0.8, 2.4), CFrame.new(x, 13.4, z), Color3.fromRGB(255, 230, 170), Enum.Material.Neon)
+			local light = Instance.new("PointLight")
+			light.Color = Color3.fromRGB(255, 225, 170)
+			light.Range = 28
+			light.Brightness = 1.2
+			light.Parent = lamp
+		end
+	end
+
+	-- trees at both ends of the street
+	for _, endSide in ipairs({ -1, 1 }) do
+		for index = 0, 3 do
+			local x = endSide * (length / 2 + 6 + (index % 2) * 10)
+			local z = (index - 1.5) * 22
+			newPart(street, "Trunk", Vector3.new(2, 9, 2), CFrame.new(x, 4.5, z), Color3.fromRGB(105, 75, 50), Enum.Material.Wood)
+			local leaves = newPart(street, "Leaves", Vector3.new(11, 11, 11), CFrame.new(x, 12.5, z), Color3.fromRGB(70, 150, 80), Enum.Material.Grass)
+			leaves.Shape = Enum.PartType.Ball
+		end
+	end
+
+	-- giant sign over the spawn
+	for _, side in ipairs({ -1, 1 }) do
+		newPart(street, "SignPillar", Vector3.new(1.5, 22, 1.5), CFrame.new(side * 15, 11, 0), Color3.fromRGB(40, 40, 48), Enum.Material.Metal)
+	end
+	local banner = newPart(street, "Banner", Vector3.new(32, 7, 1), CFrame.new(0, 20, 0), Color3.fromRGB(230, 60, 110), Enum.Material.Neon)
+	banner.CFrame = CFrame.new(0, 20, 0) * CFrame.Angles(0, math.pi / 2, 0)
+	for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+		newSurfaceLabel(banner, face, "🎴 " .. string.upper(Config.GameName) .. " 🎴")
+	end
 end
 
 function Plots.init(handlers)
@@ -274,6 +318,7 @@ function Plots.init(handlers)
 
 	local perRow = math.ceil(Config.PlotCount / 2)
 	local spacing = SIZE + 8
+	buildStreet(perRow, spacing)
 	for index = 1, Config.PlotCount do
 		local row = (index - 1) % 2
 		local column = math.floor((index - 1) / 2)
@@ -308,8 +353,6 @@ function Plots.release(player)
 			plot.stands = {}
 			Plots.setTier(plot, 1)
 			Plots.setSign(plot, "Unclaimed")
-			Plots.setShield(plot, false)
-			Plots.setLockText(plot, "")
 		end
 	end
 end
@@ -380,18 +423,6 @@ function Plots.resetStands(plot, count)
 	plot.standsFolder:ClearAllChildren()
 	plot.stands = {}
 	Plots.setSlotCount(plot, count)
-end
-
-function Plots.setShield(plot, enabled)
-	if enabled then
-		plot.shield.Transparency = 0.4
-	else
-		plot.shield.Transparency = 1
-	end
-end
-
-function Plots.setLockText(plot, text)
-	plot.lockLabel.Text = text
 end
 
 function Plots.contains(plot, position)

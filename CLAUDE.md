@@ -25,6 +25,9 @@ way so the repo stays the whole game.
 - A card key is `"id"` or `"id:variant"`. Always check it with `Cards.parse` before use.
 - Call `touch(player, true)` after changing inventory, slots, collection or upgrades (the client
   rebuilds its open panel), `touch(player, false)` for cash/aura only.
+- No stealing and no PvP (owner's decision). Cards only change hands through trading and the
+  market, both in `init.server.luau`; any new way to move cards between players needs the same
+  care (re-check ownership at the moment of the swap, never yield in the middle).
 - Characters and names must be original — no characters from existing anime or games.
 
 ## Verifying

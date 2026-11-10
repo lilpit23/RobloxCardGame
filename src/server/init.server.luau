@@ -52,13 +52,24 @@ local QuestClaimRemote = newRemote("RemoteEvent", "QuestClaim")
 local DailyClaimRemote = newRemote("RemoteEvent", "DailyClaim")
 local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
 local BattleRemote = newRemote("RemoteFunction", "Battle")
+local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
+local MarketStateRemote = newRemote("RemoteEvent", "MarketState") -- server -> client
+local MarketListRemote = newRemote("RemoteEvent", "MarketList")
+local MarketCancelRemote = newRemote("RemoteEvent", "MarketCancel")
+local MarketBuyRemote = newRemote("RemoteEvent", "MarketBuy")
+local TradeStateRemote = newRemote("RemoteEvent", "TradeState") -- server -> client
+local TradeRequestRemote = newRemote("RemoteEvent", "TradeRequest") -- both directions
+local TradeAcceptRemote = newRemote("RemoteEvent", "TradeAccept")
+local TradeOfferRemote = newRemote("RemoteEvent", "TradeOffer")
+local TradeConfirmRemote = newRemote("RemoteEvent", "TradeConfirm")
+local TradeCancelRemote = newRemote("RemoteEvent", "TradeCancel")
 
 remotes.Parent = ReplicatedStorage
 
 ---------------------------------------------------------------------
 -- Session state (not saved)
 ---------------------------------------------------------------------
--- [player] = { plot, pending = {[slot] = cash}, rev, dirty, carrying, shieldOn, shieldUntil, cooldownUntil, ... }
+-- [player] = { plot, pending = {[slot] = cash}, rev, questRev, dirty, ... }
 local sessions = {}
 
 -- Token-bucket rate limit, per player and per remote. First line of every remote handler.
@@ -215,6 +226,9 @@ local function questProgress(player, questType, amount)
 		end
 	end
 end
+
+-- Set further down, once trading and the market exist: clears a player's listings and trade.
+local onRebirthReset = function(_player, _data) end
 
 local function addCard(data, key, amount)
 	data.inventory[key] = (data.inventory[key] or 0) + (amount or 1)
@@ -691,10 +705,6 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	if session == nil or data == nil then
 		return
 	end
-	if session.carrying then
-		notify(player, "Finish your steal before you rebirth.", "error")
-		return
-	end
 	local level, ready = Rebirth.check(data)
 	if level == nil then
 		notify(player, "You have reached the highest rebirth.", "error")
@@ -705,7 +715,9 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 		return
 	end
 
-	-- Reset the run. Kept: rebirths, vault, collection book, packsOpened.
+	onRebirthReset(player, data)
+
+	-- Reset the run. Kept: rebirths, vault, collection book, perks, tower, packsOpened.
 	data.rebirths = data.rebirths + 1
 	data.cash = Perks.startCash(data.perks)
 	data.aura = 0
@@ -724,155 +736,312 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 end)
 
 ---------------------------------------------------------------------
--- Stealing
+-- Marketplace: list a card for cash; other players in the server can buy it
 ---------------------------------------------------------------------
-local function setCarryVisual(player, key)
-	local character = player.Character
-	if character == nil then
-		return
-	end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local head = character:FindFirstChild("Head")
-	local old = head and head:FindFirstChild("CarryTag")
-	if old then
-		old:Destroy()
-	end
-	if key == nil then
-		if humanoid then
-			humanoid.WalkSpeed = 16
-		end
-		return
-	end
-	if humanoid then
-		humanoid.WalkSpeed = Config.Stealing.CarrySpeed
-	end
-	if head then
-		local gui = Instance.new("BillboardGui")
-		gui.Name = "CarryTag"
-		gui.Size = UDim2.new(8, 0, 1.2, 0)
-		gui.StudsOffset = Vector3.new(0, 3, 0)
-		gui.AlwaysOnTop = true
-		gui.Parent = head
-		local label = Instance.new("TextLabel")
-		label.BackgroundTransparency = 1
-		label.Size = UDim2.new(1, 0, 1, 0)
-		label.Font = Enum.Font.FredokaOne
-		label.TextScaled = true
-		label.TextColor3 = Color3.fromRGB(255, 90, 90)
-		label.TextStrokeTransparency = 0
-		label.Text = "🚨 STOLE " .. Cards.getDisplayName(key)
-		label.Parent = gui
-	end
-end
+-- A listed card leaves the inventory and sits in data.listings (saved) until sold or cancelled.
+local listingCounter = 0
 
--- Ends a steal. success = the thief keeps the card.
-local function finishSteal(thief, success)
-	local session = sessions[thief]
-	if session == nil or session.carrying == nil then
-		return
-	end
-	local carrying = session.carrying
-	session.carrying = nil
-	setCarryVisual(thief, nil)
-
-	local victim = carrying.victim
-	local victimData = PlayerData.get(victim)
-	local name = Cards.getDisplayName(carrying.key)
-
-	-- If the victim already left, the thief keeps the card either way.
-	if success or victimData == nil then
-		local data = PlayerData.get(thief)
+local function marketSnapshot()
+	local list = {}
+	for seller in pairs(sessions) do
+		local data = PlayerData.get(seller)
 		if data then
-			addCard(data, carrying.key, 1)
-			notify(thief, "You stole " .. name .. "! It's in your cards.", "good")
-			touch(thief, true)
-		end
-		if victimData then
-			notify(victim, thief.DisplayName .. " got away with your " .. name .. "!", "error")
-		end
-	else
-		addCard(victimData, carrying.key, 1)
-		notify(victim, "You got " .. name .. " back! Put it on display again.", "good")
-		notify(thief, "You lost the " .. name .. "!", "error")
-		touch(victim, true)
-	end
-end
-
-local function trySteal(thief, plot, index)
-	local settings = Config.Stealing
-	local owner = plot.owner
-	local thiefSession = sessions[thief]
-	local ownerSession = owner and sessions[owner]
-	local ownerData = owner and PlayerData.get(owner)
-	if not settings.Enabled or thiefSession == nil or ownerSession == nil or ownerData == nil then
-		return
-	end
-	if thiefSession.carrying then
-		notify(thief, "You are already carrying a card. Get it back to your store!", "error")
-		return
-	end
-	if ownerSession.shieldOn then
-		notify(thief, "This store is locked.", "error")
-		return
-	end
-	local slotKey = tostring(index)
-	local key = ownerData.slots[slotKey]
-	if key == nil then
-		return
-	end
-	ownerData.slots[slotKey] = nil
-	Plots.setCard(plot, index, nil)
-	thiefSession.carrying = { key = key, victim = owner }
-	setCarryVisual(thief, key)
-	notify(thief, "Run back to your store! The owner can catch you.", "info")
-	notify(owner, "🚨 " .. thief.DisplayName .. " is stealing your " .. Cards.getDisplayName(key) .. "! Catch them!", "error")
-	touch(owner, true)
-end
-
-local function rootOf(player)
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if humanoid == nil or humanoid.Health <= 0 then
-		return nil
-	end
-	return character:FindFirstChild("HumanoidRootPart")
-end
-
-local function setShield(player, enabled)
-	local session = sessions[player]
-	if session == nil then
-		return
-	end
-	session.shieldOn = enabled
-	Plots.setShield(session.plot, enabled)
-end
-
-task.spawn(function()
-	while true do
-		task.wait(0.25)
-		local now = os.clock()
-		for player, session in pairs(sessions) do
-			if session.shieldOn and now >= session.shieldUntil then
-				setShield(player, false)
-				session.cooldownUntil = now + Config.Stealing.ShieldCooldown
+			for _, listing in ipairs(data.listings) do
+				table.insert(list, {
+					id = listing.id,
+					key = listing.key,
+					price = listing.price,
+					sellerId = seller.UserId,
+					sellerName = seller.DisplayName,
+				})
 			end
-			if session.carrying then
-				local root = rootOf(player)
-				if root == nil then
-					finishSteal(player, false)
-				elseif Plots.contains(session.plot, root.Position) then
-					finishSteal(player, true)
-				else
-					local victim = session.carrying.victim
-					local victimRoot = sessions[victim] and rootOf(victim)
-					if victimRoot and (victimRoot.Position - root.Position).Magnitude <= Config.Stealing.CatchDistance then
-						finishSteal(player, false)
+		end
+	end
+	table.sort(list, function(a, b)
+		if a.price ~= b.price then
+			return a.price < b.price
+		end
+		return a.id < b.id
+	end)
+	return list
+end
+
+local function broadcastMarket()
+	MarketStateRemote:FireAllClients(marketSnapshot())
+end
+
+MarketListRemote.OnServerEvent:Connect(function(player, key, price)
+	if not allow(player, "MarketList", 2, 4) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or Cards.parse(key) == nil then
+		return
+	end
+	if type(price) ~= "number" or price ~= price then
+		return
+	end
+	price = math.floor(price)
+	if price < 1 or price > Config.Market.MaxPrice then
+		notify(player, "Enter a price between $1 and " .. Format.cash(Config.Market.MaxPrice) .. ".", "error")
+		return
+	end
+	if #data.listings >= Config.Market.MaxListings then
+		notify(player, "You can only have " .. Config.Market.MaxListings .. " cards for sale at once.", "error")
+		return
+	end
+	if not takeCard(data, key, 1) then
+		return
+	end
+	listingCounter = listingCounter + 1
+	table.insert(data.listings, {
+		id = player.UserId .. "-" .. os.time() .. "-" .. listingCounter,
+		key = key,
+		price = price,
+	})
+	notify(player, Cards.getDisplayName(key) .. " listed for " .. Format.cash(price) .. ".", "good")
+	touch(player, true)
+	broadcastMarket()
+end)
+
+MarketCancelRemote.OnServerEvent:Connect(function(player, listingId)
+	if not allow(player, "MarketCancel", 4, 8) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or type(listingId) ~= "string" then
+		return
+	end
+	for index, listing in ipairs(data.listings) do
+		if listing.id == listingId then
+			table.remove(data.listings, index)
+			addCard(data, listing.key, 1)
+			touch(player, true)
+			broadcastMarket()
+			return
+		end
+	end
+end)
+
+MarketBuyRemote.OnServerEvent:Connect(function(player, listingId)
+	if not allow(player, "MarketBuy", 4, 8) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or type(listingId) ~= "string" then
+		return
+	end
+	for seller in pairs(sessions) do
+		local sellerData = PlayerData.get(seller)
+		if sellerData and seller ~= player then
+			for index, listing in ipairs(sellerData.listings) do
+				if listing.id == listingId then
+					if Cards.parse(listing.key) == nil then
+						return
 					end
+					if not spend(data, "cash", listing.price) then
+						notify(player, "Not enough cash.", "error")
+						return
+					end
+					table.remove(sellerData.listings, index)
+					addCard(data, listing.key, 1)
+					sellerData.cash = sellerData.cash + listing.price
+					local name = Cards.getDisplayName(listing.key)
+					notify(player, "You bought " .. name .. " for " .. Format.cash(listing.price) .. "!", "good")
+					notify(seller, player.DisplayName .. " bought your " .. name .. " for " .. Format.cash(listing.price) .. "!", "cash")
+					touch(player, true)
+					touch(seller, false)
+					broadcastMarket()
+					return
 				end
 			end
 		end
 	end
+	notify(player, "That card is no longer for sale.", "error")
 end)
+
+---------------------------------------------------------------------
+-- Trading: two players each offer cards, both confirm, the server swaps them
+---------------------------------------------------------------------
+-- Offered cards stay in each inventory until both players confirm; the swap then re-checks
+-- ownership and happens in one step, so a card can never be duplicated or lost.
+local trades = {} -- [player] = trade (the same table for both players)
+local tradeRequests = {} -- [target] = { [from] = os.clock() }
+
+local function sendTradeState(trade)
+	for _, player in ipairs({ trade.a, trade.b }) do
+		local other = player == trade.a and trade.b or trade.a
+		TradeStateRemote:FireClient(player, {
+			partnerName = other.DisplayName,
+			mine = trade.offers[player],
+			theirs = trade.offers[other],
+			myConfirm = trade.confirmed[player] == true,
+			theirConfirm = trade.confirmed[other] == true,
+		})
+	end
+end
+
+local function endTrade(trade, message, kind)
+	for _, player in ipairs({ trade.a, trade.b }) do
+		if trades[player] == trade then
+			trades[player] = nil
+			TradeStateRemote:FireClient(player, nil)
+			if message then
+				notify(player, message, kind or "info")
+			end
+		end
+	end
+end
+
+-- True if the player's inventory holds every card in the offer (duplicates counted).
+local function canCover(data, offer)
+	local needed = {}
+	for _, key in ipairs(offer) do
+		needed[key] = (needed[key] or 0) + 1
+	end
+	for key, count in pairs(needed) do
+		if (data.inventory[key] or 0) < count then
+			return false
+		end
+	end
+	return true
+end
+
+TradeRequestRemote.OnServerEvent:Connect(function(player, targetUserId)
+	if not allow(player, "TradeRequest", 0.5, 3) then
+		return
+	end
+	if type(targetUserId) ~= "number" or sessions[player] == nil then
+		return
+	end
+	local target = Players:GetPlayerByUserId(targetUserId)
+	if target == nil or target == player or sessions[target] == nil then
+		return
+	end
+	if trades[player] or trades[target] then
+		notify(player, "One of you is already in a trade.", "error")
+		return
+	end
+	tradeRequests[target] = tradeRequests[target] or {}
+	tradeRequests[target][player] = os.clock()
+	TradeRequestRemote:FireClient(target, player.UserId, player.DisplayName)
+	notify(player, "Trade request sent to " .. target.DisplayName .. ".", "info")
+end)
+
+TradeAcceptRemote.OnServerEvent:Connect(function(player, fromUserId)
+	if not allow(player, "TradeAccept", 1, 3) then
+		return
+	end
+	if type(fromUserId) ~= "number" or sessions[player] == nil then
+		return
+	end
+	local from = Players:GetPlayerByUserId(fromUserId)
+	local requests = tradeRequests[player]
+	local sentAt = from and requests and requests[from]
+	if from == nil or sessions[from] == nil or sentAt == nil or os.clock() - sentAt > Config.Trade.RequestTimeout then
+		notify(player, "That trade request has expired.", "error")
+		return
+	end
+	if trades[player] or trades[from] then
+		notify(player, "One of you is already in a trade.", "error")
+		return
+	end
+	requests[from] = nil
+	local trade = { a = from, b = player, offers = { [from] = {}, [player] = {} }, confirmed = {} }
+	trades[from] = trade
+	trades[player] = trade
+	sendTradeState(trade)
+end)
+
+TradeOfferRemote.OnServerEvent:Connect(function(player, key, add)
+	if not allow(player, "TradeOffer", 8, 16) then
+		return
+	end
+	local trade = trades[player]
+	local data = PlayerData.get(player)
+	if trade == nil or data == nil or Cards.parse(key) == nil then
+		return
+	end
+	local offer = trade.offers[player]
+	if add == true then
+		local offered = 0
+		for _, offeredKey in ipairs(offer) do
+			if offeredKey == key then
+				offered = offered + 1
+			end
+		end
+		if #offer >= Config.Trade.MaxCards or offered >= (data.inventory[key] or 0) then
+			return
+		end
+		table.insert(offer, key)
+	else
+		local index = table.find(offer, key)
+		if index == nil then
+			return
+		end
+		table.remove(offer, index)
+	end
+	trade.confirmed = {} -- any change means both players must confirm again
+	sendTradeState(trade)
+end)
+
+TradeConfirmRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "TradeConfirm", 2, 4) then
+		return
+	end
+	local trade = trades[player]
+	if trade == nil then
+		return
+	end
+	trade.confirmed[player] = true
+	if not (trade.confirmed[trade.a] and trade.confirmed[trade.b]) then
+		sendTradeState(trade)
+		return
+	end
+
+	local dataA, dataB = PlayerData.get(trade.a), PlayerData.get(trade.b)
+	local offerA, offerB = trade.offers[trade.a], trade.offers[trade.b]
+	if dataA == nil or dataB == nil or not canCover(dataA, offerA) or not canCover(dataB, offerB) then
+		endTrade(trade, "Trade failed: a card was no longer available.", "error")
+		return
+	end
+	for _, key in ipairs(offerA) do
+		takeCard(dataA, key, 1)
+	end
+	for _, key in ipairs(offerB) do
+		takeCard(dataB, key, 1)
+	end
+	for _, key in ipairs(offerA) do
+		addCard(dataB, key, 1)
+	end
+	for _, key in ipairs(offerB) do
+		addCard(dataA, key, 1)
+	end
+	touch(trade.a, true)
+	touch(trade.b, true)
+	endTrade(trade, "🤝 Trade complete!", "good")
+end)
+
+TradeCancelRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "TradeCancel", 2, 4) then
+		return
+	end
+	local trade = trades[player]
+	if trade then
+		endTrade(trade, "Trade cancelled.", "info")
+	end
+end)
+
+onRebirthReset = function(player, data)
+	local trade = trades[player]
+	if trade then
+		endTrade(trade, "Trade cancelled.", "info")
+	end
+	if #data.listings > 0 then
+		data.listings = {} -- cards for sale are part of the run and are reset with it
+		broadcastMarket()
+	end
+end
 
 ---------------------------------------------------------------------
 -- Plot callbacks
@@ -896,10 +1065,9 @@ Plots.init({
 	end,
 
 	onCardPrompt = function(plot, index, player)
+		-- only the owner can take a card off its stand
 		if plot.owner == player then
 			removeCard(player, index)
-		else
-			trySteal(player, plot, index)
 		end
 	end,
 
@@ -907,18 +1075,8 @@ Plots.init({
 		OpenShopRemote:FireClient(player)
 	end,
 
-	onLock = function(_, player)
-		local session = sessions[player]
-		if session == nil or session.shieldOn or not Config.Stealing.Enabled then
-			return
-		end
-		local now = os.clock()
-		if now < session.cooldownUntil then
-			return
-		end
-		session.shieldUntil = now + Config.Stealing.ShieldTime
-		setShield(player, true)
-		notify(player, "Store locked for " .. Config.Stealing.ShieldTime .. " seconds.", "good")
+	onTrade = function(_, player)
+		OpenTradeRemote:FireClient(player)
 	end,
 })
 
@@ -928,7 +1086,6 @@ Plots.init({
 task.spawn(function()
 	while true do
 		task.wait(1)
-		local now = os.clock()
 		for player, session in pairs(sessions) do
 			local data = PlayerData.get(player)
 			if data then
@@ -970,21 +1127,11 @@ task.spawn(function()
 				end
 
 				-- Never let a player get stuck with no cards and no money.
-				if not hasCards and session.carrying == nil and data.freePacks < 1 and data.cash + pendingTotal < STARTER.cost then
+				if not hasCards and data.freePacks < 1 and data.cash + pendingTotal < STARTER.cost then
 					data.freePacks = 1
 					session.rev = session.rev + 1
 					session.dirty = true
 					notify(player, "You're out of cards — here's a free Starter Pack!", "good")
-				end
-
-				if Config.Stealing.Enabled then
-					if session.shieldOn then
-						Plots.setLockText(session.plot, "🔒 LOCKED " .. math.ceil(session.shieldUntil - now) .. "s")
-					elseif now < session.cooldownUntil then
-						Plots.setLockText(session.plot, "Recharging " .. math.ceil(session.cooldownUntil - now) .. "s")
-					else
-						Plots.setLockText(session.plot, "Step here to lock store")
-					end
 				end
 
 				if session.dirty then
@@ -1054,17 +1201,12 @@ local function onPlayerAdded(player)
 		return
 	end
 
-	local now = os.clock()
 	local session = {
 		plot = plot,
 		pending = {},
 		rev = 1,
 		questRev = 0,
 		dirty = true,
-		carrying = nil,
-		shieldOn = false,
-		shieldUntil = 0,
-		cooldownUntil = 0,
 	}
 	sessions[player] = session
 
@@ -1083,11 +1225,6 @@ local function onPlayerAdded(player)
 	Plots.setOwnerSign(plot, player, data.upgrades.store, data.rebirths)
 	for index = 1, slotCount(data) do
 		Plots.setCard(plot, index, data.slots[tostring(index)])
-	end
-
-	if Config.Stealing.Enabled and Config.Stealing.JoinShield > 0 then
-		session.shieldUntil = now + Config.Stealing.JoinShield
-		setShield(player, true)
 	end
 
 	player.CharacterAdded:Connect(function(character)
@@ -1109,6 +1246,7 @@ local function onPlayerAdded(player)
 	end
 	data.lastSeen = os.time()
 	ensureQuests(player, data)
+	broadcastMarket()
 
 	pushState(player)
 end
@@ -1117,16 +1255,22 @@ local function onPlayerRemoving(player)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
 	if session and data then
-		if session.carrying then
-			finishSteal(player, false)
-		end
 		-- bank uncollected cash so nothing is lost
 		for _, amount in pairs(session.pending) do
 			data.cash = data.cash + amount
 		end
 	end
+	local trade = trades[player]
+	if trade then
+		endTrade(trade, "The other player left, so the trade was cancelled.", "info")
+	end
+	tradeRequests[player] = nil
+	for _, requests in pairs(tradeRequests) do
+		requests[player] = nil
+	end
 	sessions[player] = nil
 	buckets[player] = nil
+	broadcastMarket()
 	Plots.release(player)
 	PlayerData.release(player)
 end

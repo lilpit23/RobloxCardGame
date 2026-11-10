@@ -2,7 +2,7 @@
 
 A Roblox incremental / tycoon game: open anime card packs, put the cards on display in your store,
 collect the cash they earn, buy better packs, upgrade the store, and fill the collection book.
-Rare cards also radiate **aura**, a second currency for Aura Packs and luck upgrades.
+Rare cards also radiate **aura**, a second currency for Aura Packs, luck and permanent perks.
 
 ## The loop
 
@@ -31,8 +31,9 @@ Rare cards also radiate **aura**, a second currency for Aura Packs and luck upgr
 14. **Aura Shrine:** permanent perks bought with aura that survive rebirth (starting cash, cheaper
     packs, more aura, better offline earnings, extra vault slots).
 15. **Lucky events:** every 20 minutes the whole server gets better pack odds for 5 minutes.
-16. Other players can steal a displayed card by holding the prompt on it and running it back to
-   their own store. Catch them (get close) to take it back, or step on the red pad to lock your store.
+16. **Trading and the market:** trade cards with another player (both sides offer cards and both
+    confirm), or list a card for a cash price so anyone in the server can buy it. There is no
+    stealing and no PvP.
 
 ## Setup
 
@@ -69,7 +70,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 
 | File | What it controls |
 | --- | --- |
-| `src/shared/Config.luau` | Slots, pack size, sell price, stealing rules (or turn stealing off) |
+| `src/shared/Config.luau` | Slots, pack size, sell price, market and trade limits, events, sounds |
 | `src/shared/Cards.luau` | Card list, rarities, variants (Holo / Gold / Prismatic), aura rates |
 | `src/shared/Packs.luau` | Pack prices and odds |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |

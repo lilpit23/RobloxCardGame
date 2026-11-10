@@ -140,7 +140,7 @@ local hud = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0, 0.5),
 	Position = UDim2.new(0, 12, 0.5, 0),
-	Size = UDim2.new(0, 210, 0, 520),
+	Size = UDim2.new(0, 210, 0, 560),
 }, screen)
 addScale(hud)
 make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
@@ -1089,6 +1089,229 @@ panels.Upgrades = function()
 	end
 end
 
+-- Trade + marketplace ---------------------------------------------------------------
+local market = {} -- every card for sale in this server: { id, key, price, sellerId, sellerName }
+local activeTrade = nil -- { partnerName, mine, theirs, myConfirm, theirConfirm } while trading
+local tradeRequestsIn = {} -- { { userId, name }, ... }
+local tradeView = "market" -- "market" | "sell" | "players"
+local sellKey = nil
+local sellPriceText = ""
+
+-- "Crimson Samurai Akane  ·  $40/s", coloured by rarity.
+local function newCardLine(parent, key, position, size)
+	local def = Cards.parse(key)
+	local label = newLabel(parent, Cards.getDisplayName(key) .. "  ·  " .. Format.cash(Cards.getIncome(key)) .. "/s", position, size, {
+		TextSize = 14,
+		TextWrapped = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	if def and def.rarity ~= "Secret" then
+		label.TextColor3 = Cards.Rarities[def.rarity].color:Lerp(Color3.new(1, 1, 1), 0.35)
+	elseif def then
+		label.TextColor3 = Color3.fromRGB(255, 90, 90)
+	end
+	return label
+end
+
+local function sortedInventoryKeys()
+	local keys = {}
+	for key in pairs(state.inventory) do
+		if Cards.parse(key) then
+			table.insert(keys, key)
+		end
+	end
+	table.sort(keys, function(a, b)
+		local incomeA, incomeB = Cards.getIncome(a), Cards.getIncome(b)
+		if incomeA ~= incomeB then
+			return incomeA > incomeB
+		end
+		return a < b
+	end)
+	return keys
+end
+
+local function newNote(order, text)
+	local row = newRow(order, 34)
+	row.BackgroundTransparency = 1
+	newLabel(row, text, UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), { TextSize = 14, TextColor3 = COLORS.dim })
+	return row
+end
+
+local function renderActiveTrade()
+	local trade = activeTrade
+	titleLabel.Text = "🤝 Trading with " .. trade.partnerName
+	local header = newRow(1, 76)
+	local status = "Add cards, then both press Confirm."
+	if trade.myConfirm and not trade.theirConfirm then
+		status = "You confirmed. Waiting for " .. trade.partnerName .. "…"
+	elseif trade.theirConfirm and not trade.myConfirm then
+		status = trade.partnerName .. " confirmed. Check the offer, then confirm."
+	end
+	newLabel(header, status, UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), { TextSize = 14 })
+	newButton(header, trade.myConfirm and "Confirmed ✓" or "Confirm", UDim2.new(0, 14, 0, 34), UDim2.new(0, 160, 0, 34), trade.myConfirm and COLORS.locked or COLORS.good, function()
+		if not trade.myConfirm then
+			Remotes.TradeConfirm:FireServer()
+		end
+	end)
+	newButton(header, "Cancel trade", UDim2.new(0, 184, 0, 34), UDim2.new(0, 140, 0, 34), COLORS.bad, function()
+		Remotes.TradeCancel:FireServer()
+	end)
+
+	local order = 1
+	local function section(title, keys, removable)
+		order = order + 1
+		newNote(order, title)
+		if #keys == 0 then
+			order = order + 1
+			newNote(order, "    (nothing yet)")
+		end
+		for _, key in ipairs(keys) do
+			order = order + 1
+			local row = newRow(order, 36)
+			newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -120, 1, 0))
+			if removable then
+				newButton(row, "Remove", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), COLORS.locked, function()
+					Remotes.TradeOffer:FireServer(key, false)
+				end).TextSize = 13
+			end
+		end
+	end
+	section("You give (" .. #trade.mine .. "/" .. Config.Trade.MaxCards .. "):", trade.mine, true)
+	section(trade.partnerName .. " gives:", trade.theirs, false)
+
+	order = order + 1
+	newNote(order, "Your cards — tap Add to offer one:")
+	for _, key in ipairs(sortedInventoryKeys()) do
+		order = order + 1
+		local row = newRow(order, 36)
+		newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
+		newLabel(row, "x" .. state.inventory[key], UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
+		newButton(row, "Add", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), COLORS.button, function()
+			Remotes.TradeOffer:FireServer(key, true)
+		end).TextSize = 13
+	end
+end
+
+panels.Trade = function()
+	useList()
+	if activeTrade then
+		renderActiveTrade()
+		return
+	end
+	titleLabel.Text = "🤝 Trade & Market"
+
+	-- tabs
+	local tabs = newRow(1, 40)
+	tabs.BackgroundTransparency = 1
+	local TABS = { { "market", "🛒 Market" }, { "sell", "💰 Sell a card" }, { "players", "🤝 Trade" } }
+	for index, tab in ipairs(TABS) do
+		local label = tab[2]
+		if tab[1] == "players" and #tradeRequestsIn > 0 then
+			label = label .. "  ❗"
+		end
+		newButton(tabs, label, UDim2.new(0, (index - 1) * 206, 0, 2), UDim2.new(0, 200, 0, 36), tradeView == tab[1] and COLORS.button or COLORS.row, function()
+			tradeView = tab[1]
+			renderPanel()
+		end).TextSize = 15
+	end
+
+	if tradeView == "market" then
+		if #market == 0 then
+			newNote(2, "Nothing is for sale right now. List one of your cards in \"Sell a card\".")
+		end
+		for index, listing in ipairs(market) do
+			local row = newRow(1 + index, 48)
+			newCardLine(row, listing.key, UDim2.new(0, 12, 0, 4), UDim2.new(1, -190, 0, 22))
+			local mine = listing.sellerId == player.UserId
+			newLabel(row, mine and "Your listing" or ("Seller: " .. tostring(listing.sellerName)), UDim2.new(0, 12, 0, 26), UDim2.new(1, -190, 0, 18), {
+				TextSize = 12,
+				TextColor3 = COLORS.dim,
+			})
+			if mine then
+				newButton(row, "Cancel  (" .. Format.cash(listing.price) .. ")", UDim2.new(1, -168, 0, 7), UDim2.new(0, 160, 0, 34), COLORS.locked, function()
+					Remotes.MarketCancel:FireServer(listing.id)
+				end).TextSize = 13
+			else
+				newButton(row, "Buy  " .. Format.cash(listing.price), UDim2.new(1, -168, 0, 7), UDim2.new(0, 160, 0, 34), COLORS.good, function()
+					Remotes.MarketBuy:FireServer(listing.id)
+				end).TextSize = 15
+			end
+		end
+	elseif tradeView == "sell" then
+		if sellKey and (state.inventory[sellKey] or 0) < 1 then
+			sellKey = nil
+		end
+		local form = newRow(2, 84)
+		if sellKey then
+			newCardLine(form, sellKey, UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 22))
+		else
+			newLabel(form, "Pick a card below, set a price, then list it.", UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 22), { TextSize = 14 })
+		end
+		local priceBox = make("TextBox", {
+			Position = UDim2.new(0, 14, 0, 40),
+			Size = UDim2.new(0, 220, 0, 34),
+			BackgroundColor3 = Color3.fromRGB(20, 20, 30),
+			BorderSizePixel = 0,
+			Font = Enum.Font.GothamBold,
+			PlaceholderText = "Price in cash, e.g. 5000",
+			Text = sellPriceText,
+			TextColor3 = COLORS.text,
+			TextSize = 15,
+			ClearTextOnFocus = false,
+		}, form)
+		round(priceBox, 8)
+		priceBox:GetPropertyChangedSignal("Text"):Connect(function()
+			sellPriceText = priceBox.Text
+		end)
+		newButton(form, "List for sale", UDim2.new(0, 244, 0, 40), UDim2.new(0, 160, 0, 34), COLORS.good, function()
+			local price = tonumber((string.gsub(sellPriceText, "[,%$%s]", "")))
+			if sellKey == nil then
+				toast("Pick a card to sell first.", "error")
+			elseif price == nil or price < 1 then
+				toast("Type a price first.", "error")
+			else
+				Remotes.MarketList:FireServer(sellKey, math.floor(price))
+				sellKey = nil
+				sellPriceText = ""
+			end
+		end)
+		for index, key in ipairs(sortedInventoryKeys()) do
+			local row = newRow(2 + index, 36)
+			newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
+			newLabel(row, "x" .. state.inventory[key], UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
+			newButton(row, sellKey == key and "Selected" or "Select", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), sellKey == key and COLORS.good or COLORS.button, function()
+				sellKey = key
+				renderPanel()
+			end).TextSize = 13
+		end
+	else
+		local order = 1
+		for _, request in ipairs(tradeRequestsIn) do
+			order = order + 1
+			local row = newRow(order, 44)
+			newLabel(row, request.name .. " wants to trade with you", UDim2.new(0, 14, 0, 0), UDim2.new(1, -180, 1, 0), { TextSize = 15 })
+			newButton(row, "Accept", UDim2.new(1, -158, 0, 6), UDim2.new(0, 150, 0, 32), COLORS.good, function()
+				Remotes.TradeAccept:FireServer(request.userId)
+			end)
+		end
+		local others = 0
+		for _, other in ipairs(Players:GetPlayers()) do
+			if other ~= player then
+				others = others + 1
+				order = order + 1
+				local row = newRow(order, 44)
+				newLabel(row, other.DisplayName, UDim2.new(0, 14, 0, 0), UDim2.new(1, -180, 1, 0), { TextSize = 15 })
+				newButton(row, "Ask to trade", UDim2.new(1, -158, 0, 6), UDim2.new(0, 150, 0, 32), COLORS.button, function()
+					Remotes.TradeRequest:FireServer(other.UserId)
+				end).TextSize = 15
+			end
+		end
+		if others == 0 then
+			newNote(order + 1, "Nobody else is in this server right now.")
+		end
+	end
+end
+
 -- Battle tower -----------------------------------------------------------------------
 local battling = false
 local renderedTower = -1
@@ -1280,6 +1503,7 @@ local MENU = {
 	{ "Cards", "🃏 My Cards", COLORS.button },
 	{ "Book", "📖 Collection", Color3.fromRGB(150, 95, 230) },
 	{ "Upgrades", "🏪 Upgrades", COLORS.good },
+	{ "Trade", "🤝 Trade", Color3.fromRGB(40, 170, 160) },
 	{ "Battle", "⚔️ Battle", Color3.fromRGB(200, 60, 60) },
 	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50) },
 	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50) },
@@ -1362,6 +1586,48 @@ end)
 
 Remotes.Notify.OnClientEvent:Connect(function(text, kind)
 	toast(tostring(text), kind)
+end)
+
+Remotes.OpenTrade.OnClientEvent:Connect(function()
+	if currentPanel ~= "Trade" or not window.Visible then
+		openPanel("Trade")
+	end
+end)
+
+Remotes.MarketState.OnClientEvent:Connect(function(listings)
+	market = type(listings) == "table" and listings or {}
+	if currentPanel == "Trade" then
+		renderPanel()
+	end
+end)
+
+Remotes.TradeState.OnClientEvent:Connect(function(newTrade)
+	local started = activeTrade == nil and newTrade ~= nil
+	activeTrade = newTrade
+	if started then
+		-- a trade just began: bring the trade window up
+		tradeRequestsIn = {}
+		if currentPanel ~= "Trade" or not window.Visible then
+			openPanel("Trade")
+			return
+		end
+	end
+	if currentPanel == "Trade" then
+		renderPanel()
+	end
+end)
+
+Remotes.TradeRequest.OnClientEvent:Connect(function(fromUserId, fromName)
+	for _, request in ipairs(tradeRequestsIn) do
+		if request.userId == fromUserId then
+			return
+		end
+	end
+	table.insert(tradeRequestsIn, { userId = fromUserId, name = tostring(fromName) })
+	toast("🤝 " .. tostring(fromName) .. " wants to trade! Open Trade to accept.", "info")
+	if currentPanel == "Trade" then
+		renderPanel()
+	end
 end)
 
 Remotes.OpenShop.OnClientEvent:Connect(function()

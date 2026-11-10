@@ -21,11 +21,11 @@ different tracks can run in parallel.
 ## Status
 
 Done so far: core loop (packs → display → collect → buy), aura, 5 store tiers, stands, luck,
-collection book, stealing + store lock, session-locked saving with retries, remote rate limits,
+collection book, session-locked saving with retries, remote rate limits,
 card fusion (3 copies → next variant), offline earnings, rebirth with card requirements and a
 vault that carries cards into the next run, CI, bulk pack opening, auto collector, collection
 income bonus, first-minute hints, Neon Arcade set, daily quests and login reward, card types with
-display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds.
+display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds, trading and an in-server market (stealing was removed).
 
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 
@@ -49,8 +49,8 @@ display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash
   (cards, selling, fusion), `PackService`, `UpgradeService`, `StealService`, `IncomeLoop`. No
   behaviour change. Done when: `init.server.luau` only wires modules together.
 - [ ] **S2 Security audit.** Run the `roblox-dev:roblox-reviewer` agent over `src/` and fix every
-  confirmed finding. Specific things to check: a thief using speed hacks, stealing while the victim
-  is mid-save, card loss if the server crashes while a card is being carried.
+  confirmed finding. Specific things to check: trades and market purchases (ownership re-checked
+  at the swap, no yields mid-swap), listings across rebirth and rejoin, remote spam.
 - [ ] **S3 Move saving to ProfileStore.** Replace the hand-written session lock in `PlayerData`
   with ProfileStore via Wally, keeping the same `load / get / save / release` interface.
 - [ ] **S4 Global leaderboards.** OrderedDataStore boards for total cash earned and aura, shown on
@@ -69,29 +69,26 @@ display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash
   steal quest that only appears when other players are in the server.
 - [x] **G6 Auto-collect upgrade.** Done (Auto Collector, bought with aura).
 - [ ] **G7 Auto-sell filter.** Player picks rarities to sell automatically when pulled.
-- [ ] **G8 Trading.** Two-sided trade window with confirm + 5-second lock-in, fully server-held.
-  High dupe risk: needs S2 done first and its own review.
+- [x] **G8 Trading + market.** Done: two-sided trades with double confirm, and cash listings other
+  players in the server can buy. Follow-ups: card pictures in the trade window, a cross-server
+  market (MemoryStore), a sales tax to drain cash, trade history. Needs the S2 audit.
 - [ ] **G9 Limited-time packs.** Lucky events are done. Still to do: a weekend-only pack driven by a
   schedule table, and a Golden Pack that drops in the street for whoever reaches it first.
 - [x] **G10 More cards.** Done: Neon Arcade set (24 cards) with Neon, Arcade and Glitch packs, plus the
   Omega Pack. Follow-up: a set filter in the collection book, and rebirths that need Neon cards.
 
-## Track B — battles (PvE is in; PvP is the goal)
+## Track B — battles (PvE only; the owner has ruled out PvP and stealing for now)
 
 Done: card types with a five-way advantage cycle, `Battle.simulate` (pure, server-run), a 50-floor
 PvE tower that auto-picks the player's three strongest cards, playback UI.
 
 - [ ] **B1 Team picker.** Let the player choose and save a three-card battle team instead of the
   automatic strongest three, so type matchups become a decision. Validate ownership on the server.
-- [ ] **B2 PvP duels.** Challenge another player in the server: request → accept → the server runs
-  `Battle.simulate` with both saved teams → both clients play the same log. Start with no stakes.
-- [ ] **B3 Staked duels.** Each side puts up aura or a card; winner takes both. High dupe risk:
-  escrow the stakes on the server before the fight and do S2 first.
 - [ ] **B4 Abilities.** One simple ability per type (Warrior: first hit doubles; Beast: heals on
   KO; Mystic: hits the back row; Tech: shield; Star: buffs allies) to give fights more texture.
 - [ ] **B5 Bosses and raids.** Every tenth tower floor is a boss with a unique card reward; a
-  server-wide raid boss everyone attacks during an event.
-- [ ] **B6 Ranked ladder.** Rating, seasons and a leaderboard once B2 is solid.
+  co-op server-wide raid boss everyone attacks during an event.
+- On hold until the owner asks: PvP duels, staked duels, ranked ladder.
 
 ## Track U — interface and feel
 
@@ -111,8 +108,8 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
 
 ## Track W — world
 
-- [ ] **W1 Street and lobby.** Road, lamps, trees, a central plaza with the leaderboards (S4) and a
-  giant spinning pack.
+- [ ] **W1 Street and lobby.** Partly done: road, pavements, lamps, trees, banner over the spawn.
+  Still to do: a plaza with leaderboards (S4) and a public market stall.
 - [ ] **W2 Store visuals per tier.** Real storefront models per tier instead of walls and pillars;
   shelves, a counter, a neon sign.
 - [ ] **W3 Card stands as 3D display cases** with a glow coloured by rarity and a beam for Mythic

@@ -85,9 +85,18 @@ local function slotCount(data)
 	return math.min(Config.BaseSlots + data.upgrades.slots, Config.MaxSlots)
 end
 
--- Total income multiplier: store tier x rebirth bonus.
+local function collectionCount(data)
+	local count = 0
+	for _ in pairs(data.collection) do
+		count = count + 1
+	end
+	return count
+end
+
+-- Total income multiplier: store tier x rebirth bonus x collection book bonus.
 local function storeMult(data)
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths)
+	local collectionBonus = 1 + Config.CollectionBonusPerCard * collectionCount(data)
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus
 end
 
 -- Bought luck levels plus the free ones from rebirths.
@@ -199,7 +208,16 @@ end)
 ---------------------------------------------------------------------
 -- Packs
 ---------------------------------------------------------------------
-BuyPackRemote.OnServerInvoke = function(player, packId)
+local function isBulkSize(count)
+	for _, size in ipairs(Config.PackBulkSizes) do
+		if count == size then
+			return true
+		end
+	end
+	return false
+end
+
+BuyPackRemote.OnServerInvoke = function(player, packId, count)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
 	local pack = type(packId) == "string" and Packs.ById[packId] or nil
@@ -215,14 +233,21 @@ BuyPackRemote.OnServerInvoke = function(player, packId)
 		return { ok = false, error = "Upgrade your store to " .. Upgrades.StoreTiers[pack.storeTier].name .. " first." }
 	end
 
-	if pack.id == STARTER.id and data.freePacks > 0 then
+	if count == nil then
+		count = 1
+	end
+	if type(count) ~= "number" or not isBulkSize(count) then
+		return { ok = false, error = "Something went wrong." }
+	end
+
+	if count == 1 and pack.id == STARTER.id and data.freePacks > 0 then
 		data.freePacks = data.freePacks - 1
-	elseif not spend(data, pack.currency, pack.cost) then
+	elseif not spend(data, pack.currency, pack.cost * count) then
 		return { ok = false, error = "Not enough " .. pack.currency .. "." }
 	end
 
 	local pulled = {}
-	for _ = 1, Config.CardsPerPack do
+	for _ = 1, Config.CardsPerPack * count do
 		local key = Packs.roll(pack, luckLevel(data), rng)
 		local isNew = data.collection[key] == nil
 		addCard(data, key, 1)
@@ -230,7 +255,7 @@ BuyPackRemote.OnServerInvoke = function(player, packId)
 		data.aura = data.aura + auraBonus
 		table.insert(pulled, { key = key, isNew = isNew, auraBonus = auraBonus })
 	end
-	data.packsOpened = data.packsOpened + 1
+	data.packsOpened = data.packsOpened + count
 
 	touch(player, true)
 	return { ok = true, cards = pulled }
@@ -499,7 +524,7 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	data.aura = 0
 	data.inventory = {}
 	data.slots = {}
-	data.upgrades = { store = 0, slots = 0, luck = 0 }
+	data.upgrades = { store = 0, slots = 0, luck = 0, auto = 0 }
 	data.freePacks = 1
 	session.pending = {}
 
@@ -732,6 +757,18 @@ task.spawn(function()
 						Plots.setPending(session.plot, index, session.pending[index])
 					end
 					pendingTotal = pendingTotal + (session.pending[index] or 0)
+				end
+
+				-- Auto Collector upgrade: bank everything straight away.
+				if data.upgrades.auto >= 1 and pendingTotal >= 1 then
+					data.cash = data.cash + pendingTotal
+					for index = 1, slotCount(data) do
+						if (session.pending[index] or 0) > 0 then
+							session.pending[index] = 0
+							Plots.setPending(session.plot, index, 0)
+						end
+					end
+					session.dirty = true
 				end
 				if auraGain > 0 then
 					data.aura = data.aura + auraGain

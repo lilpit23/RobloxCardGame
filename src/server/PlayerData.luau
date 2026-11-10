@@ -36,7 +36,7 @@ local function newData()
 		inventory = {}, -- [cardKey] = count (cards not on display)
 		slots = {}, -- [tostring(slotIndex)] = cardKey (cards on display)
 		collection = {}, -- [cardKey] = true (every card ever owned)
-		upgrades = { store = 0, slots = 0, luck = 0 },
+		upgrades = { store = 0, slots = 0, luck = 0, auto = 0 },
 		freePacks = 1,
 		packsOpened = 0,
 		rebirths = 0,

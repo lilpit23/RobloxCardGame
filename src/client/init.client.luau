@@ -23,7 +23,7 @@ local state = {
 	inventory = {},
 	slots = {},
 	collection = {},
-	upgrades = { store = 0, slots = 0, luck = 0 },
+	upgrades = { store = 0, slots = 0, luck = 0, auto = 0 },
 	freePacks = 0,
 	rebirths = 0,
 	vault = {},
@@ -191,6 +191,23 @@ local body = make("ScrollingFrame", {
 }, window)
 
 -- Toast notifications
+-- First-minute hint at the top of the screen
+local hintLabel = make("TextLabel", {
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.new(0.5, 0, 0, 8),
+	Size = UDim2.new(0, 470, 0, 38),
+	BackgroundColor3 = COLORS.panel,
+	BorderSizePixel = 0,
+	Font = Enum.Font.GothamBold,
+	Text = "",
+	TextColor3 = Color3.fromRGB(255, 225, 120),
+	TextSize = 16,
+	TextWrapped = true,
+	Visible = false,
+}, screen)
+round(hintLabel, 10)
+make("UIStroke", { Color = Color3.fromRGB(255, 225, 120), Thickness = 2 }, hintLabel)
+
 local toastHolder = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0.5, 1),
@@ -385,18 +402,99 @@ local function revealCards(pulled, pack)
 	revealing = false
 end
 
+-- Several packs at once: show everything in one grid, best cards first.
+local function revealGrid(pulled, pack)
+	revealing = true
+	revealGui.Enabled = true
+	cardHolder.Visible = false
+	skipButton.Text = "Continue"
+
+	local newCount, auraTotal = 0, 0
+	local sorted = {}
+	for _, entry in ipairs(pulled) do
+		table.insert(sorted, entry)
+		if entry.isNew then
+			newCount = newCount + 1
+		end
+		auraTotal = auraTotal + (entry.auraBonus or 0)
+	end
+	table.sort(sorted, function(a, b)
+		local incomeA, incomeB = Cards.getIncome(a.key), Cards.getIncome(b.key)
+		if incomeA ~= incomeB then
+			return incomeA > incomeB
+		end
+		return a.key < b.key
+	end)
+
+	revealTitle.Text = pack.name .. " x" .. math.floor(#pulled / Config.CardsPerPack)
+	revealTitle.TextColor3 = COLORS.text
+	local summary = newCount .. " new"
+	if auraTotal > 0 then
+		summary = summary .. "   +" .. Format.short(auraTotal) .. " aura"
+	end
+	revealSub.Text = summary
+	revealHint.Text = ""
+
+	local grid = make("ScrollingFrame", {
+		Position = UDim2.new(0, 0, 0, 88),
+		Size = UDim2.new(1, 0, 1, -140),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 6,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+	}, revealStage)
+	make("UIGridLayout", {
+		CellSize = UDim2.new(0, 88, 0, 123),
+		CellPadding = UDim2.new(0, 9, 0, 9),
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, grid)
+	for order, entry in ipairs(sorted) do
+		local cell = make("Frame", { BackgroundTransparency = 1, LayoutOrder = order }, grid)
+		local holder = make("Frame", {
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 3, 0, 3),
+			Size = UDim2.new(1, -6, 1, -6),
+		}, cell)
+		CardView.new(entry.key).Parent = holder
+		if entry.isNew then
+			newLabel(cell, "NEW", UDim2.new(0, 0, 0, 0), UDim2.new(0, 36, 0, 15), {
+				TextSize = 10,
+				TextXAlignment = Enum.TextXAlignment.Center,
+				BackgroundTransparency = 0,
+				BackgroundColor3 = COLORS.bad,
+				ZIndex = 3,
+			})
+		end
+	end
+
+	clickSignal.Event:Wait()
+
+	grid:Destroy()
+	skipButton.Text = "Skip"
+	cardHolder.Visible = true
+	revealGui.Enabled = false
+	revealing = false
+end
+
 local buying = false
-local function buyPack(pack)
+local function buyPack(pack, count)
 	if buying or revealing then
 		return
 	end
 	buying = true
 	local ok, result = pcall(function()
-		return Remotes.BuyPack:InvokeServer(pack.id)
+		return Remotes.BuyPack:InvokeServer(pack.id, count or 1)
 	end)
 	buying = false
 	if ok and type(result) == "table" and result.ok then
-		revealCards(result.cards, pack)
+		if #result.cards > Config.CardsPerPack then
+			revealGrid(result.cards, pack)
+		else
+			revealCards(result.cards, pack)
+		end
 	elseif ok and type(result) == "table" and result.error then
 		toast(result.error, "error")
 	else
@@ -491,8 +589,21 @@ panels.Packs = function()
 			TextYAlignment = Enum.TextYAlignment.Top,
 		})
 
-		local buttonPosition = UDim2.new(1, -160, 0, 20)
-		local buttonSize = UDim2.new(0, 148, 0, 44)
+		local buttonPosition = UDim2.new(1, -160, 0, 8)
+		local buttonSize = UDim2.new(0, 148, 0, 40)
+		if tier >= pack.storeTier then
+			-- bulk buttons under the main one
+			local bulkColor = pack.currency == "aura" and Color3.fromRGB(150, 55, 135) or Color3.fromRGB(60, 105, 195)
+			local x = -160
+			for _, size in ipairs(Config.PackBulkSizes) do
+				if size > 1 then
+					newButton(row, "x" .. size, UDim2.new(1, x, 0, 52), UDim2.new(0, 72, 0, 26), bulkColor, function()
+						buyPack(pack, size)
+					end).TextSize = 14
+					x = x + 76
+				end
+			end
+		end
 		if tier < pack.storeTier then
 			local locked = newButton(row, "🔒 " .. Upgrades.StoreTiers[pack.storeTier].name, buttonPosition, buttonSize, COLORS.locked, nil)
 			locked.TextSize = 13
@@ -655,7 +766,8 @@ panels.Book = function()
 			TextColor3 = variantsFound == #Cards.VariantOrder and Color3.fromRGB(255, 215, 90) or COLORS.dim,
 		})
 	end
-	titleLabel.Text = "📖 Collection Book  (" .. found .. "/" .. total .. ")"
+	local bonus = math.floor(found * Config.CollectionBonusPerCard * 100 + 0.5)
+	titleLabel.Text = "📖 Collection  (" .. found .. "/" .. total .. ")  +" .. bonus .. "% income"
 end
 
 -- Upgrades -----------------------------------------------------------------
@@ -733,7 +845,7 @@ panels.Rebirth = function()
 			})
 		end
 		local bottom = 44 + #requirements * lineHeight
-		newLabel(row, "Resets cash, aura, cards, stands, luck and your store. Keeps your vault and collection book.", UDim2.new(0, 14, 0, bottom), UDim2.new(1, -200, 0, 52), {
+		newLabel(row, "Resets cash, aura, cards and every upgrade. Keeps your vault and collection book.", UDim2.new(0, 14, 0, bottom), UDim2.new(1, -200, 0, 52), {
 			TextSize = 12,
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
@@ -853,7 +965,33 @@ end
 ---------------------------------------------------------------------
 -- State updates from the server
 ---------------------------------------------------------------------
+-- What a brand-new player should do next, or "" once they have the hang of it.
+local function tutorialHint()
+	if state.rebirths > 0 then
+		return ""
+	end
+	local owned = next(state.inventory) ~= nil
+	local displayed = next(state.slots) ~= nil
+	local discovered = 0
+	for _ in pairs(state.collection) do
+		discovered = discovered + 1
+	end
+	if state.freePacks > 0 and not owned and not displayed then
+		return "🎁 Open your free pack — tap the FREE PACK button!"
+	end
+	if owned and not displayed then
+		return "🃏 Open My Cards and tap Display Best to start earning"
+	end
+	if displayed and discovered < 8 and state.upgrades.auto < 1 and state.cash < 25 then
+		return "💵 Walk over the green pads in your store to collect cash"
+	end
+	return ""
+end
+
 local function refreshHud()
+	local hint = tutorialHint()
+	hintLabel.Text = hint
+	hintLabel.Visible = hint ~= ""
 	cashLabel.Text = "💵 " .. Format.cash(state.cash)
 	auraLabel.Text = "✨ " .. Format.short(state.aura) .. " Aura"
 	local rate = "+" .. Format.cash(state.incomePerSec) .. "/s"
@@ -869,10 +1007,9 @@ Remotes.State.OnClientEvent:Connect(function(newState)
 		state[key] = value
 	end
 	refreshHud()
-	if currentPanel and state.rev ~= renderedRev then
-		renderPanel()
-	elseif currentPanel == "Rebirth" and rebirthSignature() ~= renderedRebirthSignature then
-		-- cash / aura crossed a requirement: refresh the checklist
+	-- The rebirth checklist also refreshes when cash / aura crosses a requirement.
+	local rebirthChanged = currentPanel == "Rebirth" and rebirthSignature() ~= renderedRebirthSignature
+	if currentPanel and (state.rev ~= renderedRev or rebirthChanged) then
 		renderPanel()
 	end
 end)

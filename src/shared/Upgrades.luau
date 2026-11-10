@@ -12,7 +12,7 @@ Upgrades.StoreTiers = {
 	{ name = "Aura Tower", cost = 25000000, mult = 7 },
 }
 
-Upgrades.Order = { "store", "slots", "luck" }
+Upgrades.Order = { "store", "slots", "luck", "auto" }
 
 Upgrades.Defs = {
 	store = {
@@ -51,6 +51,20 @@ Upgrades.Defs = {
 		end,
 		describe = function(level)
 			return "+" .. (level * 10) .. "% chance for Rare+ cards and Holo / Gold / Prismatic variants"
+		end,
+	},
+	auto = {
+		name = "Auto Collector",
+		currency = "aura",
+		max = 1,
+		cost = function()
+			return 2000
+		end,
+		describe = function(level)
+			if level >= 1 then
+				return "Cash from every stand goes straight to your balance"
+			end
+			return "Collects the cash from every stand for you — no more walking over pads"
 		end,
 	},
 }

@@ -5,6 +5,8 @@ return {
 	AutosaveInterval = 120,
 
 	CardsPerPack = 3,
+	PackBulkSizes = { 1, 3, 10 }, -- how many packs can be opened in one go
+	CollectionBonusPerCard = 0.01, -- +1% income for every card (and variant) in the collection book
 	BaseSlots = 4, -- display stands a new store starts with
 	MaxSlots = 16,
 	SellMultiplier = 20, -- sell price = card income per second * this

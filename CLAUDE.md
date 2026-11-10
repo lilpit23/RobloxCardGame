@@ -29,6 +29,11 @@ way so the repo stays the whole game.
 
 ## Verifying
 
-The game has not yet been run in Roblox Studio from this repo, and there is no Luau toolchain
-checked in (see task T1 in the plan). Until then: parse-check the files and run the pure modules in
-`src/shared` outside Roblox with stubs for `Color3` and `Random`. Report honestly what was checked.
+- CI (`.github/workflows/ci.yml`) runs on every push and pull request: `selene src` (lint),
+  `rojo build` (place file, uploaded as the `AuraPacks` artifact) and `luau-lsp analyze` (types).
+  Check it with `gh run list` / `gh run view --log-failed` and fix failures before finishing.
+- Tool versions are pinned in `rokit.toml`. They may not be installable inside an agent container;
+  CI is the source of truth.
+- The pure modules in `src/shared` can be run outside Roblox with stubs for `Color3` and `Random`.
+- Nobody has playtested the game in Roblox Studio from this repo yet. CI passing means the code
+  lints, type-checks and builds — not that it plays correctly. Report honestly what was checked.

@@ -8,9 +8,9 @@ different tracks can run in parallel.
 
 - Read `CLAUDE.md` first. The server decides everything; the client only asks and draws.
 - Branch from `main`, one task per branch, one pull request per task.
-- Nobody has run this game in Roblox Studio yet. Until task T1 lands, the only checks available are
-  a syntax parse and running the pure logic modules outside Roblox. Say in the pull request what
-  was and was not verified; never claim a playtest that did not happen.
+- CI (lint, type check, place-file build) must be green. Nobody has playtested this game in Roblox
+  Studio yet, so say in the pull request what was and was not verified; never claim a playtest
+  that did not happen.
 - Every new remote: rate limit first line, validate type → range → permission, never trust a price
   or amount from the client.
 - Every new saved field: add it to `newData()` in `PlayerData.luau`; if an existing field changes
@@ -23,14 +23,13 @@ different tracks can run in parallel.
 Done so far: core loop (packs → display → collect → buy), aura, 5 store tiers, stands, luck,
 collection book, stealing + store lock, session-locked saving with retries, remote rate limits,
 card fusion (3 copies → next variant), offline earnings, rebirth with card requirements and a
-vault that carries cards into the next run.
+vault that carries cards into the next run, CI, bulk pack opening, auto collector, collection
+income bonus, first-minute hints.
 
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 
-- [ ] **T1 Toolchain + CI.** Add `rokit.toml` (rojo, selene, stylua, luau-lsp), `selene.toml` with
-  the roblox standard library, `stylua.toml` (tabs, 120 columns), and a GitHub Actions workflow
-  that runs stylua check, selene, `luau-lsp analyze`, and `rojo build`, uploading the `.rbxlx` as a
-  build artifact. Done when: the workflow is green on `main`.
+- [x] **T1 Toolchain + CI.** Done: selene, `luau-lsp analyze` and `rojo build` run in GitHub
+  Actions. Follow-up: run `stylua src` once and add `stylua --check src` to the workflow.
 - [ ] **T2 Strict typing.** Add `--!strict` and type annotations file by file, starting with
   `src/shared`. Add `src/shared/Types.luau` for the profile, card, pack and remote payload shapes.
   Done when: `luau-lsp analyze` reports no errors.
@@ -58,18 +57,16 @@ vault that carries cards into the next run.
 
 ## Track G — gameplay depth (pick in order; each is independent of the others)
 
-- [ ] **G1 Open many.** Buy 3 or 10 packs at once; the reveal shows a grid with the best pull
-  highlighted. One remote call, one state update.
+- [x] **G1 Open many.** Done (x3 / x10 with a grid reveal).
 - [x] **G2 Rebirth + vault.** Done: `src/shared/Rebirth.luau`. Follow-ups: tune the six levels with
   the balance simulator (T4), a rebirth animation, rebirth count on the leaderboard.
-- [ ] **G3 Collection rewards.** Completing every card of a rarity (and every variant of a card)
-  grants a permanent income bonus, shown in the collection book.
+- [ ] **G3 Collection rewards.** Partly done: +1% income per discovered card. Still to do: bigger
+  one-off rewards for completing a whole rarity or every variant of a card.
 - [ ] **G4 Daily reward + playtime rewards.** A 7-day streak calendar and a free pack every
   15 minutes of play.
 - [ ] **G5 Quests.** Three rotating goals (open N packs, pull an Epic, steal a card, collect $X)
   that pay aura.
-- [ ] **G6 Auto-collect upgrade.** An aura upgrade that collects stand cash automatically every few
-  seconds.
+- [x] **G6 Auto-collect upgrade.** Done (Auto Collector, bought with aura).
 - [ ] **G7 Auto-sell filter.** Player picks rarities to sell automatically when pulled.
 - [ ] **G8 Trading.** Two-sided trade window with confirm + 5-second lock-in, fully server-held.
   High dupe risk: needs S2 done first and its own review.
@@ -82,8 +79,8 @@ vault that carries cards into the next run.
 
 - [ ] **U1 Sound and effects.** Pack rip, card flip, rarity stingers, cash collect; particle burst
   and camera shake on Legendary and better; floating "+$" text when collecting.
-- [ ] **U2 First-minute tutorial.** Arrows and short prompts: open free pack → display → collect →
-  buy a pack. Shown once, saved in the profile.
+- [ ] **U2 First-minute tutorial.** Partly done: text hints at the top of the screen. Still to do:
+  arrows pointing at the button / pad the hint is about.
 - [ ] **U3 Phone layout.** Check every panel at 667×375; touch targets at least 44 px; HUD must not
   cover the jump button or the Roblox top bar.
 - [ ] **U4 Card art.** Replace emoji with uploaded images through the `image` field in
@@ -116,7 +113,7 @@ Needs the owner to create the passes/products in the Creator Dashboard and suppl
 
 ## Suggested order
 
-1. T1, then S2 and T3 in parallel.
+1. S2 and T3 in parallel.
 2. U1 + U2 (the first minute decides whether players stay), G1, G2.
 3. S1 and U6 before the scripts grow further.
 4. Everything else by what playtests show.

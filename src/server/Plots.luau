@@ -26,7 +26,7 @@ local TIER_STYLE = {
 }
 
 local plots = {}
-local callbacks = {}
+local callbacks: { [string]: (...any) -> ...any } = {}
 
 local function newPart(parent, name, size, cframe, color, material)
 	local part = Instance.new("Part")

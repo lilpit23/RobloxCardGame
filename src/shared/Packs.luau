@@ -24,27 +24,31 @@ Packs.List = {}
 
 for _, setId in ipairs(Cards.SetOrder) do
 	local set = Cards.Sets[setId]
-	local storeTier = SET_TIER[setId] or 1
-	table.insert(Packs.List, {
-		id = setId .. "_booster",
-		name = set.name .. " Booster",
-		currency = "cash",
-		cost = set.packCost,
-		storeTier = storeTier,
-		sets = { setId },
-		color = set.color,
-		slots = BOOSTER_SLOTS,
-	})
-	table.insert(Packs.List, {
-		id = setId .. "_elite",
-		name = set.name .. " Elite",
-		currency = "cash",
-		cost = set.packCost * ELITE_PRICE,
-		storeTier = storeTier,
-		sets = { setId },
-		color = set.color:Lerp(Color3.new(0, 0, 0), 0.35),
-		slots = ELITE_SLOTS,
-	})
+	if not set.promo then
+		local storeTier = SET_TIER[setId] or 1
+		table.insert(Packs.List, {
+			id = setId .. "_booster",
+			name = set.name .. " Booster",
+			currency = "cash",
+			cost = set.packCost,
+			storeTier = storeTier,
+			sets = { setId },
+			color = set.color,
+			slots = BOOSTER_SLOTS,
+			kind = "booster",
+		})
+		table.insert(Packs.List, {
+			id = setId .. "_elite",
+			name = set.name .. " Elite",
+			currency = "cash",
+			cost = set.packCost * ELITE_PRICE,
+			storeTier = storeTier,
+			sets = { setId },
+			color = set.color:Lerp(Color3.new(0, 0, 0), 0.35),
+			slots = ELITE_SLOTS,
+			kind = "elite",
+		})
+	end
 end
 
 -- Special packs that pull from every set (sets = nil).

@@ -46,6 +46,9 @@ local function newData()
 		tower = 0, -- highest battle tower floor cleared
 		quests = { day = 0, list = {} }, -- today's quests, see Quests.luau
 		daily = { lastDay = 0, streak = 0 }, -- daily login reward
+		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
+		season = { id = 0, xp = 0, claimed = 0 }, -- monthly season pass progress
+		receipts = {}, -- developer product PurchaseIds already granted
 		lastSeen = 0, -- os.time() of the last save, for offline earnings
 	}
 end
@@ -176,13 +179,17 @@ function PlayerData.get(player)
 end
 
 -- release = true on the final save: clears the session lock so another server can load.
+-- Returns true if the data is safely stored (or there is nothing to store).
 function PlayerData.save(player, release)
 	local profile = profiles[player]
-	if profile == nil or not profile.canSave or store == nil then
-		return
+	if profile == nil then
+		return false
+	end
+	if not profile.canSave or store == nil then
+		return true -- temporary Studio profile: nothing to save
 	end
 	local data = profile.data
-	withRetry(3, function()
+	return withRetry(3, function()
 		store:UpdateAsync(keyFor(player), function(stored)
 			local now = os.time()
 			if lockedByOtherServer(stored, now) then

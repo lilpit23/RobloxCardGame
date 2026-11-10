@@ -15,10 +15,12 @@ local Perks = require(Shared:WaitForChild("Perks"))
 local Combos = require(Shared:WaitForChild("Combos"))
 local Luck = require(Shared:WaitForChild("Luck"))
 local Deck = require(Shared:WaitForChild("Deck"))
+local Season = require(Shared:WaitForChild("Season"))
 local Battle = require(Shared:WaitForChild("Battle"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
+local Monetization = require(script:WaitForChild("Monetization"))
 
 local rng = Random.new()
 local STARTER = Packs.ById[Packs.StarterId]
@@ -56,6 +58,8 @@ local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
 local BattleRemote = newRemote("RemoteFunction", "Battle")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
+local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
+local SeasonClaimRemote = newRemote("RemoteEvent", "SeasonClaim")
 local MarketStateRemote = newRemote("RemoteEvent", "MarketState") -- server -> client
 local MarketListRemote = newRemote("RemoteEvent", "MarketList")
 local MarketCancelRemote = newRemote("RemoteEvent", "MarketCancel")
@@ -103,8 +107,21 @@ local function notify(player, text, kind)
 	NotifyRemote:FireClient(player, text, kind or "info")
 end
 
+-- Game passes owned, looked up by profile: [data] = { [passKey] = true }.
+local dataPasses = setmetatable({}, { __mode = "k" })
+
+local function hasPass(data, passKey)
+	local flags = dataPasses[data]
+	return flags ~= nil and flags[passKey] == true
+end
+
+local function hasAutoCollect(data)
+	return data.upgrades.auto >= 1 or hasPass(data, "autoCollect")
+end
+
 local function slotCount(data)
-	return math.min(Config.BaseSlots + data.upgrades.slots, Config.MaxSlots)
+	local bonus = hasPass(data, "extraSlots") and Config.Monetization.ExtraSlots or 0
+	return math.min(Config.BaseSlots + data.upgrades.slots + bonus, Config.MaxSlots)
 end
 
 local function collectionCount(data)
@@ -121,7 +138,8 @@ local function storeMult(data)
 	local collectionBonus = 1 + Config.CollectionBonusPerCard * collectionCount(data)
 	local combos = Combos.evaluate(data.slots)
 	local setBonus = 1 + Config.SetCompleteBonus * Cards.completedSets(data.collection)
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus
+	local passBonus = hasPass(data, "doubleCash") and 2 or 1
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus
 end
 
 -- Aura multiplier: Aura Magnet perk x deck combos.
@@ -133,7 +151,7 @@ local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
 
 -- The player's total Luck stat, from every source (see Luck.luau).
 local function luckLevel(data)
-	return Luck.total(data, os.time() < luckEventEndsAt)
+	return Luck.total(data, os.time() < luckEventEndsAt, dataPasses[data])
 end
 
 local function vaultSlots(data)
@@ -181,6 +199,11 @@ local function pushState(player)
 		daily = data.daily,
 		today = Quests.today(),
 		slotCount = slotCount(data),
+		gifts = data.gifts,
+		season = data.season,
+		featuredSet = Season.featuredSet(),
+		passes = dataPasses[data] or {},
+		restricted = session.restricted,
 		incomePerSec = income,
 		auraPerSec = aura,
 	})
@@ -192,6 +215,34 @@ local function pushState(player)
 end
 
 -- structural = inventory / slots / collection / upgrades changed (client rebuilds its panels)
+-- Keeps the two showcase frames at the store entrance on the deck's two best cards.
+local function updateShowcase(player)
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil then
+		return
+	end
+	local keys = {}
+	for index = 1, slotCount(data) do
+		local key = data.slots[tostring(index)]
+		if key then
+			table.insert(keys, key)
+		end
+	end
+	table.sort(keys, function(a, b)
+		local incomeA, incomeB = Cards.getIncome(a), Cards.getIncome(b)
+		if incomeA ~= incomeB then
+			return incomeA > incomeB
+		end
+		return a < b
+	end)
+	local signature = (keys[1] or "") .. "|" .. (keys[2] or "")
+	if signature ~= session.showcase then
+		session.showcase = signature
+		Plots.setShowcase(session.plot, keys[1], keys[2])
+	end
+end
+
 local function touch(player, structural)
 	local session = sessions[player]
 	if session == nil then
@@ -199,6 +250,7 @@ local function touch(player, structural)
 	end
 	if structural then
 		session.rev = session.rev + 1
+		updateShowcase(player)
 	end
 	pushState(player)
 end
@@ -212,6 +264,26 @@ local function ensureQuests(player, data)
 	local income = totals(data)
 	data.quests = { day = day, list = Quests.generate(day, player.UserId, income) }
 	return true
+end
+
+-- Starts a fresh season pass when the month changes.
+local function ensureSeason(data)
+	local id = Season.currentId()
+	if data.season.id ~= id then
+		data.season = { id = id, xp = 0, claimed = 0 }
+	end
+end
+
+local function seasonXp(player, amount)
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil or amount <= 0 then
+		return
+	end
+	ensureSeason(data)
+	data.season.xp = data.season.xp + amount
+	session.questRev = session.questRev + 1
+	session.dirty = true
 end
 
 -- Adds progress to today's quests of one type.
@@ -318,13 +390,21 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 
 	if count == 1 and pack.id == STARTER.id and data.freePacks > 0 then
 		data.freePacks = data.freePacks - 1
+	elseif count == 1 and pack.kind == "booster" and data.gifts > 0 then
+		data.gifts = data.gifts - 1 -- a free booster gift
 	elseif not spend(data, pack.currency, Perks.packCost(pack, data.perks) * count) then
 		return { ok = false, error = "Not enough " .. pack.currency .. "." }
 	end
 
+	-- this week's featured set gets bonus luck
+	local luck = luckLevel(data)
+	if pack.sets and table.find(pack.sets, Season.featuredSet()) then
+		luck = luck + Season.FeaturedLuck
+	end
+
 	local keys = {}
 	for _ = 1, count do
-		for _, key in ipairs(Packs.open(pack, luckLevel(data), rng)) do
+		for _, key in ipairs(Packs.open(pack, luck, rng)) do
 			table.insert(keys, key)
 		end
 	end
@@ -336,6 +416,10 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 		if def and Cards.Rarities[def.rarity].order >= 4 then
 			rareCount = rareCount + 1
 		end
+		if def and Cards.Rarities[def.rarity].order >= 6 then
+			-- Mythic and Secret pulls are announced to the whole server
+			AnnounceRemote:FireAllClients(player.DisplayName, key)
+		end
 		local isNew = data.collection[key] == nil
 		addCard(data, key, 1)
 		local auraBonus = Cards.getAura(key) * Config.AuraPullBonus
@@ -343,6 +427,7 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 		table.insert(pulled, { key = key, isNew = isNew, auraBonus = auraBonus })
 	end
 	data.packsOpened = data.packsOpened + count
+	seasonXp(player, Season.Xp.pack * count)
 	questProgress(player, "open_packs", count)
 	questProgress(player, "pull_rare", rareCount)
 
@@ -522,7 +607,7 @@ BuyUpgradeRemote.OnServerEvent:Connect(function(player, upgradeId)
 		notify(player, "New deck slot unlocked!", "good")
 	elseif upgradeId == "store" then
 		Plots.setTier(session.plot, data.upgrades.store + 1)
-		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths)
+		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 		notify(player, "Store upgraded to " .. Upgrades.getStoreTier(data.upgrades.store).name .. "!", "good")
 	else
 		notify(player, def.name .. " upgraded!", "good")
@@ -588,6 +673,7 @@ BattleRemote.OnServerInvoke = function(player)
 	if win then
 		local aura, cash = Battle.reward(floor)
 		data.tower = floor
+		seasonXp(player, Season.Xp.floor)
 		data.aura = data.aura + aura
 		data.cash = data.cash + cash
 		result.aura = aura
@@ -614,6 +700,7 @@ QuestClaimRemote.OnServerEvent:Connect(function(player, index)
 		return
 	end
 	quest.claimed = true
+	seasonXp(player, Season.Xp.quest)
 	local aura = Quests.reward(data.rebirths)
 	data.aura = data.aura + aura
 	session.questRev = session.questRev + 1
@@ -650,6 +737,37 @@ DailyClaimRemote.OnServerEvent:Connect(function(player)
 	session.questRev = session.questRev + 1
 	notify(player, "Day " .. daily.streak .. " reward: +" .. Format.short(aura) .. " aura and " .. Format.cash(cash), "good")
 	touch(player, false)
+end)
+
+SeasonClaimRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "SeasonClaim", 4, 8) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil then
+		return
+	end
+	ensureSeason(data)
+	local level = data.season.claimed + 1
+	if level > Season.levelFor(data.season.xp) then
+		return
+	end
+	local income = totals(data)
+	local reward = Season.reward(level, data.season.id, income)
+	data.season.claimed = level
+	if reward.kind == "cash" then
+		data.cash = data.cash + reward.amount
+	elseif reward.kind == "aura" then
+		data.aura = data.aura + reward.amount
+	elseif reward.kind == "gift" then
+		data.gifts = data.gifts + reward.amount
+	elseif reward.kind == "promo" then
+		addCard(data, reward.card, 1)
+	end
+	session.questRev = session.questRev + 1
+	notify(player, "🏅 Season level " .. level .. ": " .. Season.rewardText(reward), "good")
+	touch(player, true)
 end)
 
 ---------------------------------------------------------------------
@@ -725,7 +843,7 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 
 	Plots.resetStands(session.plot, slotCount(data))
 	Plots.setTier(session.plot, 1)
-	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths)
+	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 
 	notify(player, "🌟 REBIRTH " .. data.rebirths .. "!  " .. Rebirth.describeBonuses(data.rebirths), "good")
 	touch(player, true)
@@ -1040,6 +1158,30 @@ onRebirthReset = function(player, data)
 end
 
 ---------------------------------------------------------------------
+-- Game passes and developer products
+---------------------------------------------------------------------
+Monetization.init({
+	onPassChanged = function(player)
+		local session = sessions[player]
+		local data = PlayerData.get(player)
+		if session == nil or data == nil then
+			return
+		end
+		dataPasses[data] = Monetization.get(player)
+		Plots.setSlotCount(session.plot, slotCount(data))
+		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
+		notify(player, "Thank you! Your game pass is now active.", "good")
+		touch(player, true)
+	end,
+
+	grantProduct = function(player, data, product)
+		data.aura = data.aura + (product.aura or 0)
+		notify(player, "Thank you! +" .. Format.short(product.aura or 0) .. " aura", "good")
+		touch(player, false)
+	end,
+})
+
+---------------------------------------------------------------------
 -- Plot callbacks
 ---------------------------------------------------------------------
 Plots.init({
@@ -1135,13 +1277,13 @@ task.spawn(function()
 				end
 				if income > 0 then
 					session.pending = session.pending + income * storeMult(data)
-					if data.upgrades.auto < 1 then
+					if not hasAutoCollect(data) then
 						Plots.setPending(session.plot, session.pending)
 					end
 				end
 
 				-- Auto Collector upgrade: bank everything straight away.
-				if data.upgrades.auto >= 1 and session.pending >= 1 then
+				if hasAutoCollect(data) and session.pending >= 1 then
 					data.cash = data.cash + session.pending
 					questProgress(player, "collect", session.pending)
 					session.pending = 0
@@ -1151,6 +1293,18 @@ task.spawn(function()
 				if auraGain > 0 then
 					data.aura = data.aura + auraGain * auraMult(data)
 					session.dirty = true
+				end
+
+				-- a free booster gift for every stretch of play time
+				session.playSeconds = session.playSeconds + 1
+				if session.playSeconds >= Config.GiftInterval then
+					session.playSeconds = 0
+					if data.gifts < Config.GiftMax then
+						data.gifts = data.gifts + 1
+						session.rev = session.rev + 1
+						session.dirty = true
+						notify(player, "🎁 Thanks for playing! You earned a free booster — open any unlocked Booster for free.", "good")
+					end
 				end
 
 				if ensureQuests(player, data) then
@@ -1226,6 +1380,10 @@ local function onPlayerAdded(player)
 		player:Kick(loadError or "Your data could not be loaded. Please rejoin.")
 		return
 	end
+	-- game passes and regional purchase rules (both ask Roblox, so they can take a moment)
+	dataPasses[data] = Monetization.load(player)
+	local restricted = Monetization.isRestricted(player)
+
 	if player.Parent == nil then
 		-- left while their data was loading
 		Plots.release(player)
@@ -1236,6 +1394,8 @@ local function onPlayerAdded(player)
 	local session = {
 		plot = plot,
 		pending = 0,
+		playSeconds = 0,
+		restricted = restricted,
 		rev = 1,
 		questRev = 0,
 		dirty = true,
@@ -1254,7 +1414,7 @@ local function onPlayerAdded(player)
 
 	Plots.setSlotCount(plot, slotCount(data))
 	Plots.setTier(plot, data.upgrades.store + 1)
-	Plots.setOwnerSign(plot, player, data.upgrades.store, data.rebirths)
+	Plots.setOwnerSign(plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 	for index = 1, slotCount(data) do
 		Plots.setCard(plot, index, data.slots[tostring(index)])
 	end
@@ -1278,6 +1438,8 @@ local function onPlayerAdded(player)
 	end
 	data.lastSeen = os.time()
 	ensureQuests(player, data)
+	ensureSeason(data)
+	updateShowcase(player)
 	broadcastMarket()
 
 	pushState(player)
@@ -1301,6 +1463,7 @@ local function onPlayerRemoving(player)
 	end
 	sessions[player] = nil
 	buckets[player] = nil
+	Monetization.forget(player)
 	broadcastMarket()
 	Plots.release(player)
 	PlayerData.release(player)

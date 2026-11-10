@@ -204,6 +204,20 @@ local function buildPlot(index, cframe, parent)
 		newSurfaceLabel(sign, Enum.NormalId.Back, "Unclaimed"),
 	}
 
+	-- Showcase: two big frames by the entrance showing the owner's best deck cards
+	plot.showcase = {}
+	for _, sx in ipairs({ -1, 1 }) do
+		newPart(folder, "ShowcasePost", Vector3.new(0.8, 6, 0.8), cframe * CFrame.new(sx * 21, 4, -HALF + 1), Color3.fromRGB(50, 50, 60))
+		local frame = newPart(folder, "Showcase", Vector3.new(7, 9.8, 0.3), cframe * CFrame.new(sx * 21, 11.9, -HALF + 1), Color3.fromRGB(20, 20, 25))
+		frame.Transparency = 1
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = Enum.NormalId.Front
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 30
+		gui.Parent = frame
+		table.insert(plot.showcase, { part = frame, gui = gui })
+	end
+
 	-- Pack shop counter
 	local counter = newPart(folder, "PackCounter", Vector3.new(10, 3, 3), cframe * CFrame.new(-19, 2.5, -26), Color3.fromRGB(200, 70, 110))
 	newBillboard(counter, "🎴 PACK SHOP", 3.2, 9, 1.6)
@@ -530,6 +544,7 @@ function Plots.release(player)
 			Plots.setTier(plot, 1)
 			Plots.setSign(plot, "Unclaimed")
 			Plots.setPending(plot, 0)
+			Plots.setShowcase(plot, nil, nil)
 		end
 	end
 end
@@ -572,6 +587,21 @@ function Plots.setCard(plot, index, key)
 	end
 end
 
+-- Shows up to two cards in the big frames by the entrance (nil = empty frame).
+function Plots.setShowcase(plot, firstKey, secondKey)
+	local keys = { firstKey or false, secondKey or false }
+	for index, slot in ipairs(plot.showcase) do
+		slot.gui:ClearAllChildren()
+		local key = keys[index]
+		if key then
+			CardView.new(key).Parent = slot.gui
+			slot.part.Transparency = 0
+		else
+			slot.part.Transparency = 1
+		end
+	end
+end
+
 -- Uncollected cash waiting at the cash register.
 function Plots.setPending(plot, amount)
 	if amount >= 1 then
@@ -592,8 +622,11 @@ function Plots.setSign(plot, text)
 	end
 end
 
-function Plots.setOwnerSign(plot, player, storeLevel, rebirths)
+function Plots.setOwnerSign(plot, player, storeLevel, rebirths, vip)
 	local text = player.DisplayName .. "'s " .. Upgrades.getStoreTier(storeLevel).name
+	if vip then
+		text = "👑 " .. text
+	end
 	if rebirths and rebirths > 0 then
 		text = "★" .. rebirths .. "  " .. text
 	end

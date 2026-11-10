@@ -107,19 +107,63 @@ function CardView.new(key)
 		corner.CornerRadius = UDim.new(0.07, 0)
 		corner.Parent = wash
 	end
-	addSetBands(frame, def, 0.1)
+	if variant.shine then
+		-- foil streak
+		local foil = Instance.new("Frame")
+		foil.Name = "Foil"
+		foil.BorderSizePixel = 0
+		foil.Size = UDim2.new(1, 0, 1, 0)
+		foil.BackgroundColor3 = Color3.new(1, 1, 1)
+		foil.Parent = frame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.07, 0)
+		corner.Parent = foil
+		local streak = Instance.new("UIGradient")
+		streak.Rotation = 25
+		streak.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.38, 1),
+			NumberSequenceKeypoint.new(0.5, 0.5),
+			NumberSequenceKeypoint.new(0.62, 1),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		streak.Parent = foil
+	end
+
+	-- Full Art cards drop the name band and picture window so the art fills the card.
+	local fullArt = variant.fullArt == true
+	addSetBands(frame, def, fullArt and 0.55 or 0.1)
 	addLabel(frame, def.name, 0.02, 0.15)
+
+	local artTop, artHeight = 0.18, 0.38
+	if fullArt then
+		artTop, artHeight = 0.13, 0.52
+	else
+		-- picture window
+		local window = Instance.new("Frame")
+		window.Name = "ArtWindow"
+		window.BorderSizePixel = 0
+		window.Position = UDim2.new(0.07, 0, 0.175, 0)
+		window.Size = UDim2.new(0.86, 0, 0.39, 0)
+		window.BackgroundColor3 = Color3.new(0, 0, 0)
+		window.BackgroundTransparency = 0.72
+		window.Parent = frame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.08, 0)
+		corner.Parent = window
+	end
 
 	if def.image then
 		local image = Instance.new("ImageLabel")
 		image.BackgroundTransparency = 1
-		image.Position = UDim2.new(0.1, 0, 0.18, 0)
-		image.Size = UDim2.new(0.8, 0, 0.38, 0)
+		image.Position = UDim2.new(0.1, 0, artTop, 0)
+		image.Size = UDim2.new(0.8, 0, artHeight, 0)
 		image.ScaleType = Enum.ScaleType.Fit
 		image.Image = def.image
+		image.ZIndex = 2
 		image.Parent = frame
 	else
-		addLabel(frame, def.glyph or "?", 0.18, 0.38)
+		addLabel(frame, def.glyph or "?", artTop, artHeight)
 	end
 
 	local typeInfo = Cards.Types[def.type]

@@ -21,6 +21,7 @@ Combos.EffectCombos = {
 	lucky = { name = "Four-Leaf Clover", count = 3, luck = 2 },
 	shadow = { name = "Shadow Court", count = 3, aura = 0.25 },
 	gold = { name = "Gold Rush", count = 3, income = 0.25 },
+	fullart = { name = "Art Gallery", count = 2, aura = 0.5 },
 	prism = { name = "Double Rainbow", count = 2, income = 0.5 },
 }
 

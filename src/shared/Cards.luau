@@ -27,11 +27,12 @@ Cards.Rarities = {
 --   auraFlat   = extra aura per second, even on cards that normally give none
 --   auraMult   = aura multiplier (defaults to mult)
 --   tint       = colour wash over the card face
-Cards.VariantOrder = { "normal", "holo", "slimy", "lucky", "shadow", "gold", "prism" }
+--   shine      = a diagonal foil streak across the card
+Cards.VariantOrder = { "normal", "holo", "slimy", "lucky", "shadow", "gold", "fullart", "prism" }
 
 Cards.Variants = {
 	normal = { name = "", mult = 1, chance = 0, color = Color3.fromRGB(25, 25, 30) },
-	holo = { name = "Shiny", mult = 2, chance = 0.07, color = Color3.fromRGB(120, 235, 255) },
+	holo = { name = "Shiny", mult = 2, chance = 0.07, shine = true, color = Color3.fromRGB(120, 235, 255) },
 	slimy = {
 		name = "Slimy",
 		mult = 1.5,
@@ -60,8 +61,17 @@ Cards.Variants = {
 		name = "Golden",
 		mult = 5,
 		chance = 0.015,
+		shine = true,
 		color = Color3.fromRGB(255, 205, 60),
 		tint = Color3.fromRGB(255, 200, 40),
+	},
+	fullart = {
+		name = "Full Art",
+		mult = 8,
+		chance = 0.006,
+		fullArt = true, -- the picture fills the whole card
+		shine = true,
+		color = Color3.fromRGB(255, 170, 220),
 	},
 	prism = {
 		name = "Prismatic",
@@ -69,12 +79,13 @@ Cards.Variants = {
 		chance = 0.003,
 		deckIncome = 0.05,
 		deckLuck = 1,
+		shine = true,
 		color = Color3.fromRGB(255, 255, 255),
 	},
 }
 
 -- Effects are rolled rarest first; the first one that hits is kept.
-Cards.RollOrder = { "prism", "gold", "shadow", "lucky", "slimy", "holo" }
+Cards.RollOrder = { "prism", "fullart", "gold", "shadow", "lucky", "slimy", "holo" }
 
 -- Fusing 3 copies moves a card one step along this chain. Other effects are pull-only.
 Cards.FuseOrder = { "normal", "holo", "gold", "prism" }
@@ -497,6 +508,32 @@ local SETS = {
 			},
 		},
 	},
+	{
+		-- Promo cards never come from packs: they are season pass rewards.
+		id = "promo",
+		promo = true,
+		code = "PRM",
+		name = "Promo",
+		icon = "🎁",
+		color = Color3.fromRGB(235, 80, 140),
+		sources = "Seasonal folklore figures",
+		mult = 16,
+		packCost = 250000,
+		cards = {
+			Epic = {
+				{ "Jack Frost", "❄️", "m" },
+				{ "The Easter Hare", "🐇", "b" },
+				{ "Cupid", "💘", "s" },
+			},
+			Legendary = {
+				{ "Father Time", "⏳", "m" },
+				{ "The Sandman", "🌙", "m" },
+			},
+			Mythic = {
+				{ "Santa Claus", "🎅", "s" },
+			},
+		},
+	},
 }
 
 ---------------------------------------------------------------------
@@ -514,6 +551,7 @@ end
 
 for _, setData in ipairs(SETS) do
 	local set = {
+		promo = setData.promo == true,
 		icon = setData.icon,
 		color = setData.color,
 		sources = setData.sources,
@@ -547,7 +585,9 @@ for _, setData in ipairs(SETS) do
 			assert(Cards.ById[def.id] == nil, "duplicate card id " .. def.id)
 			table.insert(set.cards, def)
 			table.insert(Cards.List, def)
-			table.insert(Cards.ByRarity[rarityName], def)
+			if not set.promo then
+				table.insert(Cards.ByRarity[rarityName], def) -- the pool packs pull from
+			end
 			Cards.ById[def.id] = def
 			def.index = #Cards.List
 			if rarityName ~= "Secret" then

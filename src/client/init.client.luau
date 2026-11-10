@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -16,6 +17,7 @@ local Quests = require(Shared:WaitForChild("Quests"))
 local Perks = require(Shared:WaitForChild("Perks"))
 local Combos = require(Shared:WaitForChild("Combos"))
 local Luck = require(Shared:WaitForChild("Luck"))
+local Season = require(Shared:WaitForChild("Season"))
 local Battle = require(Shared:WaitForChild("Battle"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -39,6 +41,11 @@ local state = {
 	questRev = 0,
 	daily = { lastDay = 0, streak = 0 },
 	today = 0,
+	gifts = 0,
+	season = { id = 0, xp = 0, claimed = 0 },
+	featuredSet = "",
+	passes = {},
+	restricted = true,
 	perks = {},
 	tower = 0,
 	luckEventEndsAt = 0,
@@ -141,7 +148,7 @@ local hud = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0, 0.5),
 	Position = UDim2.new(0, 12, 0.5, 0),
-	Size = UDim2.new(0, 210, 0, 560),
+	Size = UDim2.new(0, 210, 0, 372),
 }, screen)
 addScale(hud)
 make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
@@ -234,7 +241,13 @@ make("UIListLayout", {
 	HorizontalAlignment = Enum.HorizontalAlignment.Center,
 }, toastHolder)
 
-local TOAST_COLORS = { info = COLORS.button, good = COLORS.good, error = COLORS.bad, cash = COLORS.good }
+local TOAST_COLORS = {
+	info = COLORS.button,
+	good = COLORS.good,
+	error = COLORS.bad,
+	cash = COLORS.good,
+	announce = Color3.fromRGB(215, 150, 30),
+}
 
 local function toast(text, kind)
 	local label = make("TextLabel", {
@@ -544,6 +557,75 @@ local function revealGrid(pulled, pack)
 	revealing = false
 end
 
+-- Wobbles a GUI object left and right.
+local function shakeRotation(object, degrees, times, stepTime)
+	for index = 1, times do
+		object.Rotation = index % 2 == 0 and degrees or -degrees
+		task.wait(stepTime)
+	end
+	object.Rotation = 0
+end
+
+-- Rattles the whole reveal stage (big pulls only).
+local function shakeScreen(intensity)
+	local home = revealStage.Position
+	for _ = 1, 8 do
+		revealStage.Position = home + UDim2.new(0, math.random(-intensity, intensity), 0, math.random(-intensity, intensity))
+		task.wait(0.03)
+	end
+	revealStage.Position = home
+end
+
+-- The pack wobbles (harder the better its best card is), then bursts open.
+local function playPackOpening(pack, pulled)
+	revealing = true
+	revealGui.Enabled = true
+	cardHolder.Visible = true
+	cardHolder:ClearAllChildren()
+	cardHolder.Size = UDim2.new(0, CARD_W, 0, CARD_H)
+	newPackBack(pack).Parent = cardHolder
+	revealTitle.Text = pack.name
+	revealTitle.TextColor3 = COLORS.text
+	revealSub.Text = ""
+	revealHint.Text = "Opening…"
+
+	local best, bestColor = 1, COLORS.text
+	for _, entry in ipairs(pulled) do
+		local def = Cards.parse(entry.key)
+		if def then
+			local rarity = Cards.Rarities[def.rarity]
+			if rarity.order > best then
+				best = rarity.order
+				bestColor = def.rarity == "Secret" and Color3.fromRGB(255, 80, 80) or rarity.color
+			end
+		end
+	end
+
+	playSound("click")
+	shakeRotation(cardHolder, 3, 6, 0.06)
+	if best >= 4 then
+		shakeRotation(cardHolder, 6, 8, 0.045)
+	end
+	if best >= 5 then
+		shakeRotation(cardHolder, 10, 10, 0.035)
+	end
+
+	if best >= 3 then
+		flashScreen(bestColor)
+	end
+	playSound(best >= 5 and "bigPull" or "flip")
+	local burst = TweenService:Create(cardHolder, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Size = UDim2.new(0, CARD_W * 1.4, 0, 0),
+	})
+	burst:Play()
+	burst.Completed:Wait()
+	cardHolder:ClearAllChildren()
+	cardHolder.Size = UDim2.new(0, CARD_W, 0, CARD_H)
+	if best >= 5 then
+		shakeScreen(best >= 6 and 14 or 8)
+	end
+end
+
 local buying = false
 local function buyPack(pack, count)
 	if buying or revealing then
@@ -555,6 +637,7 @@ local function buyPack(pack, count)
 	end)
 	buying = false
 	if ok and type(result) == "table" and result.ok then
+		playPackOpening(pack, result.cards)
 		if #result.cards > pack.size then
 			revealGrid(result.cards, pack)
 		else
@@ -621,7 +704,12 @@ panels.Packs = function()
 		newLabel(swatch, "🎴", UDim2.new(), UDim2.new(1, 0, 1, 0), { TextSize = 28, TextXAlignment = Enum.TextXAlignment.Center })
 		addPackImage(swatch, pack)
 
+		local featured = pack.sets ~= nil and table.find(pack.sets, state.featuredSet) ~= nil
+		local packLuck = state.luck + (featured and Season.FeaturedLuck or 0)
 		local title = pack.name .. "  ·  " .. pack.size .. " cards"
+		if featured then
+			title = "⭐ " .. title .. "  ·  FEATURED +" .. (Season.FeaturedLuck * 10) .. "% luck"
+		end
 		if pack.sets == nil then
 			title = title .. "  ·  all sets"
 		end
@@ -631,7 +719,7 @@ panels.Packs = function()
 			TextWrapped = false,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 		})
-		newLabel(row, table.concat(Packs.oddsLines(pack, state.luck), "\n"), UDim2.new(0, 76, 0, 32), UDim2.new(1, -248, 0, 64), {
+		newLabel(row, table.concat(Packs.oddsLines(pack, packLuck), "\n"), UDim2.new(0, 76, 0, 32), UDim2.new(1, -248, 0, 64), {
 			TextSize = 12,
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
@@ -656,8 +744,8 @@ panels.Packs = function()
 			local locked = newButton(row, "🔒 " .. Upgrades.StoreTiers[pack.storeTier].name, buttonPosition, buttonSize, COLORS.locked, nil)
 			locked.TextSize = 13
 			locked.AutoButtonColor = false
-		elseif pack.id == Packs.StarterId and state.freePacks > 0 then
-			newButton(row, "FREE!", buttonPosition, buttonSize, COLORS.good, function()
+		elseif (pack.id == Packs.StarterId and state.freePacks > 0) or (pack.kind == "booster" and state.gifts > 0) then
+			newButton(row, "FREE 🎁", buttonPosition, buttonSize, COLORS.good, function()
 				buyPack(pack)
 			end)
 		else
@@ -1078,7 +1166,7 @@ panels.Rebirth = function()
 
 	local vaultLines = math.ceil(state.vaultSlots / 5)
 	local vaultRow = newRow(3, 40 + vaultLines * 222)
-	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Add cards from Deck & Cards.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Add cards from the Deck screen.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
 		TextSize = 14,
 	})
 	local strip = make("Frame", {
@@ -1128,6 +1216,9 @@ local function hasClaimable()
 	if state.today > 0 and state.daily.lastDay < state.today then
 		return true
 	end
+	if state.season.claimed < Season.levelFor(state.season.xp) then
+		return true
+	end
 	for _, quest in ipairs(state.quests.list) do
 		if not quest.claimed and quest.progress >= quest.goal then
 			return true
@@ -1137,11 +1228,56 @@ local function hasClaimable()
 end
 
 panels.Quests = function()
-	titleLabel.Text = "🎯 Daily Quests"
+	titleLabel.Text = "🎯 Quests & Season"
 	renderedQuestRev = state.questRev
 	useList()
 	local buttonPosition = UDim2.new(1, -160, 0, 14)
 	local buttonSize = UDim2.new(0, 148, 0, 44)
+
+	-- Season pass: a free reward track that resets every month
+	local season = state.season
+	local seasonLevel = Season.levelFor(season.xp)
+	local seasonRow = newRow(0, 96)
+	seasonRow.BackgroundColor3 = Color3.fromRGB(70, 52, 22)
+	newLabel(seasonRow, "🏅 " .. Season.name(season.id) .. "  ·  level " .. seasonLevel .. "/" .. Season.MaxLevel, UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 24), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 19,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+	})
+	local seasonBar = make("Frame", {
+		Position = UDim2.new(0, 14, 0, 36),
+		Size = UDim2.new(1, -190, 0, 18),
+		BackgroundColor3 = Color3.fromRGB(25, 25, 35),
+		BorderSizePixel = 0,
+	}, seasonRow)
+	round(seasonBar, 6)
+	local within = seasonLevel >= Season.MaxLevel and 1 or (season.xp % Season.XpPerLevel) / Season.XpPerLevel
+	local seasonFill = make("Frame", {
+		Size = UDim2.new(within, 0, 1, 0),
+		BackgroundColor3 = Color3.fromRGB(215, 160, 50),
+		BorderSizePixel = 0,
+	}, seasonBar)
+	round(seasonFill, 6)
+	newLabel(seasonBar, season.xp .. " XP   ·   pack +" .. Season.Xp.pack .. ", tower floor +" .. Season.Xp.floor .. ", quest +" .. Season.Xp.quest, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		ZIndex = 2,
+	})
+	local nextLevel = season.claimed + 1
+	if nextLevel > Season.MaxLevel then
+		newLabel(seasonRow, "Every reward claimed. A new season starts next month.", UDim2.new(0, 14, 0, 60), UDim2.new(1, -190, 0, 28), { TextSize = 13, TextColor3 = COLORS.dim })
+		newButton(seasonRow, "Complete ✓", UDim2.new(1, -160, 0, 26), buttonSize, COLORS.locked, nil).AutoButtonColor = false
+	else
+		local reward = Season.reward(nextLevel, season.id, state.incomePerSec)
+		newLabel(seasonRow, "Level " .. nextLevel .. " reward:  " .. Season.rewardText(reward), UDim2.new(0, 14, 0, 60), UDim2.new(1, -190, 0, 28), { TextSize = 13 })
+		if nextLevel <= seasonLevel then
+			newButton(seasonRow, "Claim", UDim2.new(1, -160, 0, 26), buttonSize, COLORS.good, function()
+				Remotes.SeasonClaim:FireServer()
+			end)
+		else
+			newButton(seasonRow, "Level " .. nextLevel, UDim2.new(1, -160, 0, 26), buttonSize, COLORS.locked, nil).AutoButtonColor = false
+		end
+	end
 
 	-- Daily login reward
 	local dailyRow = newRow(1, 72)
@@ -1218,7 +1354,7 @@ panels.Upgrades = function()
 	renderStoreUpgrades()
 
 	-- Luck stat and where it comes from
-	local sources = Luck.sources(state, state.luckEventEndsAt > os.time())
+	local sources = Luck.sources(state, state.luckEventEndsAt > os.time(), state.passes)
 	local parts = {}
 	for _, source in ipairs(sources) do
 		table.insert(parts, source.name .. " +" .. source.levels)
@@ -1491,6 +1627,66 @@ panels.Trade = function()
 	end
 end
 
+-- Store: game passes and aura bundles ------------------------------------------------
+panels.Store = function()
+	titleLabel.Text = "💎 Store"
+	useList()
+	local settings = Config.Monetization
+	local buttonPosition = UDim2.new(1, -160, 0, 14)
+	local buttonSize = UDim2.new(0, 148, 0, 44)
+
+	local order = 0
+	for _, passKey in ipairs(settings.PassOrder) do
+		local pass = settings.Passes[passKey]
+		order = order + 1
+		local row = newRow(order, 72)
+		newLabel(row, pass.name, UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), { Font = Enum.Font.FredokaOne, TextSize = 19 })
+		newLabel(row, pass.text, UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 30), {
+			TextSize = 13,
+			TextColor3 = COLORS.dim,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		})
+		if state.passes[passKey] then
+			newButton(row, "Owned ✓", buttonPosition, buttonSize, COLORS.good, nil).AutoButtonColor = false
+		elseif pass.id <= 0 then
+			newButton(row, "Coming soon", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
+		else
+			newButton(row, "Buy", buttonPosition, buttonSize, Color3.fromRGB(150, 95, 230), function()
+				MarketplaceService:PromptGamePassPurchase(player, pass.id)
+			end)
+		end
+	end
+
+	-- Aura can be spent on random packs, so aura bundles are hidden where paid random items
+	-- are restricted.
+	if not state.restricted then
+		for _, productKey in ipairs(settings.ProductOrder) do
+			local product = settings.Products[productKey]
+			order = order + 1
+			local row = newRow(order, 60)
+			newLabel(row, product.name .. "   +" .. Format.short(product.aura) .. " aura", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), {
+				Font = Enum.Font.FredokaOne,
+				TextSize = 19,
+				TextColor3 = COLORS.aura,
+			})
+			if product.id <= 0 then
+				newButton(row, "Coming soon", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.locked, nil).AutoButtonColor = false
+			else
+				newButton(row, "Buy", UDim2.new(1, -160, 0, 8), buttonSize, Color3.fromRGB(200, 70, 180), function()
+					MarketplaceService:PromptProductPurchase(player, product.id)
+				end)
+			end
+		end
+	end
+
+	local note = newRow(order + 1, 34)
+	note.BackgroundTransparency = 1
+	newLabel(note, "Purchases are optional. Everything in the game can be earned by playing.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
+		TextSize = 13,
+		TextColor3 = COLORS.dim,
+	})
+end
+
 -- Battle tower -----------------------------------------------------------------------
 local battling = false
 local renderedTower = -1
@@ -1674,24 +1870,36 @@ actionButton.Activated:Connect(function()
 	end
 end)
 
--- HUD menu buttons
+-- HUD menu buttons: two columns so the menu stays short on phones
 local packsButton = nil
 local questsButton = nil
 local MENU = {
 	{ "Packs", "🎴 Packs", Color3.fromRGB(225, 80, 120) },
-	{ "Cards", "🃏 Deck & Cards", COLORS.button },
-	{ "Book", "📖 Collection", Color3.fromRGB(150, 95, 230) },
-	{ "Upgrades", "🏪 Upgrades", COLORS.good },
+	{ "Cards", "🃏 Deck", COLORS.button },
+	{ "Book", "📖 Book", Color3.fromRGB(150, 95, 230) },
+	{ "Upgrades", "🏪 Upgrade", COLORS.good },
 	{ "Trade", "🤝 Trade", Color3.fromRGB(40, 170, 160) },
 	{ "Battle", "⚔️ Battle", Color3.fromRGB(200, 60, 60) },
 	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50) },
 	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50) },
+	{ "Store", "💎 Store", Color3.fromRGB(120, 80, 200) },
 }
+local menuGrid = make("Frame", {
+	BackgroundTransparency = 1,
+	Size = UDim2.new(1, 0, 0, math.ceil(#MENU / 2) * 40),
+	LayoutOrder = 10,
+}, hud)
+make("UIGridLayout", {
+	CellSize = UDim2.new(0.5, -3, 0, 34),
+	CellPadding = UDim2.new(0, 6, 0, 6),
+	SortOrder = Enum.SortOrder.LayoutOrder,
+}, menuGrid)
 for index, entry in ipairs(MENU) do
-	local button = newButton(hud, entry[2], UDim2.new(), UDim2.new(1, 0, 0, 36), entry[3], function()
+	local button = newButton(menuGrid, entry[2], UDim2.new(), UDim2.new(1, 0, 1, 0), entry[3], function()
 		openPanel(entry[1])
 	end)
-	button.LayoutOrder = 10 + index
+	button.LayoutOrder = index
+	button.TextSize = 15
 	if entry[1] == "Packs" then
 		packsButton = button
 	elseif entry[1] == "Quests" then
@@ -1714,10 +1922,10 @@ local function tutorialHint()
 		discovered = discovered + 1
 	end
 	if state.freePacks > 0 and not owned and not displayed then
-		return "🎁 Open your free pack — tap the FREE PACK button!"
+		return "🎁 Open your free pack — tap the 🎁 FREE! button"
 	end
 	if owned and not displayed then
-		return "🃏 Open Deck & Cards and tap Auto-fill Deck to start earning"
+		return "🃏 Open Deck and tap Auto-fill Deck to start earning"
 	end
 	if displayed and discovered < 8 and state.upgrades.auto < 1 and state.cash < 100 then
 		return "💵 Walk over the green cash register in your store to collect"
@@ -1745,8 +1953,8 @@ local function refreshHud()
 		rate = rate .. string.format("\n🍀 Lucky event  %d:%02d", math.floor(eventLeft / 60), eventLeft % 60)
 	end
 	rateLabel.Text = rate
-	packsButton.Text = state.freePacks > 0 and "🎁 FREE PACK!" or "🎴 Packs"
-	questsButton.Text = hasClaimable() and "🎯 Quests  ❗" or "🎯 Quests"
+	packsButton.Text = (state.freePacks > 0 or state.gifts > 0) and "🎁 FREE!" or "🎴 Packs"
+	questsButton.Text = hasClaimable() and "🎯 Quests❗" or "🎯 Quests"
 end
 
 Remotes.State.OnClientEvent:Connect(function(newState)
@@ -1766,6 +1974,13 @@ end)
 
 Remotes.Notify.OnClientEvent:Connect(function(text, kind)
 	toast(tostring(text), kind)
+end)
+
+-- Someone in the server pulled a Mythic or Secret card.
+Remotes.Announce.OnClientEvent:Connect(function(playerName, key)
+	if Cards.parse(key) then
+		toast("🌟 " .. tostring(playerName) .. " pulled " .. Cards.getDisplayName(key) .. "!", "announce")
+	end
 end)
 
 Remotes.OpenBattle.OnClientEvent:Connect(function()

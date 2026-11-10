@@ -14,6 +14,28 @@ return {
 	OfflineMaxSeconds = 4 * 60 * 60,
 	AuraPullBonus = 30, -- instant aura on pulling an aura card = its aura/sec * this
 
+	GiftInterval = 15 * 60, -- seconds of play between free booster gifts
+	GiftMax = 3, -- unclaimed gifts stop piling up here
+
+	-- Game passes and developer products. Create each one on the Creator Dashboard and paste
+	-- its id here; while an id is 0 the item shows as "coming soon" and cannot be bought.
+	Monetization = {
+		ExtraSlots = 8,
+		VipLuck = 2,
+		PassOrder = { "doubleCash", "autoCollect", "extraSlots", "vip" },
+		Passes = {
+			doubleCash = { id = 0, name = "2x Cash", text = "Your deck earns double cash, forever." },
+			autoCollect = { id = 0, name = "Auto Collector", text = "Cash goes straight to your balance and survives rebirth." },
+			extraSlots = { id = 0, name = "+8 Deck Slots", text = "Eight extra deck slots from the start of every run." },
+			vip = { id = 0, name = "VIP", text = "A crown on your store sign and +2 luck." },
+		},
+		ProductOrder = { "auraSmall", "auraBig" },
+		Products = {
+			auraSmall = { id = 0, name = "Aura Bundle", aura = 5000 },
+			auraBig = { id = 0, name = "Aura Chest", aura = 50000 },
+		},
+	},
+
 	-- Server-wide lucky event: everyone gets bonus luck levels for a while.
 	LuckEvent = { Interval = 20 * 60, Duration = 5 * 60, BonusLevels = 5 },
 	BattleCooldown = 5, -- seconds between tower battles

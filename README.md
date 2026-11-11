@@ -100,7 +100,11 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 
 Eight stores sit in a ring around a cul-de-sac plaza (one per player, eight players per server).
 One road leaves the plaza and runs through a tunnel in a rocky ridge to the PvE arena, where the
-Battle Tower stands. The whole map is built by `src/server/Plots.luau`; the diagram is drawn from
+Battle Tower stands. A fountain sits on the plaza island and four small shops line the road
+(scenery only). Each store is a building that grows with its tier: an open-air stall with a
+fence, a wooden shop with shelves, an emporium with long windows, a mega store with a roof frame
+and neon pillars, a tower with a grand entrance beam and aura beam, a marble palace with a golden
+dome and red carpet, and finally a hall with floating crystals and a halo. The whole map is built by `src/server/Plots.luau`; the diagram is drawn from
 the same numbers by `node tools/make-map.js`.
 
 ## Setup

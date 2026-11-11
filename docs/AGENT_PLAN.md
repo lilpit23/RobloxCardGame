@@ -169,10 +169,11 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
   from the monster gates along lanes to the tower, the player places cards from their deck as
   defenders on pads, cards attack by type, rewards per wave. Decide solo instances vs shared
   arena first, and keep it PvE only.
-- [ ] **W5 Map polish.** Terrain or meshes for the ridge instead of blocks, a fast-travel pad
-  between a store and the arena, a public market stall and fountain on the plaza island.
-- [ ] **W2 Store visuals per tier.** Real storefront models per tier instead of walls and pillars;
-  shelves, a counter, a neon sign.
+- [ ] **W5 Map polish.** Fountain and four roadside shops are done. Still to do: terrain or meshes
+  for the ridge instead of blocks, a fast-travel pad between a store and the arena, houses and
+  street furniture behind the stores.
+- [x] **W2 Store buildings per tier.** Done with parts: seven distinct buildings (`buildDecor` in
+  `Plots.luau`). Follow-up: replace with meshes, add interior props (tables, pack shelves, lights).
 - [ ] **W3 Card stands as 3D display cases** with a glow coloured by rarity and a beam for Mythic
   and Secret cards.
 

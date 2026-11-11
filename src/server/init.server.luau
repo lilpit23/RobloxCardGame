@@ -217,6 +217,7 @@ local function pushState(player)
 		achievements = data.achievements,
 		packCounts = data.packCounts,
 		autoPack = data.autoPack,
+		autoRev = session.autoRev or 0,
 		restricted = session.restricted,
 		incomePerSec = income,
 		auraPerSec = aura,
@@ -543,6 +544,7 @@ local function runAutoPacker(player, session, data)
 	AutoPullRemote:FireClient(player, pulled, newBest)
 	updateShowcase(player)
 	session.rev = session.rev + 1
+	session.autoRev = (session.autoRev or 0) + 1 -- lets the client tell this apart from a click
 	session.dirty = true
 end
 

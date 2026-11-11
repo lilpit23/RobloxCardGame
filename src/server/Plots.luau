@@ -137,36 +137,140 @@ local function buildStand(plot, index)
 	plot.stands[index] = { folder = folder, card = card, guis = { gui }, prompt = prompt }
 end
 
+-- Wall style of the store building at each tier (tier 1 is an open-air stall).
+local WALLS = {
+	false,
+	{ height = 12, color = Color3.fromRGB(200, 160, 110), material = Enum.Material.WoodPlanks },
+	{ height = 14, color = Color3.fromRGB(235, 230, 220), material = Enum.Material.Concrete },
+	{ height = 18, color = Color3.fromRGB(60, 62, 78), material = Enum.Material.Metal },
+	{ height = 20, color = Color3.fromRGB(70, 60, 95), material = Enum.Material.Metal },
+	{ height = 22, color = Color3.fromRGB(240, 238, 232), material = Enum.Material.Marble },
+	{ height = 24, color = Color3.fromRGB(28, 24, 48), material = Enum.Material.SmoothPlastic },
+}
+
+-- Rebuilds the store building for the plot's tier. Each tier keeps what the one before had
+-- and adds to it:
+--   1 Card Stall       open-air stall: rail fence and crates
+--   2 Card Shop        wooden back wall with shelves, half side walls
+--   3 Card Emporium    full walls with long windows
+--   4 Mega Card Store  roof frame, neon trim, glowing corner pillars
+--   5 Aura Tower       grand entrance beam and the aura beam
+--   6 Card Palace      marble, red carpet, golden dome
+--   7 Hall of Legends  floating crystals and a halo over the store
 local function buildDecor(plot)
 	plot.decor:ClearAllChildren()
-	local style = TIER_STYLE[plot.tier]
+	local tier = plot.tier
+	local style = TIER_STYLE[tier]
 	plot.floor.Color = style.floor
 	plot.floor.Material = style.material
 
-	local wallColor = Color3.fromRGB(235, 230, 220)
-	if plot.tier >= 2 then
-		newPart(plot.decor, "BackWall", Vector3.new(SIZE, 14, 1), plot.cframe * CFrame.new(0, 8, HALF - 0.5), wallColor)
+	local function add(name, size, x, y, z, color, material)
+		return newPart(plot.decor, name, size, plot.cframe * CFrame.new(x, y, z), color, material)
 	end
-	if plot.tier >= 3 then
-		newPart(plot.decor, "LeftWall", Vector3.new(1, 14, SIZE - 1), plot.cframe * CFrame.new(-HALF + 0.5, 8, -0.5), wallColor)
-		newPart(plot.decor, "RightWall", Vector3.new(1, 14, SIZE - 1), plot.cframe * CFrame.new(HALF - 0.5, 8, -0.5), wallColor)
+	local function glow(part, range)
+		local light = Instance.new("PointLight")
+		light.Color = part.Color
+		light.Range = range
+		light.Parent = part
 	end
-	if plot.tier >= 4 then
+
+	local edge = HALF - 0.5
+	if tier == 1 then
+		local wood = Color3.fromRGB(120, 85, 55)
+		for _, sx in ipairs({ -1, 1 }) do
+			add("FenceRail", Vector3.new(0.6, 0.6, SIZE - 2), sx * edge, 3.2, 0, wood, Enum.Material.Wood)
+			for z = -30, 30, 12 do
+				add("FencePost", Vector3.new(1, 3.4, 1), sx * edge, 2.7, z, wood, Enum.Material.Wood)
+			end
+		end
+		add("FenceRail", Vector3.new(SIZE - 2, 0.6, 0.6), 0, 3.2, edge, wood, Enum.Material.Wood)
+		add("Crate", Vector3.new(4, 4, 4), 27, 3, 28, Color3.fromRGB(165, 125, 80), Enum.Material.WoodPlanks)
+		add("Crate", Vector3.new(3, 3, 3), 22.5, 2.5, 29, Color3.fromRGB(150, 110, 70), Enum.Material.WoodPlanks)
+		add("Crate", Vector3.new(4, 4, 4), -27, 3, 28, Color3.fromRGB(165, 125, 80), Enum.Material.WoodPlanks)
+		return
+	end
+
+	local wall = WALLS[tier]
+	local height = wall.height
+	local top = 1 + height
+	local middle = 1 + height / 2
+
+	-- back wall with shelves
+	add("BackWall", Vector3.new(SIZE, height, 1), 0, middle, edge, wall.color, wall.material)
+	for shelfY = 5, height - 3, 4 do
+		add("Shelf", Vector3.new(SIZE - 8, 0.4, 1.4), 0, shelfY, HALF - 1.7, Color3.fromRGB(90, 65, 45), Enum.Material.Wood)
+	end
+
+	if tier == 2 then
+		for _, sx in ipairs({ -1, 1 }) do
+			add("SideWall", Vector3.new(1, height, HALF), sx * edge, middle, HALF / 2, wall.color, wall.material)
+		end
+	else
+		-- full side walls with a long window band between y = 5 and y = 11
+		for _, sx in ipairs({ -1, 1 }) do
+			local x = sx * edge
+			add("WallBase", Vector3.new(1, 4, SIZE - 1), x, 3, -0.5, wall.color, wall.material)
+			add("WallTop", Vector3.new(1, height - 10, SIZE - 1), x, 11 + (height - 10) / 2, -0.5, wall.color, wall.material)
+			for z = -24, 24, 16 do
+				add("WallPier", Vector3.new(1.2, 6, 3), x, 8, z, wall.color, wall.material)
+			end
+			local window = add("Window", Vector3.new(0.4, 6, SIZE - 1), x, 8, -0.5, Color3.fromRGB(170, 215, 255), Enum.Material.Glass)
+			window.Transparency = 0.6
+		end
+	end
+
+	if tier >= 4 then
+		-- roof frame and cross beams (open, so the deck stays visible from above)
+		local beamColor = Color3.fromRGB(40, 40, 50)
+		for _, side in ipairs({ -1, 1 }) do
+			add("RoofBeam", Vector3.new(2, 2, SIZE), side * (HALF - 1), top + 1, 0, beamColor, Enum.Material.Metal)
+			add("RoofBeam", Vector3.new(SIZE, 2, 2), 0, top + 1, side * (HALF - 1), beamColor, Enum.Material.Metal)
+			add("NeonTrim", Vector3.new(0.4, 0.5, SIZE - 1), side * (HALF - 1.3), 11.5, -0.5, style.accent, Enum.Material.Neon)
+		end
+		for z = -16, 16, 16 do
+			add("CrossBeam", Vector3.new(SIZE - 4, 1, 1), 0, top + 1, z, beamColor, Enum.Material.Metal)
+		end
 		for _, sx in ipairs({ -1, 1 }) do
 			for _, sz in ipairs({ -1, 1 }) do
-				local pillar = newPart(plot.decor, "Pillar", Vector3.new(2, 24, 2), plot.cframe * CFrame.new(sx * (HALF - 1), 13, sz * (HALF - 1)), style.accent, Enum.Material.Neon)
-				local light = Instance.new("PointLight")
-				light.Color = style.accent
-				light.Range = 20
-				light.Parent = pillar
+				glow(add("Pillar", Vector3.new(2, top + 4, 2), sx * (HALF - 1), (top + 4) / 2 + 1, sz * (HALF - 1), style.accent, Enum.Material.Neon), 20)
 			end
 		end
 	end
-	if plot.tier >= 5 then
-		local beam = newPart(plot.decor, "AuraBeam", Vector3.new(4, 120, 4), plot.cframe * CFrame.new(0, 61, HALF - 4), style.accent, Enum.Material.Neon)
+
+	if tier >= 5 then
+		-- grand entrance beam across the front, resting on the corner pillars
+		add("Lintel", Vector3.new(SIZE, 3, 3), 0, top + 6.5, -HALF + 1, wall.color, wall.material)
+		glow(add("LintelGlow", Vector3.new(SIZE - 8, 0.5, 1.5), 0, top + 4.8, -HALF + 1, style.accent, Enum.Material.Neon), 24)
+		local beam = add("AuraBeam", Vector3.new(4, 120, 4), 0, 61, HALF - 4, style.accent, Enum.Material.Neon)
 		beam.Transparency = 0.5
 		beam.CanCollide = false
-		beam.Shape = Enum.PartType.Block
+	end
+
+	if tier >= 6 then
+		-- palace: red carpet down the middle aisle and a golden dome over the back wall
+		local carpet = add("Carpet", Vector3.new(2.6, 0.1, SIZE - 10), 0, 1.05, 3, Color3.fromRGB(170, 30, 45), Enum.Material.Fabric)
+		carpet.CanCollide = false
+		local dome = add("Dome", Vector3.new(22, 22, 22), 0, top + 3, HALF - 9, Color3.fromRGB(245, 200, 80), Enum.Material.Metal)
+		dome.Shape = Enum.PartType.Ball
+		dome.CanCollide = false
+		add("DomeSpire", Vector3.new(1, 8, 1), 0, top + 17, HALF - 9, Color3.fromRGB(245, 200, 80), Enum.Material.Metal)
+	end
+
+	if tier >= 7 then
+		-- hall of legends: crystals floating over the corners and a glowing halo above
+		for _, sx in ipairs({ -1, 1 }) do
+			for _, sz in ipairs({ -1, 1 }) do
+				local crystal = add("Crystal", Vector3.new(3, 7, 3), sx * (HALF - 1), top + 13, sz * (HALF - 1), style.accent, Enum.Material.Neon)
+				crystal.CFrame = crystal.CFrame * CFrame.Angles(0, math.pi / 4, 0)
+				crystal.CanCollide = false
+				glow(crystal, 26)
+			end
+		end
+		local haloY = top + 22
+		for _, side in ipairs({ -1, 1 }) do
+			add("Halo", Vector3.new(1, 1, 36), side * 18, haloY, 0, style.accent, Enum.Material.Neon).CanCollide = false
+			add("Halo", Vector3.new(36, 1, 1), 0, haloY, side * 18, style.accent, Enum.Material.Neon).CanCollide = false
+		end
 	end
 end
 
@@ -245,8 +349,8 @@ local function buildPlot(index, cframe, parent)
 	end)
 
 	-- Vault safe: cards kept here survive a rebirth
-	local safe = newPart(folder, "VaultSafe", Vector3.new(5, 5, 4), cframe * CFrame.new(-28.5, 3.5, -29), Color3.fromRGB(70, 75, 85), Enum.Material.DiamondPlate)
-	newPart(folder, "VaultDial", Vector3.new(1.6, 1.6, 0.4), cframe * CFrame.new(-28.5, 3.5, -31.1), Color3.fromRGB(215, 160, 50), Enum.Material.Neon)
+	local safe = newPart(folder, "VaultSafe", Vector3.new(5, 5, 4), cframe * CFrame.new(-27.5, 3.5, -28), Color3.fromRGB(70, 75, 85), Enum.Material.DiamondPlate)
+	newPart(folder, "VaultDial", Vector3.new(1.6, 1.6, 0.4), cframe * CFrame.new(-27.5, 3.5, -30.1), Color3.fromRGB(215, 160, 50), Enum.Material.Neon)
 	newBillboard(safe, "🔐 VAULT", 3.6, 7, 1.5)
 	local vaultPrompt = Instance.new("ProximityPrompt")
 	vaultPrompt.ActionText = "Open"
@@ -347,6 +451,16 @@ local function buildPlaza(map, layout)
 	newDisc(map, "IslandKerb", 24, 0.5, Vector3.new(0, 0.25, 0), PAVEMENT, Enum.Material.Concrete)
 	newDisc(map, "Island", 22, 0.6, Vector3.new(0, 0.3, 0), Color3.fromRGB(95, 170, 105), Enum.Material.Grass)
 
+	-- fountain in the middle of the island
+	newDisc(map, "FountainBasin", 9, 1.6, Vector3.new(0, 1.4, 0), Color3.fromRGB(170, 170, 180), Enum.Material.Marble)
+	local water = newDisc(map, "FountainWater", 8, 0.4, Vector3.new(0, 2.3, 0), Color3.fromRGB(80, 170, 255), Enum.Material.Glass)
+	water.Transparency = 0.35
+	water.CanCollide = false
+	newPart(map, "FountainColumn", Vector3.new(2, 5, 2), CFrame.new(0, 4.7, 0), Color3.fromRGB(170, 170, 180), Enum.Material.Marble)
+	local jet = newPart(map, "FountainJet", Vector3.new(1.4, 1.4, 1.4), CFrame.new(0, 7.9, 0), Color3.fromRGB(150, 220, 255), Enum.Material.Neon)
+	jet.Shape = Enum.PartType.Ball
+	jet.CanCollide = false
+
 	-- lamps between the plots and on both sides of the road mouth
 	for index = 0, Config.PlotCount do
 		local angle = (index + 0.5) * layout.step
@@ -394,6 +508,36 @@ local function buildRoad(map, layout)
 	-- signpost where the road leaves the plaza
 	local post = newPart(map, "Signpost", Vector3.new(0.8, 9, 0.8), CFrame.new(layout.plazaRadius + 12, 4.5, ROAD_WIDTH / 2 + 3), Color3.fromRGB(105, 75, 50), Enum.Material.Wood)
 	newBillboard(post, "⚔️ Tower Defense →", 6, 12, 1.6)
+end
+
+-- Little shops lining the road between the plaza and the tunnel (scenery only).
+local SHOPS = {
+	{ name = "🎴 Pack Depot", color = Color3.fromRGB(225, 110, 130) },
+	{ name = "🤝 Trade Hall", color = Color3.fromRGB(90, 185, 175) },
+	{ name = "☕ Card Café", color = Color3.fromRGB(235, 190, 110) },
+	{ name = "🏦 Aura Bank", color = Color3.fromRGB(170, 130, 230) },
+}
+
+local function buildTown(map, layout)
+	local index = 0
+	for _, offset in ipairs({ 82, 122 }) do
+		local x = layout.plazaRadius + offset
+		for _, side in ipairs({ -1, 1 }) do
+			index = index + 1
+			local shop = SHOPS[index]
+			local z = side * 46
+			local front = z - side * 11 -- the wall that faces the road
+			newPart(map, "ShopBody", Vector3.new(26, 16, 22), CFrame.new(x, 8, z), shop.color, Enum.Material.Brick)
+			local roof = newPart(map, "ShopRoof", Vector3.new(30, 2, 26), CFrame.new(x, 17, z), Color3.fromRGB(60, 55, 65), Enum.Material.Slate)
+			newPart(map, "ShopDoor", Vector3.new(5, 8, 0.6), CFrame.new(x, 4, front - side * 0.2), Color3.fromRGB(95, 65, 45), Enum.Material.Wood)
+			for _, wx in ipairs({ -8, 8 }) do
+				local window = newPart(map, "ShopWindow", Vector3.new(5, 5, 0.4), CFrame.new(x + wx, 8, front - side * 0.2), Color3.fromRGB(255, 235, 170), Enum.Material.Neon)
+				window.Transparency = 0.2
+			end
+			newPart(map, "ShopAwning", Vector3.new(26, 0.6, 4), CFrame.new(x, 11.5, front - side * 2), Color3.fromRGB(245, 245, 245), Enum.Material.Fabric)
+			newBillboard(roof, shop.name, 4, 18, 2.6)
+		end
+	end
 end
 
 -- A rocky ridge across the map with the tunnel through it.
@@ -514,7 +658,7 @@ function Plots.init(handlers)
 		local spawn = Instance.new("SpawnLocation")
 		spawn.Anchored = true
 		spawn.Size = Vector3.new(10, 1, 10)
-		spawn.CFrame = CFrame.new(8, 1, 0)
+		spawn.CFrame = CFrame.new(16, 1, 0) -- on the island, beside the fountain
 		spawn.Neutral = true
 		spawn.Transparency = 1
 		spawn.CanCollide = false
@@ -526,6 +670,7 @@ function Plots.init(handlers)
 	map.Parent = workspace
 	buildPlaza(map, layout)
 	buildRoad(map, layout)
+	buildTown(map, layout)
 	buildTunnel(map, layout)
 	buildArena(map, layout)
 

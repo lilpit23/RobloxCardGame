@@ -2091,10 +2091,15 @@ local function refreshHud()
 	questsButton.Text = hasClaimable() and "🎯 Quests❗" or "🎯 Quests"
 end
 
+local seenAutoRev = 0
+
 Remotes.State.OnClientEvent:Connect(function(newState)
 	for key, value in pairs(newState) do
 		state[key] = value
 	end
+	-- did this update come from the Auto Packer (rather than something the player did)?
+	local fromAutoPacker = (state.autoRev or 0) ~= seenAutoRev
+	seenAutoRev = state.autoRev or 0
 	refreshHud()
 	-- The rebirth checklist also refreshes when cash / aura crosses a requirement.
 	local rebirthChanged = currentPanel == "Rebirth" and rebirthSignature() ~= renderedRebirthSignature
@@ -2102,9 +2107,10 @@ Remotes.State.OnClientEvent:Connect(function(newState)
 	local battleChanged = currentPanel == "Battle" and state.tower ~= renderedTower
 	local busy = currentPanel == "Battle" and battling -- don't rebuild the arena mid-fight
 	if currentPanel and not busy and (state.rev ~= renderedRev or rebirthChanged or questsChanged or battleChanged) then
-		-- While the Auto Packer runs, cards arrive every few seconds; rebuilding a big screen
-		-- that often makes buttons hard to press, so space the rebuilds out.
-		if state.autoPack.on and os.clock() - lastRenderAt < 4 then
+		-- The Auto Packer adds cards every few seconds; rebuilding a big screen that often
+		-- makes buttons hard to press, so its updates are spaced out. Anything the player did
+		-- themselves (an upgrade, a purchase) always shows straight away.
+		if fromAutoPacker and os.clock() - lastRenderAt < 4 then
 			renderQueued = true
 		else
 			renderPanel()

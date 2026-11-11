@@ -8,12 +8,13 @@ local Achievements = {}
 Achievements.BonusEach = 0.03 -- +3% income per achievement claimed
 Achievements.AuraEach = 200 -- aura for claiming one, times its tier (1, 2, 3, ...)
 
--- Each track is one statistic with rising goals. text uses %s for the goal.
+-- Each track is one statistic with rising goals. text uses %s for the goal; "one" is the
+-- wording when the goal is 1.
 local TRACKS = {
 	{ stat = "packs", name = "Pack Ripper", text = "Open %s packs", goals = { 10, 100, 500, 2500, 10000, 50000 } },
 	{ stat = "cards", name = "Collector", text = "Discover %s different cards (effects count)", goals = { 10, 50, 150, 400, 800, 1400 } },
-	{ stat = "sets", name = "Set Master", text = "Complete %s sets", goals = { 1, 2, 4, 6 } },
-	{ stat = "rebirths", name = "Reborn", text = "Rebirth %s times", goals = { 1, 2, 4, 6, 8 } },
+	{ stat = "sets", name = "Set Master", text = "Complete %s sets", one = "Complete a set", goals = { 1, 2, 4, 6 } },
+	{ stat = "rebirths", name = "Reborn", text = "Rebirth %s times", one = "Rebirth once", goals = { 1, 2, 4, 6, 8 } },
 	{ stat = "tower", name = "Tower Climber", text = "Clear %s Battle Tower floors", goals = { 5, 15, 30, 50 } },
 	{ stat = "fused", name = "Fusion Chef", text = "Fuse cards %s times", goals = { 5, 50, 250, 1000 } },
 	{ stat = "earned", name = "Tycoon", text = "Earn %s in total", goals = { 1e6, 1e9, 1e12, 1e15, 1e18 }, cash = true },
@@ -31,7 +32,7 @@ for _, track in ipairs(TRACKS) do
 			tier = tier,
 			goal = goal,
 			name = track.name .. " " .. string.rep("★", tier),
-			text = string.format(track.text, goalText),
+			text = goal == 1 and track.one or string.format(track.text, goalText),
 			cash = track.cash == true,
 		}
 		table.insert(Achievements.List, achievement)

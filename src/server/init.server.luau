@@ -16,6 +16,7 @@ local Combos = require(Shared:WaitForChild("Combos"))
 local Luck = require(Shared:WaitForChild("Luck"))
 local Deck = require(Shared:WaitForChild("Deck"))
 local Season = require(Shared:WaitForChild("Season"))
+local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
@@ -49,6 +50,9 @@ local EquipBestRemote = newRemote("RemoteEvent", "EquipBest")
 local BuyUpgradeRemote = newRemote("RemoteEvent", "BuyUpgrade")
 local RequestStateRemote = newRemote("RemoteEvent", "RequestState")
 local FuseCardRemote = newRemote("RemoteEvent", "FuseCard")
+local FuseAllRemote = newRemote("RemoteEvent", "FuseAll")
+local SellSparesRemote = newRemote("RemoteEvent", "SellSpares")
+local AchievementClaimRemote = newRemote("RemoteEvent", "AchievementClaim")
 local RebirthRemote = newRemote("RemoteEvent", "Rebirth")
 local VaultStoreRemote = newRemote("RemoteEvent", "VaultStore")
 local VaultTakeRemote = newRemote("RemoteEvent", "VaultTake")
@@ -142,7 +146,8 @@ local function storeMult(data)
 	local combos = Combos.evaluate(data.slots)
 	local setBonus = 1 + Config.SetCompleteBonus * Cards.completedSets(data.collection)
 	local passBonus = hasPass(data, "doubleCash") and 2 or 1
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus
+	local achievementBonus = Achievements.incomeMult(data.achievements)
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus * achievementBonus
 end
 
 -- Aura multiplier: Aura Magnet perk x deck combos.
@@ -207,6 +212,9 @@ local function pushState(player)
 		featuredSet = Season.featuredSet(),
 		passes = dataPasses[data] or {},
 		cashCap = Rebirth.cashCap(data.rebirths),
+		packsOpened = data.packsOpened,
+		stats = data.stats,
+		achievements = data.achievements,
 		packCounts = data.packCounts,
 		autoPack = data.autoPack,
 		restricted = session.restricted,
@@ -351,6 +359,7 @@ local function addCash(data, amount, bypassCap)
 		amount = math.min(amount, math.max(0, Rebirth.cashCap(data.rebirths) - data.cash))
 	end
 	data.cash = data.cash + amount
+	data.stats.earned = data.stats.earned + amount -- lifetime total, for achievements
 	return amount
 end
 
@@ -650,7 +659,86 @@ FuseCardRemote.OnServerEvent:Connect(function(player, key)
 	local newKey = Cards.makeKey(def.id, nextVariant)
 	addCard(data, newKey, 1)
 	notify(player, "Fused into " .. Cards.getDisplayName(newKey) .. "!", "good")
+	data.stats.fused = data.stats.fused + 1
 	questProgress(player, "fuse", 1)
+	touch(player, true)
+end)
+
+-- Fuses every set of spare copies in the inventory (cards in the deck are left alone).
+-- Runs a few passes so three new Shiny cards can go on to become a Golden one.
+FuseAllRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "FuseAll", 1, 2) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil then
+		return
+	end
+	local fused = 0
+	for _ = 1, #Cards.FuseOrder do
+		local changes = {}
+		for key, count in pairs(data.inventory) do
+			local def, variantId = Cards.parse(key)
+			local nextVariant = def and Cards.nextVariant(variantId)
+			if nextVariant and count >= Config.FuseCount then
+				table.insert(changes, { key = key, times = math.floor(count / Config.FuseCount), newKey = Cards.makeKey(def.id, nextVariant) })
+			end
+		end
+		if #changes == 0 then
+			break
+		end
+		for _, change in ipairs(changes) do
+			if takeCard(data, change.key, change.times * Config.FuseCount) then
+				addCard(data, change.newKey, change.times)
+				fused = fused + change.times
+			end
+		end
+	end
+	if fused == 0 then
+		notify(player, "Nothing to fuse. You need " .. Config.FuseCount .. " spare copies of the same card.", "error")
+		return
+	end
+	data.stats.fused = data.stats.fused + fused
+	questProgress(player, "fuse", fused)
+	notify(player, "Fused " .. fused .. " times!", "good")
+	touch(player, true)
+end)
+
+-- Sells plain spare copies from the inventory, keeping enough of each card to fuse once.
+SellSparesRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "SellSpares", 1, 2) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil then
+		return
+	end
+	local room = Rebirth.cashCap(data.rebirths) - data.cash
+	local sold, total = 0, 0
+	local keys = {}
+	for key in pairs(data.inventory) do
+		table.insert(keys, key)
+	end
+	for _, key in ipairs(keys) do
+		local def, variantId = Cards.parse(key)
+		local spare = (data.inventory[key] or 0) - Config.FuseCount
+		if def and variantId == "normal" and spare > 0 then
+			local each = Cards.getSellValue(key)
+			-- never sell into a full wallet
+			local amount = math.min(spare, math.floor((room - total) / each))
+			if amount > 0 and takeCard(data, key, amount) then
+				sold = sold + amount
+				total = total + each * amount
+			end
+		end
+	end
+	if sold == 0 then
+		notify(player, "No spare cards to sell (or your wallet is full).", "error")
+		return
+	end
+	total = addCash(data, total)
+	questProgress(player, "sell", sold)
+	notify(player, "Sold " .. sold .. " spare cards for " .. Format.cash(total), "cash")
 	touch(player, true)
 end)
 
@@ -780,7 +868,7 @@ BattleRemote.OnServerInvoke = function(player)
 
 	local result = { ok = true, win = win, floor = floor, team = team, enemies = enemies, log = log }
 	if win then
-		local aura, cash = Battle.reward(floor)
+		local aura, cash = Battle.reward(floor, Rebirth.cashCap(data.rebirths))
 		data.tower = floor
 		seasonXp(player, Season.Xp.floor)
 		data.aura = data.aura + aura
@@ -877,6 +965,34 @@ SeasonClaimRemote.OnServerEvent:Connect(function(player)
 	session.questRev = session.questRev + 1
 	notify(player, "🏅 Season level " .. level .. ": " .. Season.rewardText(reward), "good")
 	touch(player, true)
+end)
+
+AchievementClaimRemote.OnServerEvent:Connect(function(player, achievementId)
+	if not allow(player, "AchievementClaim", 4, 8) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	local achievement = type(achievementId) == "string" and Achievements.ById[achievementId] or nil
+	if session == nil or data == nil or achievement == nil or data.achievements[achievement.id] then
+		return
+	end
+	-- the profile plus the one value that is not saved in it
+	local value
+	if achievement.stat == "deck" then
+		value = slotCount(data)
+	else
+		value = Achievements.value(data, achievement.stat)
+	end
+	if value < achievement.goal then
+		return
+	end
+	data.achievements[achievement.id] = true
+	local aura = Achievements.auraReward(achievement)
+	data.aura = data.aura + aura
+	session.questRev = session.questRev + 1
+	notify(player, "🏆 " .. achievement.name .. "!  +" .. math.floor(Achievements.BonusEach * 100 + 0.5) .. "% income forever, +" .. Format.short(aura) .. " aura", "good")
+	touch(player, false)
 end)
 
 ---------------------------------------------------------------------

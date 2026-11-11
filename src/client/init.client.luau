@@ -20,6 +20,7 @@ local Perks = require(Shared:WaitForChild("Perks"))
 local Combos = require(Shared:WaitForChild("Combos"))
 local Luck = require(Shared:WaitForChild("Luck"))
 local Season = require(Shared:WaitForChild("Season"))
+local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -54,6 +55,9 @@ local state = {
 	slotCount = Config.BaseSlots,
 	incomePerSec = 0,
 	cashCap = math.huge,
+	packsOpened = 0,
+	stats = { fused = 0, earned = 0 },
+	achievements = {},
 	packCounts = {},
 	autoPack = { packId = "", on = false, sell = 0 },
 	auraPerSec = 0,
@@ -883,6 +887,15 @@ panels.Cards = function()
 		TextTruncate = Enum.TextTruncate.AtEnd,
 	})
 
+	local toolsRow = newRow(3, 44)
+	toolsRow.BackgroundTransparency = 1
+	newButton(toolsRow, "⚗️ Fuse all spares (3 → 1)", UDim2.new(0, 0, 0, 2), UDim2.new(0.5, -4, 0, 38), Color3.fromRGB(200, 70, 180), function()
+		Remotes.FuseAll:FireServer()
+	end).TextSize = 15
+	newButton(toolsRow, "💰 Sell spares (keep 3 of each)", UDim2.new(0.5, 4, 0, 2), UDim2.new(0.5, -4, 0, 38), COLORS.bad, function()
+		Remotes.SellSpares:FireServer()
+	end).TextSize = 15
+
 	local guideRow = newRow(2, 58)
 	newLabel(guideRow, "Card effects  —  " .. effectsGuide(), UDim2.new(0, 14, 0, 4), UDim2.new(1, -28, 1, -8), {
 		TextSize = 12,
@@ -894,7 +907,7 @@ panels.Cards = function()
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -12, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = 3,
+		LayoutOrder = 4,
 	}, body)
 	make("UIGridLayout", {
 		CellSize = UDim2.new(0, 120, 0, 241),
@@ -984,7 +997,7 @@ panels.Cards = function()
 
 	if order == 0 then
 		page:Destroy()
-		newLabel(newRow(3, 60), "No cards yet — open a pack from the Pack Shop!", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+		newLabel(newRow(4, 60), "No cards yet — open a pack from the Pack Shop!", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
 			TextSize = 18,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextColor3 = COLORS.dim,
@@ -1280,6 +1293,9 @@ local function hasClaimable()
 	if state.season.claimed < Season.levelFor(state.season.xp) then
 		return true
 	end
+	if Achievements.anyClaimable(state, state.achievements) then
+		return true
+	end
 	for _, quest in ipairs(state.quests.list) do
 		if not quest.claimed and quest.progress >= quest.goal then
 			return true
@@ -1407,6 +1423,39 @@ panels.Quests = function()
 		TextSize = 13,
 		TextColor3 = COLORS.dim,
 	})
+
+	-- Achievements: permanent goals. Shows what can be claimed and the next goal of each kind.
+	local rows, claimedCount = Achievements.display(state, state.achievements)
+	local bonus = math.floor(Achievements.BonusEach * claimedCount * 100 + 0.5)
+	local header = newRow(20, 44)
+	header.BackgroundColor3 = Color3.fromRGB(60, 45, 80)
+	newLabel(header, "🏆 Achievements  ·  " .. claimedCount .. "/" .. #Achievements.List .. "  ·  +" .. bonus .. "% income forever", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 17,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+	})
+	for index, entry in ipairs(rows) do
+		local achievement = entry.achievement
+		local row = newRow(20 + index, 60)
+		newLabel(row, achievement.name, UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 22), { Font = Enum.Font.FredokaOne, TextSize = 17 })
+		local progress
+		if achievement.cash then
+			progress = Format.cash(math.min(entry.value, achievement.goal)) .. " / " .. Format.cash(achievement.goal)
+		else
+			progress = Format.short(math.min(entry.value, achievement.goal)) .. " / " .. Format.short(achievement.goal)
+		end
+		newLabel(row, achievement.text .. "   ·   " .. progress, UDim2.new(0, 14, 0, 30), UDim2.new(1, -190, 0, 24), {
+			TextSize = 13,
+			TextColor3 = COLORS.dim,
+		})
+		if entry.done then
+			newButton(row, "Claim", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.good, function()
+				Remotes.AchievementClaim:FireServer(achievement.id)
+			end)
+		else
+			newButton(row, "+" .. math.floor(Achievements.BonusEach * 100 + 0.5) .. "% income", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.locked, nil).AutoButtonColor = false
+		end
+	end
 end
 
 -- Aura Shrine: permanent perks, shown under the store upgrades ---------------------
@@ -1829,7 +1878,7 @@ panels.Battle = function()
 		return
 	end
 
-	local aura, cash = Battle.reward(floor)
+	local aura, cash = Battle.reward(floor, state.cashCap)
 	newLabel(infoRow, "Floor " .. floor .. "   ·   win: +" .. Format.short(aura) .. " aura, " .. Format.cash(cash), UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 19,
@@ -1897,10 +1946,15 @@ panels.Battle = function()
 	end)
 end
 
+local lastRenderAt = 0
+local renderQueued = false -- a rebuild is waiting for the throttle below
+
 function renderPanel()
 	if currentPanel == nil then
 		return
 	end
+	lastRenderAt = os.clock()
+	renderQueued = false
 	local scroll = body.CanvasPosition
 	clearBody()
 	panels[currentPanel]()
@@ -2048,7 +2102,13 @@ Remotes.State.OnClientEvent:Connect(function(newState)
 	local battleChanged = currentPanel == "Battle" and state.tower ~= renderedTower
 	local busy = currentPanel == "Battle" and battling -- don't rebuild the arena mid-fight
 	if currentPanel and not busy and (state.rev ~= renderedRev or rebirthChanged or questsChanged or battleChanged) then
-		renderPanel()
+		-- While the Auto Packer runs, cards arrive every few seconds; rebuilding a big screen
+		-- that often makes buttons hard to press, so space the rebuilds out.
+		if state.autoPack.on and os.clock() - lastRenderAt < 4 then
+			renderQueued = true
+		else
+			renderPanel()
+		end
 	end
 end)
 
@@ -2266,6 +2326,9 @@ task.spawn(function()
 		task.wait(1)
 		if state.luckEventEndsAt - os.time() > -2 then
 			refreshHud()
+		end
+		if renderQueued and currentPanel and os.clock() - lastRenderAt >= 4 and not (currentPanel == "Battle" and battling) then
+			renderPanel()
 		end
 	end
 end)

@@ -86,9 +86,16 @@ function Battle.enemyTeam(floor)
 	return team
 end
 
--- Aura and cash for clearing a floor.
-function Battle.reward(floor)
-	return 40 * floor, math.floor(150 * 1.45 ^ floor)
+-- Aura and cash for clearing a floor. The cash is limited to a share of the wallet cap so
+-- the tower can never outrun the rest of the economy.
+Battle.RewardCapShare = 0.05
+
+function Battle.reward(floor, cashCap)
+	local cash = math.floor(150 * 1.45 ^ floor)
+	if cashCap and cashCap < math.huge then
+		cash = math.min(cash, math.floor(cashCap * Battle.RewardCapShare))
+	end
+	return 40 * floor, cash
 end
 
 local function firstAlive(team)

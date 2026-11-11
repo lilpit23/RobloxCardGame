@@ -6,7 +6,7 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
 ## Layout
 
 - `src/shared/` → `ReplicatedStorage.Shared`. Data tables and pure logic used by both sides:
-  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Battle`, `Format`, `CardView` (builds a card's GUI).
+  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Format`, `CardView` (builds a card's GUI).
 - `src/server/` → `ServerScriptService.Server`. `init.server.luau` holds the remotes and game
   rules; `PlayerData.luau` is the only code that touches DataStores; `Monetization.luau` handles game
   passes and product receipts; `Plots.luau` builds the map

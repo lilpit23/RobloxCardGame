@@ -77,10 +77,10 @@ flatter rarity and effect multipliers, Auto Packer perk, simulator models the ca
   1.5 to 2.5 hours of normal play, each later rebirth a little longer.
 - [ ] **P2 Simulate later rebirths.** The simulator stops at the first rebirth; extend it to carry
   the vault and bonuses through several rebirths.
-- [ ] **P3 More long-term goals.** Achievements with permanent rewards, a prestige layer above
-  rebirth, tower floors beyond 50, set mastery (own every effect of every card in a set).
-- [ ] **P4 Slow the tower.** Battle Tower rewards are fixed amounts that can outrun the economy
-  early; scale them to the wallet cap.
+- [ ] **P3 More long-term goals.** Achievements are done (permanent +3% income each). Still to do:
+  a prestige layer above rebirth, tower floors beyond 50, set mastery (own every effect of every
+  card in a set).
+- [x] **P4 Slow the tower.** Done: tower cash is limited to 5% of the wallet cap.
 
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 

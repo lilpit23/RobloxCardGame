@@ -48,6 +48,8 @@ local function newData()
 		daily = { lastDay = 0, streak = 0 }, -- daily login reward
 		packCounts = {}, -- packs opened this run, per pack id (drives pack price; reset by rebirth)
 		autoPack = { packId = "", on = false, sell = 0 }, -- Auto Packer settings
+		achievements = {}, -- [achievementId] = true once claimed (permanent income bonus)
+		stats = { fused = 0, earned = 0 }, -- lifetime counters for achievements
 		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
 		season = { id = 0, xp = 0, claimed = 0 }, -- monthly season pass progress
 		receipts = {}, -- developer product PurchaseIds already granted

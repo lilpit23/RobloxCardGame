@@ -51,6 +51,7 @@ local function newData()
 		achievements = {}, -- [achievementId] = true once claimed (permanent income bonus)
 		stats = { fused = 0, earned = 0 }, -- lifetime counters for achievements
 		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
+		codes = {}, -- [CODE] = true for codes already redeemed
 		showcase = { left = "", right = "" }, -- cards chosen for the storefront frames ("" = automatic)
 		boosts = { luckUntil = 0, cashUntil = 0 }, -- os.time() when bought potions run out
 		receipts = {}, -- developer product PurchaseIds already granted
@@ -209,6 +210,17 @@ function PlayerData.save(player, release)
 			return data
 		end)
 	end)
+end
+
+-- Wipes the player's progress back to a brand-new profile (keeps the session lock, so the
+-- wiped profile is what gets saved when they leave).
+function PlayerData.reset(player)
+	local profile = profiles[player]
+	if profile then
+		local lock = profile.data.lock
+		profile.data = newData()
+		profile.data.lock = lock
+	end
 end
 
 function PlayerData.release(player)

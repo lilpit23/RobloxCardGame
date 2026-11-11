@@ -67,6 +67,8 @@ local OpenRebirthRemote = newRemote("RemoteEvent", "OpenRebirth") -- server -> c
 local AutoPackSetRemote = newRemote("RemoteEvent", "AutoPackSet")
 local AutoPullRemote = newRemote("RemoteEvent", "AutoPull") -- server -> client
 local SetShowcaseRemote = newRemote("RemoteEvent", "SetShowcase")
+local RedeemCodeRemote = newRemote("RemoteEvent", "RedeemCode")
+local ResetDataRemote = newRemote("RemoteEvent", "ResetData")
 local MarketStateRemote = newRemote("RemoteEvent", "MarketState") -- server -> client
 local MarketListRemote = newRemote("RemoteEvent", "MarketList")
 local MarketCancelRemote = newRemote("RemoteEvent", "MarketCancel")
@@ -112,6 +114,14 @@ end
 
 local function notify(player, text, kind)
 	NotifyRemote:FireClient(player, text, kind or "info")
+end
+
+-- The game's creator (or anyone testing in Studio) gets a few testing tools.
+local function isOwner(player)
+	if RunService:IsStudio() then
+		return true
+	end
+	return game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId
 end
 
 -- Game passes owned, looked up by profile: [data] = { [passKey] = true }.
@@ -225,6 +235,7 @@ local function pushState(player)
 		boosts = data.boosts,
 		showcase = data.showcase,
 		restricted = session.restricted,
+		isOwner = isOwner(player),
 		incomePerSec = income,
 		auraPerSec = aura,
 	})
@@ -823,6 +834,55 @@ end)
 ---------------------------------------------------------------------
 -- Aura Shrine (permanent perks)
 ---------------------------------------------------------------------
+-- Redeem a code from Config.Codes. Each code works once per player.
+RedeemCodeRemote.OnServerEvent:Connect(function(player, text)
+	if not allow(player, "RedeemCode", 0.5, 3) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or type(text) ~= "string" or #text > 40 then
+		return
+	end
+	local code = string.upper((string.gsub(text, "%s+", "")))
+	local reward = Config.Codes[code]
+	if reward == nil then
+		notify(player, "That code isn't valid.", "error")
+		return
+	end
+	if data.codes[code] then
+		notify(player, "You've already used that code.", "error")
+		return
+	end
+	data.codes[code] = true
+	local parts = {}
+	if reward.gifts then
+		data.gifts = data.gifts + reward.gifts
+		table.insert(parts, reward.gifts .. " free boosters")
+	end
+	if reward.aura then
+		data.aura = data.aura + reward.aura
+		table.insert(parts, "+" .. Format.short(reward.aura) .. " aura")
+	end
+	if reward.cash then
+		table.insert(parts, Format.cash(addCash(data, reward.cash)))
+	end
+	notify(player, "🎉 Code redeemed: " .. table.concat(parts, ", "), "good")
+	touch(player, true)
+end)
+
+-- Owner-only testing tool: wipe your own save and start again.
+ResetDataRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "ResetData", 0.2, 1) or not isOwner(player) then
+		return
+	end
+	local session = sessions[player]
+	if session then
+		session.pending = 0
+	end
+	PlayerData.reset(player)
+	player:Kick("Your save was reset. Rejoin to start fresh.")
+end)
+
 -- Choose a card for one of the two storefront frames. side = "left", "right", or "auto" to go
 -- back to showing the deck's top earners.
 SetShowcaseRemote.OnServerEvent:Connect(function(player, side, key)

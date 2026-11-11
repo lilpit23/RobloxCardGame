@@ -19,6 +19,15 @@ return {
 	-- Uncommons, 3 = up to Rares. Only plain cards you already own 3+ copies of are sold.
 	AutoSellMax = 3,
 
+	-- Redeemable codes (typed in the Store screen). Each player can use each code once.
+	-- Add a line to launch a new code; delete a line to retire one.
+	-- gifts = free boosters, aura = aura, cash = cash (limited by the wallet cap).
+	Codes = {
+		RELEASE = { gifts = 3, aura = 250 },
+		AURAPACKS = { gifts = 2 },
+		THANKYOU = { aura = 500 },
+	},
+
 	GiftInterval = 15 * 60, -- seconds of play between free booster gifts
 	GiftMax = 3, -- unclaimed gifts stop piling up here
 

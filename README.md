@@ -71,6 +71,10 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
   many you own and where they are (deck, vault).
 - **Storefront choice.** From that card detail screen, pick which cards hang in the two frames
   at the front of your store, or leave it on automatic (your deck's top two earners).
+- **Codes.** Players type a code on the Store screen for free boosters, aura or cash, once each.
+  Codes live in `Config.Codes`; three are set up to start with (RELEASE, AURAPACKS, THANKYOU).
+- **Owner reset.** The game's creator sees a "Reset my save" button at the bottom of the Store
+  screen, for re-testing the game from the start.
 - **Achievements.** 38 long-term goals (packs opened, cards discovered, sets completed, rebirths,
   tower floors, fusions, total cash earned, deck size). Each one claimed gives +3% income forever
   plus aura. They are at the bottom of the Quests screen.

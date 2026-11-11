@@ -48,6 +48,7 @@ local state = {
 	featuredSet = "",
 	passes = {},
 	restricted = true,
+	isOwner = false,
 	perks = {},
 	tower = 0,
 	luckEventEndsAt = 0,
@@ -1859,12 +1860,43 @@ panels.Trade = function()
 end
 
 -- Store: game passes and aura bundles ------------------------------------------------
+local codeText = ""
+local resetConfirmUntil = 0
+
 panels.Store = function()
 	titleLabel.Text = "💎 Store"
 	useList()
 	local settings = Config.Monetization
 	local buttonPosition = UDim2.new(1, -160, 0, 14)
 	local buttonSize = UDim2.new(0, 148, 0, 44)
+
+	-- redeem a code
+	local codeRow = newRow(0, 60)
+	codeRow.BackgroundColor3 = Color3.fromRGB(38, 58, 82)
+	newLabel(codeRow, "🎟️ Got a code?", UDim2.new(0, 14, 0, 0), UDim2.new(0, 150, 1, 0), { Font = Enum.Font.FredokaOne, TextSize = 18 })
+	local codeBox = make("TextBox", {
+		Position = UDim2.new(0, 170, 0, 12),
+		Size = UDim2.new(1, -340, 0, 36),
+		BackgroundColor3 = Color3.fromRGB(20, 20, 30),
+		BorderSizePixel = 0,
+		Font = Enum.Font.GothamBold,
+		PlaceholderText = "Type it here",
+		Text = codeText,
+		TextColor3 = COLORS.text,
+		TextSize = 16,
+		ClearTextOnFocus = false,
+	}, codeRow)
+	round(codeBox, 8)
+	codeBox:GetPropertyChangedSignal("Text"):Connect(function()
+		codeText = codeBox.Text
+	end)
+	newButton(codeRow, "Redeem", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.good, function()
+		if codeText ~= "" then
+			Remotes.RedeemCode:FireServer(codeText)
+			codeText = ""
+			codeBox.Text = ""
+		end
+	end)
 
 	local order = 0
 	for _, passKey in ipairs(settings.PassOrder) do
@@ -1913,6 +1945,23 @@ panels.Store = function()
 				end)
 			end
 		end
+	end
+
+	-- testing tool, only shown to the game's creator (and in Studio)
+	if state.isOwner then
+		local resetRow = newRow(order + 2, 60)
+		resetRow.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
+		newLabel(resetRow, "🧪 Owner tool: wipe your own save to test the game from the start. Only you can see this.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), { TextSize = 13 })
+		local resetButton
+		resetButton = newButton(resetRow, "Reset my save", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.bad, function()
+			if os.clock() < resetConfirmUntil then
+				Remotes.ResetData:FireServer()
+			else
+				resetConfirmUntil = os.clock() + 4
+				resetButton.Text = "Tap again to wipe"
+				resetButton.TextSize = 14
+			end
+		end)
 	end
 
 	local note = newRow(order + 1, 34)

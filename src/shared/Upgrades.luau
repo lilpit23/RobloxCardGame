@@ -6,12 +6,12 @@ local Upgrades = {}
 -- Store tier = store upgrade level + 1. cost is the price to reach that tier.
 Upgrades.StoreTiers = {
 	{ name = "Card Stall", cost = 0, mult = 1 },
-	{ name = "Card Shop", cost = 2500, mult = 1.5 },
-	{ name = "Card Emporium", cost = 50000, mult = 2.5 },
-	{ name = "Mega Card Store", cost = 1000000, mult = 4 },
-	{ name = "Aura Tower", cost = 25000000, mult = 7 },
-	{ name = "Card Palace", cost = 5000000000, mult = 12 },
-	{ name = "Hall of Legends", cost = 250000000000, mult = 20 },
+	{ name = "Card Shop", cost = 10000, mult = 1.5 },
+	{ name = "Card Emporium", cost = 5000000, mult = 2.5 },
+	{ name = "Mega Card Store", cost = 1000000000, mult = 4 },
+	{ name = "Aura Tower", cost = 50000000000, mult = 7 },
+	{ name = "Card Palace", cost = 2000000000000, mult = 12 },
+	{ name = "Hall of Legends", cost = 1000000000000000, mult = 20 },
 }
 
 Upgrades.Order = { "store", "slots", "charm", "luck", "auto" }
@@ -38,7 +38,7 @@ Upgrades.Defs = {
 		currency = "cash",
 		max = Config.MaxSlots - Config.BaseSlots,
 		cost = function(level)
-			return math.floor(150 * 1.35 ^ level)
+			return math.floor(250 * 1.5 ^ level)
 		end,
 		describe = function(level)
 			return (Config.BaseSlots + level) .. " / " .. Config.MaxSlots .. " deck slots — each slot holds one active card that earns cash"

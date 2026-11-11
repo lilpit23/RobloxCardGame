@@ -52,6 +52,22 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
     confirm), or list a card for a cash price so anyone in the server can buy it. There is no
     stealing and no PvP.
 
+## More systems
+
+- **Pack opening.** The pack wobbles harder the better its best card is, then bursts open with a
+  flash; big pulls shake the screen, and Mythic or Secret pulls are announced to the whole server.
+- **Season pass.** A free 30-level reward track that resets every month. Opening packs, clearing
+  tower floors and finishing quests earn season XP; rewards are cash, aura, free boosters and
+  **promo cards** that never appear in packs.
+- **Free boosters.** Every 15 minutes of play earns a free booster of any unlocked set (up to 3
+  waiting). Each week one set is **featured** and its packs get +50% luck.
+- **Full Art.** A rare effect (x8 cash) where the picture fills the card.
+- **Showcase.** Two big frames at each store entrance show the owner's two best deck cards.
+- **Store.** Game passes (2x Cash, Auto Collector, +8 Deck Slots, VIP) and aura bundles. Nothing
+  is on sale until you create the items on the Creator Dashboard and paste their ids into
+  `Config.Monetization`; until then they show as "Coming soon". Aura bundles are hidden from
+  players in regions where paid random items are restricted.
+
 ## The map
 
 ![Top-down map layout](docs/map-layout.png)
@@ -104,6 +120,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Combos.luau` | Deck combos: type, set, effect and story combos and their bonuses |
 | `src/shared/Luck.luau` | Every source of the Luck stat |
 | `src/shared/Deck.luau` | How "Auto-fill Deck" chooses cards |
+| `src/shared/Season.luau` | Season pass levels and rewards, weekly featured set |
 | `src/shared/Battle.luau` | Battle rules, tower enemy strength, tower rewards |
 | `src/shared/Quests.luau` | Quest types, goals and rewards, daily reward size |
 | `src/shared/Rebirth.luau` | Rebirth requirements (cash, aura, cards), bonuses, vault size |
@@ -114,6 +131,16 @@ Cards show an emoji as placeholder art. To use real art, upload an image and add
 ## Working on the game
 
 `CLAUDE.md` has the project rules and `docs/AGENT_PLAN.md` is the task backlog.
+
+## Balance simulator
+
+```bash
+cd tools && npm install && node simulate.js 2
+```
+
+Plays a simple greedy player through the real game tables for the given number of hours and
+prints when each store tier, deck size and the first rebirth are reached. It opens packs faster
+than a person can, so treat the times as a lower bound. Re-run it after changing prices.
 
 ## Art
 

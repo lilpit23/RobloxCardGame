@@ -6,9 +6,10 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
 ## Layout
 
 - `src/shared/` → `ReplicatedStorage.Shared`. Data tables and pure logic used by both sides:
-  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Battle`, `Format`, `CardView` (builds a card's GUI).
+  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Battle`, `Format`, `CardView` (builds a card's GUI).
 - `src/server/` → `ServerScriptService.Server`. `init.server.luau` holds the remotes and game
-  rules; `PlayerData.luau` is the only code that touches DataStores; `Plots.luau` builds the map
+  rules; `PlayerData.luau` is the only code that touches DataStores; `Monetization.luau` handles game
+  passes and product receipts; `Plots.luau` builds the map
   and each player's store out of parts.
 - `src/client/` → `StarterPlayerScripts.Client`. All UI, built from code.
 
@@ -45,6 +46,11 @@ way so the repo stays the whole game.
   goes to one register per store (`session.pending`). Deck bonuses come only from `Combos.evaluate`
   and luck only from `Luck.sources`; add new bonus sources there so server and client agree.
 - Card effects are `Cards.Variants` (Shiny, Slimy, Lucky, Shadow, Golden, Prismatic).
+- Money: passes and products live in `Config.Monetization` (id 0 = not on sale). Product grants
+  must stay receipt-safe (`data.receipts`, save before returning PurchaseGranted). Anything
+  bought with Robux that can turn into random cards must respect `session.restricted`.
+- After changing prices or incomes, run `tools/simulate.js` and include its output in the pull
+  request.
 - Booster structure: packs are lists of slots (`Packs.luau`). Sell prices are a share of the set's
   Booster price (`Cards.Rarities[...].sell`); the cards in an average pack must sell for well
   under the pack price, including at maximum luck and discount.

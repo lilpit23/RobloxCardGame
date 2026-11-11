@@ -25,7 +25,8 @@ collection book, session-locked saving with retries, remote rate limits,
 card fusion (3 copies → next variant), offline earnings, rebirth with card requirements and a
 vault that carries cards into the next run, CI, bulk pack opening, auto collector, collection
 income bonus, first-minute hints, Neon Arcade set, daily quests and login reward, card types with
-display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds, trading and an in-server market (stealing was removed), 64-slot deck, card effects, combos, Luck stat.
+display synergies, PvE battle tower, Aura Shrine perks, lucky events, pull flash and sounds, trading and an in-server market (stealing was removed), 64-slot deck, card effects, combos, Luck stat, cul-de-sac map, season pass, gifts, featured set,
+promo cards, pack-opening animation, showcase, store (passes and products), balance simulator.
 
 ## Track C — cards and sets (trading-card-game structure)
 
@@ -38,12 +39,17 @@ and Elite packs built from slots, binder-style collection book, set completion b
   Confirm US public-domain status for each source.
 - [ ] **C2 Bigger sets.** Grow each set toward 60+ cards; keep the slot odds and re-run the
   sell-back check (cards in an average pack must sell for well under the pack price).
-- [ ] **C3 Card art.** Anime-style illustrations per card via the image field, one consistent
-  style per set. Draw from the original books, not from film or TV versions.
-- [ ] **C4 Special card treatments.** Full-art and alternate-art versions as extra secret numbers.
+- [ ] **C3 Card art.** Card faces now have a picture window, set bands, effect tints and a foil
+  streak, but the picture is still an emoji. Needs original illustrations (an artist or an image
+  tool), uploaded to Roblox, with ids added as the fourth entry of each card row in `Cards.luau`.
+- [ ] **C4 Special card treatments.** Full Art effect is done. Still to do: alternate-art cards as
+  extra secret numbers, serial-numbered Prismatics (needs a global counter), and card grading
+  (needs per-card data: cards are currently stackable counts, so a graded card has nowhere to
+  keep its grade).
 - [ ] **C5 Limited sets.** A time-limited promo set tied to events.
-- [ ] **C6 Balance pass.** Early game is fast now that every booster holds a rare; tune set
-  multipliers, pack prices and stand costs with the simulator (T4).
+- [ ] **C6 Balance pass.** First pass done with the simulator (store tiers, deck slots and rebirth
+  prices raised). A greedy bot still reaches tier 5 in well under an hour; tune further once
+  real play times are known.
 
 ## Track D — deck, effects, combos and luck
 
@@ -71,17 +77,17 @@ type / set / effect / story combos (`Combos.luau`), a Luck stat with eight sourc
 - [ ] **T3 Unit tests.** Tests for the pure modules (`Cards`, `Packs`, `Upgrades`, `Format`) run in
   CI with Lune or TestEZ: key parsing rejects bad keys, pack odds sum correctly, luck never lowers
   a rarity's odds, costs are increasing, number formatting at boundaries.
-- [ ] **T4 Balance simulator.** A script that simulates a player (buy best affordable pack, display
-  best cards, buy cheapest upgrade) and prints time-to-each-store-tier. Done when: output is in the
-  pull request and any tier taking under 2 minutes or over 3 hours is flagged.
+- [x] **T4 Balance simulator.** Done: `tools/simulate.js`. Follow-ups: simulate aura, luck and
+  rebirths, and a slower "human" pace (one pack every few seconds).
 - [ ] **T5 Studio-only QA remotes.** Gated by `RunService:IsStudio()`: grant cash/aura, grant a
   card, reset profile. Never present on live servers.
 
 ## Track S — server structure and safety
 
-- [ ] **S1 Split the server script.** Move `init.server.luau` into modules: `Remotes`, `Economy`
-  (cards, selling, fusion), `PackService`, `UpgradeService`, `TradeService`, `MarketService`, `IncomeLoop`. No
-  behaviour change. Done when: `init.server.luau` only wires modules together.
+- [ ] **S1 Split the server script.** Still to do, and now urgent: `init.server.luau` is ~1,500
+  lines. Move it into modules (`Remotes`, `Economy`, `PackService`, `UpgradeService`,
+  `TradeService`, `MarketService`, `SeasonService`, `IncomeLoop`) behind a shared context table.
+  No behaviour change; do it only once someone can playtest before and after.
 - [ ] **S2 Security audit.** Run the `roblox-dev:roblox-reviewer` agent over `src/` and fix every
   confirmed finding. Specific things to check: trades and market purchases (ownership re-checked
   at the swap, no yields mid-swap), listings across rebirth and rejoin, remote spam.
@@ -97,8 +103,7 @@ type / set / effect / story combos (`Combos.luau`), a Luck stat with eight sourc
   the balance simulator (T4), a rebirth animation, rebirth count on the leaderboard.
 - [ ] **G3 Collection rewards.** Partly done: +1% income per discovered card. Still to do: bigger
   one-off rewards for completing a whole rarity or every variant of a card.
-- [ ] **G4 Playtime rewards.** Daily login streak is done. Still to do: a free pack every 15 minutes
-  of play.
+- [x] **G4 Playtime rewards.** Done: a free booster every 15 minutes, daily login streak.
 - [x] **G5 Quests.** Done: three daily quests paid in aura (`src/shared/Quests.luau`). Follow-up: more
   quest types (trade a card, win a tower floor, list a card on the market).
 - [x] **G6 Auto-collect upgrade.** Done (Auto Collector, bought with aura).
@@ -106,8 +111,8 @@ type / set / effect / story combos (`Combos.luau`), a Luck stat with eight sourc
 - [x] **G8 Trading + market.** Done: two-sided trades with double confirm, and cash listings other
   players in the server can buy. Follow-ups: card pictures in the trade window, a cross-server
   market (MemoryStore), a sales tax to drain cash, trade history. Needs the S2 audit.
-- [ ] **G9 Limited-time packs.** Lucky events are done. Still to do: a weekend-only pack driven by a
-  schedule table, and a Golden Pack that drops in the street for whoever reaches it first.
+- [ ] **G9 Limited-time content.** Lucky events, the weekly featured set, the monthly season pass and
+  promo cards are done. Still to do: a Golden Pack that drops in the plaza for whoever reaches it.
 - [x] **G10 More cards.** Done: Neon Arcade set (24 cards) with Neon, Arcade and Glitch packs, plus the
   Omega Pack. Follow-up: a set filter in the collection book, and rebirths that need Neon cards.
 
@@ -126,13 +131,13 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
 
 ## Track U — interface and feel
 
-- [ ] **U1 Sound and effects.** Partly done: screen flash on Legendary+ pulls and four built-in
-  sounds (`Config.Sounds`, not yet heard in Studio). Still to do: proper sound assets, particles,
-  camera shake, floating "+$" text when collecting.
+- [ ] **U1 Sound and effects.** Pack wobble-and-burst, screen shake, flashes and server-wide pull
+  announcements are done. Still to do: real sound assets (the four built-in sounds are unheard),
+  particles, floating "+$" text at the register.
 - [ ] **U2 First-minute tutorial.** Partly done: text hints at the top of the screen. Still to do:
   arrows pointing at the button / pad the hint is about.
-- [ ] **U3 Phone layout.** Check every panel at 667×375; touch targets at least 44 px; HUD must not
-  cover the jump button or the Roblox top bar.
+- [ ] **U3 Phone layout.** The HUD menu is now two columns. Still to do: check every panel at
+  667x375, touch targets at least 44 px, HUD clear of the jump button and the Roblox top bar.
 - [ ] **U4 Card art.** Replace emoji with uploaded images through the `image` field in
   `Cards.luau`. Needs the owner to upload art and supply asset IDs.
 - [ ] **U5 Card detail popup.** Tap a card for a large view with stats, odds source packs, and
@@ -160,13 +165,12 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
 
 Needs the owner to create the passes/products in the Creator Dashboard and supply IDs.
 
-- [ ] **M1 Game passes.** 2x cash, auto-collect, +4 stands, VIP sign. Checked on the server with
-  `MarketplaceService`.
-- [ ] **M2 Developer products.** Aura bundles and a luck boost, granted in `ProcessReceipt` with
-  purchase IDs recorded in the profile so a receipt is never granted twice.
-- [ ] **M3 Paid-random-item compliance.** If any pack can be bought with Robux, directly or
-  through bought aura, use `PolicyService` to hide it where paid random items are restricted, and
-  keep odds visible (they already are).
+- [ ] **M1 Game passes.** Code is done (2x Cash, Auto Collector, +8 Deck Slots, VIP). The owner must
+  create the passes and put their ids in `Config.Monetization`; then test a purchase in Studio.
+- [ ] **M2 Developer products.** Code is done (aura bundles, receipt-safe). Needs ids and a test
+  purchase, including the retry path when a save fails.
+- [x] **M3 Paid-random-item compliance.** Aura bundles are hidden when PolicyService says paid random
+  items are restricted. Pack odds are always shown.
 
 ## Suggested order
 

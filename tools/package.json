@@ -1,0 +1,8 @@
+{
+  "name": "aura-packs-tools",
+  "private": true,
+  "description": "Dev tools: art generator, map diagram, balance simulator",
+  "dependencies": {
+    "fengari": "^0.1.4"
+  }
+}

@@ -4,3 +4,5 @@
 *.rbxlx.lock
 sourcemap.json
 globalTypes.d.luau
+node_modules/
+package-lock.json

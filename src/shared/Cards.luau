@@ -53,7 +53,7 @@ Cards.Variants = {
 		name = "Shadow",
 		mult = 2,
 		chance = 0.02,
-		auraFlat = 2,
+		auraFlat = 1,
 		color = Color3.fromRGB(120, 60, 200),
 		tint = Color3.fromRGB(20, 0, 45),
 	},

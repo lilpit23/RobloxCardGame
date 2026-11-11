@@ -13,7 +13,7 @@ return {
 	FuseCount = 3, -- copies of the same card needed to fuse into the next variant
 	OfflineRate = 0.25, -- share of normal income earned while offline
 	OfflineMaxSeconds = 4 * 60 * 60,
-	AuraPullBonus = 30, -- instant aura on pulling an aura card = its aura/sec * this
+	AuraPullBonus = 10, -- instant aura on pulling an aura card = its aura/sec * this
 
 	-- Auto Packer "auto-sell": 0 = keep everything, 1 = sell spare Commons, 2 = Commons and
 	-- Uncommons, 3 = up to Rares. Only plain cards you already own 3+ copies of are sold.

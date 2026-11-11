@@ -55,6 +55,7 @@ local state = {
 	incomePerSec = 0,
 	cashCap = math.huge,
 	boosts = { luckUntil = 0, cashUntil = 0 },
+	showcase = { left = "", right = "" },
 	packsOpened = 0,
 	stats = { fused = 0, earned = 0 },
 	achievements = {},
@@ -1041,9 +1042,126 @@ end
 
 -- Collection book: one binder page per set ---------------------------------
 local bookSet = Cards.SetOrder[1]
+local bookCard = nil -- card id being looked at in detail, or nil for the binder page
+
+-- How many copies of an exact card + effect the player has, and where.
+local function countCopies(key)
+	local inDeck, inVault = 0, 0
+	for _, deckKey in pairs(state.slots) do
+		if deckKey == key then
+			inDeck = inDeck + 1
+		end
+	end
+	for _, vaultKey in ipairs(state.vault) do
+		if vaultKey == key then
+			inVault = inVault + 1
+		end
+	end
+	return (state.inventory[key] or 0) + inDeck + inVault, inDeck, inVault
+end
+
+-- One card, every effect version of it: which you have found, how many you own, and
+-- buttons to put one on your storefront.
+local function renderCardDetail(def)
+	local set = Cards.Sets[def.set]
+	titleLabel.Text = "📖 " .. def.name
+
+	local top = newRow(1, 48)
+	top.BackgroundTransparency = 1
+	newButton(top, "← Back to " .. set.name, UDim2.new(0, 0, 0, 4), UDim2.new(0, 250, 0, 38), COLORS.button, function()
+		bookCard = nil
+		renderPanel()
+	end).TextSize = 15
+	newLabel(top, set.code .. " " .. def.numberText .. "  ·  " .. def.rarity .. "  ·  " .. Cards.Types[def.type].name, UDim2.new(0, 262, 0, 4), UDim2.new(1, -262, 0, 38), {
+		TextSize = 15,
+		TextColor3 = COLORS.dim,
+	})
+
+	local page = make("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -12, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 2,
+	}, body)
+	make("UIGridLayout", {
+		CellSize = UDim2.new(0, 150, 0, 300),
+		CellPadding = UDim2.new(0, 8, 0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, page)
+
+	for order, variantId in ipairs(Cards.VariantOrder) do
+		local key = Cards.makeKey(def.id, variantId)
+		local variant = Cards.Variants[variantId]
+		local total, inDeck, inVault = countCopies(key)
+		local cell = make("Frame", { BackgroundTransparency = 1, LayoutOrder = order }, page)
+		local holder = make("Frame", {
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 4, 0, 4),
+			Size = UDim2.new(1, -8, 0, 199),
+		}, cell)
+		if state.collection[key] then
+			CardView.new(key).Parent = holder
+		else
+			CardView.newUnknown(def).Parent = holder
+		end
+
+		local effectName = variantId == "normal" and "Normal" or variant.name
+		newLabel(cell, effectName, UDim2.new(0, 0, 0, 206), UDim2.new(1, 0, 0, 18), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 15,
+			TextXAlignment = Enum.TextXAlignment.Center,
+		})
+		local owned
+		if total > 0 then
+			owned = "Own " .. total
+			if inDeck > 0 then
+				owned = owned .. "  ·  " .. inDeck .. " in deck"
+			end
+			if inVault > 0 then
+				owned = owned .. "  ·  " .. inVault .. " in vault"
+			end
+		elseif state.collection[key] then
+			owned = "Found before, none owned now"
+		else
+			owned = "Not found yet"
+		end
+		newLabel(cell, owned, UDim2.new(0, 0, 0, 226), UDim2.new(1, 0, 0, 30), {
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextYAlignment = Enum.TextYAlignment.Top,
+			TextColor3 = total > 0 and COLORS.cash or COLORS.dim,
+		})
+		if total > 0 then
+			-- put this card in one of the two frames at the front of the store
+			local onLeft, onRight = state.showcase.left == key, state.showcase.right == key
+			newButton(cell, onLeft and "◀ Shown" or "◀ Show", UDim2.new(0, 4, 0, 262), UDim2.new(0.5, -6, 0, 30), onLeft and COLORS.good or COLORS.row, function()
+				Remotes.SetShowcase:FireServer("left", key)
+			end).TextSize = 12
+			newButton(cell, onRight and "Shown ▶" or "Show ▶", UDim2.new(0.5, 2, 0, 262), UDim2.new(0.5, -6, 0, 30), onRight and COLORS.good or COLORS.row, function()
+				Remotes.SetShowcase:FireServer("right", key)
+			end).TextSize = 12
+		end
+	end
+
+	local footer = newRow(3, 50)
+	newLabel(footer, "\"Show\" puts a card in the left or right frame at the front of your store. Automatic shows your deck's two top earners.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), {
+		TextSize = 12,
+		TextColor3 = COLORS.dim,
+	})
+	local auto = state.showcase.left == "" and state.showcase.right == ""
+	newButton(footer, auto and "Automatic ✓" or "Use automatic", UDim2.new(1, -164, 0, 8), UDim2.new(0, 156, 0, 34), auto and COLORS.locked or COLORS.button, function()
+		Remotes.SetShowcase:FireServer("auto", "")
+	end).TextSize = 14
+end
 
 panels.Book = function()
 	useList()
+
+	local detail = bookCard and Cards.ById[bookCard]
+	if detail then
+		renderCardDetail(detail)
+		return
+	end
 
 	-- overall progress (every card and variant counts toward the income bonus)
 	local discovered = 0
@@ -1121,7 +1239,7 @@ panels.Book = function()
 	local info = newRow(2, 38)
 	local complete = found >= total
 	local bonusPercent = math.floor(Config.SetCompleteBonus * 100 + 0.5)
-	local progress = set.icon .. " " .. set.name .. "  ·  " .. found .. "/" .. total .. " cards  ·  "
+	local progress = "Tap a card for its effects.  " .. set.icon .. " " .. set.name .. "  ·  " .. found .. "/" .. total .. "  ·  "
 	if complete then
 		progress = progress .. "SET COMPLETE: +" .. bonusPercent .. "% income!"
 	else
@@ -1166,7 +1284,19 @@ panels.Book = function()
 		else
 			CardView.newUnknown(def).Parent = holder
 		end
-		-- one mark per variant collected: Normal, Holo, Gold, Prismatic
+		-- tap a card to see every effect version of it
+		local open = make("TextButton", {
+			BackgroundTransparency = 1,
+			Text = "",
+			Size = UDim2.new(1, 0, 1, 0),
+			ZIndex = 5,
+		}, cell)
+		open.Activated:Connect(function()
+			bookCard = def.id
+			body.CanvasPosition = Vector2.new(0, 0)
+			renderPanel()
+		end)
+		-- one mark per effect found
 		local dots = string.rep("◆", variantsFound) .. string.rep("◇", #Cards.VariantOrder - variantsFound)
 		newLabel(cell, dots, UDim2.new(0, 0, 0, 160), UDim2.new(1, 0, 0, 18), {
 			TextSize = 13,
@@ -1470,7 +1600,7 @@ panels.Upgrades = function()
 	})
 	local header = newRow(20, 44)
 	header.BackgroundColor3 = Color3.fromRGB(70, 35, 80)
-	newLabel(header, "✨ Aura Shrine — permanent perks that survive rebirth", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+	newLabel(header, "✨ Aura Shrine — permanent perks. Each rebirth unlocks one more level.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 17,
 		TextColor3 = COLORS.aura,
@@ -1492,6 +1622,11 @@ panels.Upgrades = function()
 		local buttonSize = UDim2.new(0, 148, 0, 44)
 		if level >= def.max then
 			newButton(row, "MAX", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
+		elseif level >= Perks.maxLevel(perkId, state.rebirths) then
+			-- each rebirth opens one more level of every perk
+			local locked = newButton(row, "🔒 Needs " .. level .. (level == 1 and " rebirth" or " rebirths"), buttonPosition, buttonSize, COLORS.locked, nil)
+			locked.TextSize = 13
+			locked.AutoButtonColor = false
 		else
 			newButton(row, currencyText("aura", def.cost(level)), buttonPosition, buttonSize, Color3.fromRGB(200, 70, 180), function()
 				Remotes.BuyPerk:FireServer(perkId)

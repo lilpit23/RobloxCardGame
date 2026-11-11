@@ -50,6 +50,8 @@ way so the repo stays the whole game.
   through `addCash`), pack price inflation (`Packs.price`, counts in `data.packCounts`), deck
   slot and store tier prices, and the rarity / effect income multipliers in `Cards.luau`. The
   multipliers stack, so small changes there move the whole game.
+- Aura Shrine perk levels are gated by rebirths (`Perks.maxLevel`); keep new permanent perks
+  behind the same gate so aura stays useful all game.
 - Money: passes and products live in `Config.Monetization` (id 0 = not on sale). Product grants
   must stay receipt-safe (`data.receipts`, save before returning PurchaseGranted). Anything
   bought with Robux that can turn into random cards must respect `session.restricted`.

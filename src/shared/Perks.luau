@@ -90,6 +90,12 @@ Perks.Defs = {
 	},
 }
 
+-- Aura Shrine levels unlock with rebirths, so aura stays useful for the whole game:
+-- level 1 of every perk is open from the start, and each rebirth opens one more level.
+function Perks.maxLevel(perkId, rebirths)
+	return math.min(Perks.Defs[perkId].max, (rebirths or 0) + 1)
+end
+
 local function levelOf(perks, id)
 	local level = perks and perks[id]
 	if type(level) ~= "number" then

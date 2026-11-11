@@ -51,6 +51,7 @@ local function newData()
 		achievements = {}, -- [achievementId] = true once claimed (permanent income bonus)
 		stats = { fused = 0, earned = 0 }, -- lifetime counters for achievements
 		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
+		showcase = { left = "", right = "" }, -- cards chosen for the storefront frames ("" = automatic)
 		boosts = { luckUntil = 0, cashUntil = 0 }, -- os.time() when bought potions run out
 		receipts = {}, -- developer product PurchaseIds already granted
 		lastSeen = 0, -- os.time() of the last save, for offline earnings

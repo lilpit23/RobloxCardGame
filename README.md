@@ -65,6 +65,12 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 - **Auto Packer.** A permanent Aura Shrine perk that buys and opens the pack you choose every 10
   seconds (down to 2 with upgrades), with an option to auto-sell spare low-rarity cards. It plays a sound and shows a banner when it
   pulls a new personal best.
+- **Aura Shrine levels unlock with rebirths.** Level 1 of every permanent perk is open from the
+  start; each rebirth opens one more level. Aura also arrives more slowly than before.
+- **Card detail.** Tap any card in the collection book to see every effect version of it, how
+  many you own and where they are (deck, vault).
+- **Storefront choice.** From that card detail screen, pick which cards hang in the two frames
+  at the front of your store, or leave it on automatic (your deck's top two earners).
 - **Achievements.** 38 long-term goals (packs opened, cards discovered, sets completed, rebirths,
   tower floors, fusions, total cash earned, deck size). Each one claimed gives +3% income forever
   plus aura. They are at the bottom of the Quests screen.

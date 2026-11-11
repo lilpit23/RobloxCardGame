@@ -66,6 +66,7 @@ local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyon
 local OpenRebirthRemote = newRemote("RemoteEvent", "OpenRebirth") -- server -> client
 local AutoPackSetRemote = newRemote("RemoteEvent", "AutoPackSet")
 local AutoPullRemote = newRemote("RemoteEvent", "AutoPull") -- server -> client
+local SetShowcaseRemote = newRemote("RemoteEvent", "SetShowcase")
 local MarketStateRemote = newRemote("RemoteEvent", "MarketState") -- server -> client
 local MarketListRemote = newRemote("RemoteEvent", "MarketList")
 local MarketCancelRemote = newRemote("RemoteEvent", "MarketCancel")
@@ -222,6 +223,7 @@ local function pushState(player)
 		autoPack = data.autoPack,
 		autoRev = session.autoRev or 0,
 		boosts = data.boosts,
+		showcase = data.showcase,
 		restricted = session.restricted,
 		incomePerSec = income,
 		auraPerSec = aura,
@@ -255,10 +257,30 @@ local function updateShowcase(player)
 		end
 		return a < b
 	end)
-	local signature = (keys[1] or "") .. "|" .. (keys[2] or "")
+	-- a card the player picked wins, as long as they still own it; otherwise the top earners
+	local function owns(key)
+		if key == "" or Cards.parse(key) == nil then
+			return false
+		end
+		if (data.inventory[key] or 0) > 0 or table.find(data.vault, key) then
+			return true
+		end
+		for _, deckKey in pairs(data.slots) do
+			if deckKey == key then
+				return true
+			end
+		end
+		return false
+	end
+	local left = owns(data.showcase.left) and data.showcase.left or keys[1]
+	local right = owns(data.showcase.right) and data.showcase.right or keys[2]
+	if right == nil and left ~= keys[1] then
+		right = keys[1]
+	end
+	local signature = (left or "") .. "|" .. (right or "")
 	if signature ~= session.showcase then
 		session.showcase = signature
-		Plots.setShowcase(session.plot, keys[1], keys[2])
+		Plots.setShowcase(session.plot, left, right)
 	end
 end
 
@@ -801,6 +823,27 @@ end)
 ---------------------------------------------------------------------
 -- Aura Shrine (permanent perks)
 ---------------------------------------------------------------------
+-- Choose a card for one of the two storefront frames. side = "left", "right", or "auto" to go
+-- back to showing the deck's top earners.
+SetShowcaseRemote.OnServerEvent:Connect(function(player, side, key)
+	if not allow(player, "SetShowcase", 4, 8) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil then
+		return
+	end
+	if side == "auto" then
+		data.showcase = { left = "", right = "" }
+	elseif (side == "left" or side == "right") and Cards.parse(key) then
+		data.showcase[side] = key -- ownership is checked every time the frames are drawn
+	else
+		return
+	end
+	updateShowcase(player)
+	touch(player, true)
+end)
+
 BuyPerkRemote.OnServerEvent:Connect(function(player, perkId)
 	if not allow(player, "BuyPerk", 5, 10) then
 		return
@@ -813,6 +856,10 @@ BuyPerkRemote.OnServerEvent:Connect(function(player, perkId)
 	local level = Perks.level(data.perks, perkId)
 	if level >= def.max then
 		notify(player, def.name .. " is maxed out.", "error")
+		return
+	end
+	if level >= Perks.maxLevel(perkId, data.rebirths) then
+		notify(player, "Rebirth to unlock the next level of " .. def.name .. ".", "error")
 		return
 	end
 	if not spend(data, "aura", def.cost(level)) then

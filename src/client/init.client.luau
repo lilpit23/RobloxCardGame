@@ -1469,7 +1469,7 @@ panels.Upgrades = function()
 	for _, source in ipairs(sources) do
 		table.insert(parts, source.name .. " +" .. source.levels)
 	end
-	local luckRow = newRow(0, 74)
+	local luckRow = newRow(0, 88)
 	luckRow.BackgroundColor3 = Color3.fromRGB(30, 70, 50)
 	newLabel(luckRow, "🍀 Luck " .. Luck.percentText(state.luck) .. "   (" .. state.luck .. " levels)", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 24), {
 		Font = Enum.Font.FredokaOne,
@@ -1477,7 +1477,7 @@ panels.Upgrades = function()
 		TextColor3 = Color3.fromRGB(150, 255, 170),
 	})
 	local breakdown = #parts > 0 and table.concat(parts, "   ·   ") or "No luck yet. Buy Lucky Charms, finish sets, climb the tower or build luck combos."
-	newLabel(luckRow, "Each level makes better rarities 10% more likely.  " .. breakdown, UDim2.new(0, 14, 0, 32), UDim2.new(1, -28, 0, 38), {
+	newLabel(luckRow, "Each level makes better rarities 10% more likely. Later sets use less of your luck (the Pack Shop shows the real odds).  " .. breakdown, UDim2.new(0, 14, 0, 32), UDim2.new(1, -28, 0, 52), {
 		TextSize = 12,
 		TextColor3 = COLORS.dim,
 		TextYAlignment = Enum.TextYAlignment.Top,

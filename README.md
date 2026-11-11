@@ -57,6 +57,9 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 - **Wallet cap.** You can hold at most twice the cash your next rebirth costs. When the wallet is
   full the register stops filling, which is the signal to rebirth. Every rebirth raises the cap,
   and the higher store tiers and sets only fit under the later caps.
+- **Luck fades in later sets.** A set uses only part of your luck: 100% for the first set, then
+  80%, 65%, 50%, 40% and 30%, so rare cards from late sets stay hard to get. Every card slot in
+  every pack also keeps at least a 1% chance of a Common, however lucky you are.
 - **Rising pack prices.** Each cash pack costs 1.8% more than the last one of its kind opened in
   the same run. Rebirth resets the prices.
 - **Auto Packer.** A permanent Aura Shrine perk that buys and opens the pack you choose every 10

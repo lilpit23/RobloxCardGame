@@ -55,7 +55,9 @@ way so the repo stays the whole game.
   bought with Robux that can turn into random cards must respect `session.restricted`.
 - After changing prices or incomes, run `tools/simulate.js` and include its output in the pull
   request.
-- Booster structure: packs are lists of slots (`Packs.luau`). Sell prices are a share of the set's
+- Booster structure: packs are lists of slots (`Packs.luau`). `Packs.slotOdds` is the only place
+  odds are computed: it scales luck per set (`Packs.SetLuckScale`) and applies the 1% Common
+  floor, and both the roll and the odds shown to players use it. Sell prices are a share of the set's
   Booster price (`Cards.Rarities[...].sell`); the cards in an average pack must sell for well
   under the pack price, including at maximum luck and discount.
 

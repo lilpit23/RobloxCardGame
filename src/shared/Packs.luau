@@ -111,42 +111,78 @@ function Packs.setsText(pack)
 	return table.concat(names, " + ")
 end
 
-local function lowestOrder(slot)
+-- Luck counts for less in later sets, so their rare cards stay hard to get however much
+-- luck a player has stacked up. One entry per set, in set order; the last value repeats.
+Packs.SetLuckScale = { 1, 0.8, 0.65, 0.5, 0.4, 0.3 }
+
+-- Every card slot of every pack keeps at least this chance of a Common, whatever the luck.
+Packs.MinCommonChance = 0.01
+
+local function luckScale(pack)
+	if pack.sets == nil then
+		return Packs.SetLuckScale[#Packs.SetLuckScale] -- all-set packs use the hardest scale
+	end
+	local scale = 1
+	for position, setId in ipairs(Cards.SetOrder) do
+		if table.find(pack.sets, setId) then
+			scale = math.min(scale, Packs.SetLuckScale[position] or Packs.SetLuckScale[#Packs.SetLuckScale])
+		end
+	end
+	return scale
+end
+
+-- The luck levels that actually apply to this pack (after the set's scale).
+function Packs.effectiveLuck(pack, luckLevel)
+	return (luckLevel or 0) * luckScale(pack)
+end
+
+-- The real odds of one slot of a pack: { [rarityName] = chance from 0 to 1 }.
+-- Luck boosts every rarity above the slot's lowest one, then the Common floor is applied.
+function Packs.slotOdds(pack, slot, luckLevel)
 	local lowest = math.huge
 	for rarityName in pairs(slot) do
 		lowest = math.min(lowest, Cards.Rarities[rarityName].order)
 	end
-	return lowest
-end
+	local boost = Packs.luckMultiplier(Packs.effectiveLuck(pack, luckLevel))
 
--- Odds of one rarity in one slot. Luck boosts everything above the slot's lowest rarity.
-function Packs.slotWeight(slot, rarityName, luckLevel)
-	local weight = slot[rarityName]
-	if weight == nil then
-		return 0
+	local weights, total = {}, 0
+	for rarityName, weight in pairs(slot) do
+		if Cards.Rarities[rarityName].order > lowest then
+			weight = weight * boost
+		end
+		weights[rarityName] = weight
+		total = total + weight
 	end
-	if Cards.Rarities[rarityName].order > lowestOrder(slot) then
-		weight = weight * Packs.luckMultiplier(luckLevel)
+
+	local odds = {}
+	for rarityName, weight in pairs(weights) do
+		odds[rarityName] = weight / total
 	end
-	return weight
+
+	-- Common floor: take the missing share evenly out of everything else.
+	local common = odds.Common or 0
+	if common < Packs.MinCommonChance then
+		local shrink = (1 - Packs.MinCommonChance) / (1 - common)
+		for rarityName, chance in pairs(odds) do
+			odds[rarityName] = chance * shrink
+		end
+		odds.Common = Packs.MinCommonChance
+	end
+	return odds
 end
 
 local function rollSlot(pack, slot, luckLevel, rng)
-	local total = 0
-	for _, rarityName in ipairs(Cards.RarityOrder) do
-		total = total + Packs.slotWeight(slot, rarityName, luckLevel)
-	end
-
-	local pick = rng:NextNumber() * total
+	local odds = Packs.slotOdds(pack, slot, luckLevel)
+	local pick = rng:NextNumber()
 	local chosenRarity = nil
 	for _, rarityName in ipairs(Cards.RarityOrder) do
-		local weight = Packs.slotWeight(slot, rarityName, luckLevel)
-		if weight > 0 then
+		local chance = odds[rarityName]
+		if chance and chance > 0 then
 			chosenRarity = rarityName
-			if pick < weight then
+			if pick < chance then
 				break
 			end
-			pick = pick - weight
+			pick = pick - chance
 		end
 	end
 
@@ -155,7 +191,7 @@ local function rollSlot(pack, slot, luckLevel, rng)
 
 	-- Card effect: rarest first, the first hit is kept. Luck helps a little.
 	local variantId = "normal"
-	local effectLuck = Packs.effectLuckMultiplier(luckLevel)
+	local effectLuck = Packs.effectLuckMultiplier(Packs.effectiveLuck(pack, luckLevel))
 	for _, candidate in ipairs(Cards.RollOrder) do
 		if rng:NextNumber() < Cards.Variants[candidate].chance * effectLuck then
 			variantId = candidate
@@ -195,15 +231,12 @@ function Packs.oddsLines(pack, luckLevel)
 		while pack.slots[index + count] == slot do
 			count = count + 1
 		end
-		local total = 0
-		for _, rarityName in ipairs(Cards.RarityOrder) do
-			total = total + Packs.slotWeight(slot, rarityName, luckLevel)
-		end
+		local odds = Packs.slotOdds(pack, slot, luckLevel)
 		local parts = {}
 		for _, rarityName in ipairs(Cards.RarityOrder) do
-			local weight = Packs.slotWeight(slot, rarityName, luckLevel)
-			if weight > 0 then
-				table.insert(parts, rarityName .. " " .. percentText(weight / total * 100))
+			local chance = odds[rarityName]
+			if chance and chance > 0 then
+				table.insert(parts, rarityName .. " " .. percentText(chance * 100))
 			end
 		end
 		table.insert(lines, count .. (count == 1 and " card: " or " cards: ") .. table.concat(parts, " · "))

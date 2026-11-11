@@ -289,7 +289,10 @@ local toastOrder = 0
 local function toast(text, kind)
 	-- never more than MAX_TOASTS on screen: the oldest makes room
 	while #toasts >= MAX_TOASTS do
-		table.remove(toasts, 1):Destroy()
+		local oldest = table.remove(toasts, 1)
+		if oldest then
+			oldest:Destroy()
+		end
 	end
 	toastOrder = toastOrder + 1
 	local label = make("TextLabel", {
@@ -818,7 +821,7 @@ panels.Packs = function()
 				end
 			end
 			-- x10 is a game pass perk; without the pass the button leads to the Store
-			if state.passes.megaOpen then
+			if state.passes["megaOpen"] then
 				newButton(row, "x" .. Config.PassBulkSize, UDim2.new(1, x, 0, 60), UDim2.new(0, 48, 0, 26), Color3.fromRGB(120, 80, 200), function()
 					buyPack(pack, Config.PassBulkSize)
 				end).TextSize = 14

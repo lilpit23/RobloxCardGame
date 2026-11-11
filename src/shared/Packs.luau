@@ -52,7 +52,7 @@ for _, setId in ipairs(Cards.SetOrder) do
 	end
 end
 
--- Special packs that pull from every set (sets = nil).
+-- Special pack that pulls from every set (sets = nil).
 table.insert(Packs.List, {
 	id = "champion",
 	name = "Champion Pack",
@@ -62,16 +62,6 @@ table.insert(Packs.List, {
 	color = Color3.fromRGB(245, 245, 250),
 	slots = { CHAMPION, CHAMPION, CHAMPION, CHAMPION, CHAMPION },
 })
-table.insert(Packs.List, {
-	id = "aura",
-	name = "Aura Pack",
-	currency = "aura",
-	cost = 1500,
-	storeTier = 1,
-	color = Color3.fromRGB(230, 60, 110),
-	slots = { EPIC, EPIC, EPIC },
-})
-
 Packs.ById = {}
 for _, pack in ipairs(Packs.List) do
 	pack.size = #pack.slots

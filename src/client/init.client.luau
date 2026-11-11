@@ -232,22 +232,30 @@ local body = make("ScrollingFrame", {
 }, window)
 
 -- Toast notifications
--- First-minute hint at the top of the screen
+-- Hint banner at the top of the screen: big white text on a dark box with a yellow border
 local hintLabel = make("TextLabel", {
 	AnchorPoint = Vector2.new(0.5, 0),
-	Position = UDim2.new(0.5, 0, 0, 8),
-	Size = UDim2.new(0, 470, 0, 38),
-	BackgroundColor3 = COLORS.panel,
+	Position = UDim2.new(0.5, 0, 0, 10),
+	Size = UDim2.new(0, 680, 0, 54),
+	BackgroundColor3 = Color3.fromRGB(16, 16, 24),
+	BackgroundTransparency = 0.05,
 	BorderSizePixel = 0,
 	Font = Enum.Font.GothamBold,
 	Text = "",
-	TextColor3 = Color3.fromRGB(255, 225, 120),
-	TextSize = 16,
+	TextColor3 = Color3.new(1, 1, 1),
+	TextSize = 21,
 	TextWrapped = true,
 	Visible = false,
 }, screen)
-round(hintLabel, 10)
-make("UIStroke", { Color = Color3.fromRGB(255, 225, 120), Thickness = 2 }, hintLabel)
+round(hintLabel, 12)
+make("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }, hintLabel)
+-- the stroke must be on the border: left on its default it outlines every letter instead
+make("UIStroke", {
+	Color = Color3.fromRGB(255, 215, 90),
+	Thickness = 3,
+	ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+}, hintLabel)
+addScale(hintLabel)
 
 local toastHolder = make("Frame", {
 	BackgroundTransparency = 1,
@@ -910,6 +918,12 @@ panels.Cards = function()
 			newButton(cell, "Take out", UDim2.new(0, 4, 0, 167), UDim2.new(1, -8, 0, 32), COLORS.locked, function()
 				Remotes.RemoveCard:FireServer(index)
 			end).TextSize = 14
+			-- vault it straight from the deck
+			if #state.vault < state.vaultSlots then
+				newButton(cell, "🔐 Vault", UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32), Color3.fromRGB(215, 160, 50), function()
+					Remotes.VaultStore:FireServer(key, index)
+				end).TextSize = 13
+			end
 		end
 	end
 
@@ -1213,7 +1227,7 @@ panels.Rebirth = function()
 
 	local vaultLines = math.ceil(state.vaultSlots / 5)
 	local vaultRow = newRow(0, 40 + vaultLines * 222) -- first thing on the screen
-	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Use the 🔐 Vault button under a card in the Deck screen.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Use the 🔐 Vault button under any card on the Deck screen, in your deck or not.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
 		TextSize = 14,
 	})
 	local strip = make("Frame", {
@@ -2057,9 +2071,14 @@ Remotes.OpenRebirth.OnClientEvent:Connect(function()
 end)
 
 -- The Auto Packer just opened a pack: show the best card on the HUD ticker.
-Remotes.AutoPull.OnClientEvent:Connect(function(pulled)
+Remotes.AutoPull.OnClientEvent:Connect(function(pulled, newBest)
 	if type(pulled) ~= "table" then
 		return
+	end
+	-- a new personal best gets a sound and a banner
+	if Cards.parse(newBest) then
+		playSound("bigPull")
+		toast("🤖 New best card: " .. Cards.getDisplayName(newBest) .. "!", "announce")
 	end
 	local bestKey, bestIncome, sold = nil, -1, 0
 	for _, entry in ipairs(pulled) do

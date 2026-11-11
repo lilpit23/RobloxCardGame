@@ -12,14 +12,13 @@ const SETS = [
   ['olympus', 'Olympus', '神', '#3cbeaa'],
   ['knights', 'Knights and Outlaws', '騎', '#32965a'],
 ];
-// One Booster and one (darker) Elite cover per set, plus the two special packs.
+// One Booster and one (darker) Elite cover per set, plus the Champion Pack.
 const PACKS = [];
 for (const [id, name, kanji, color] of SETS) {
   PACKS.push([id + '_booster', name + ' Booster', kanji, color, 5]);
   PACKS.push([id + '_elite', name + ' Elite', kanji, `color-mix(in srgb, ${color} 62%, #000)`, 5]);
 }
 PACKS.push(['champion', 'Champion Pack', '王', '#cfd3e6', 5]);
-PACKS.push(['aura', 'Aura Pack', '気', '#e63c6e', 3]);
 
 const base = `
   * { box-sizing: border-box; margin: 0; }

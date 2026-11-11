@@ -2,7 +2,7 @@
 
 A Roblox incremental / tycoon game: open anime card packs, put the cards on display in your store,
 collect the cash they earn, buy better packs, upgrade the store, and fill the collection book.
-Rare cards also radiate **aura**, a second currency for Aura Packs, luck and permanent perks.
+Rare cards also radiate **aura**, a second currency for luck and permanent perks.
 
 ## The loop
 
@@ -28,7 +28,7 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
     **Knights and Outlaws** (King Arthur, Robin Hood). Each unlocks at a higher store tier (there
     are seven). Every set has its own colour and emblem, a 5-card **Booster** (3 commons, 1
     uncommon, 1 guaranteed rare-or-better) and a pricier **Elite** pack. Later sets cost more and
-    earn more. The collection book is a binder page per set with card numbers (secret cards are
+    earn more. Packs are bought with cash only. The collection book is a binder page per set with card numbers (secret cards are
     numbered past the set size), plus a **combo book** of every story combo. Completing a set
     gives +25% income.
 11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
@@ -60,9 +60,11 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
 - **Rising pack prices.** Each cash pack costs 1.8% more than the last one of its kind opened in
   the same run. Rebirth resets the prices.
 - **Auto Packer.** A permanent Aura Shrine perk that buys and opens the pack you choose every 10
-  seconds (down to 2 with upgrades), with an option to auto-sell spare low-rarity cards.
+  seconds (down to 2 with upgrades), with an option to auto-sell spare low-rarity cards. It plays a sound and shows a banner when it
+  pulls a new personal best.
 - **Vault.** The safe in the front-left corner of your store, or the top of the Rebirth screen.
-  Cards in it survive a rebirth.
+  Cards in it survive a rebirth. Any card can be vaulted from the Deck screen, including cards
+  that are in the deck.
 
 ## Controls
 

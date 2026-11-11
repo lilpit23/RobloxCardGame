@@ -509,8 +509,29 @@ local function runAutoPacker(player, session, data)
 	if not spend(data, "cash", Packs.price(pack, data.packCounts[pack.id], 1, data.perks)) then
 		return -- cannot afford it right now; try again next time
 	end
+	-- the best card owned before this pack, to spot a new personal best
+	local bestBefore = 0
+	for key in pairs(data.inventory) do
+		bestBefore = math.max(bestBefore, Cards.getIncome(key))
+	end
+	for _, key in pairs(data.slots) do
+		bestBefore = math.max(bestBefore, Cards.getIncome(key))
+	end
+	for _, key in ipairs(data.vault) do
+		bestBefore = math.max(bestBefore, Cards.getIncome(key))
+	end
+
 	local pulled = openPacks(player, data, pack, 1, settings.sell)
-	AutoPullRemote:FireClient(player, pulled)
+
+	local newBest = nil
+	for _, entry in ipairs(pulled) do
+		local income = Cards.getIncome(entry.key)
+		if not entry.sold and income > bestBefore then
+			bestBefore = income
+			newBest = entry.key
+		end
+	end
+	AutoPullRemote:FireClient(player, pulled, newBest)
 	updateShowcase(player)
 	session.rev = session.rev + 1
 	session.dirty = true
@@ -862,22 +883,35 @@ end)
 -- Vault and rebirth
 ---------------------------------------------------------------------
 -- Vault cards earn nothing, but they are the only cards that survive a rebirth.
-VaultStoreRemote.OnServerEvent:Connect(function(player, key)
+-- fromSlot (optional): vault the card straight out of that deck slot instead of the inventory.
+VaultStoreRemote.OnServerEvent:Connect(function(player, key, fromSlot)
 	if not allow(player, "VaultStore", 8, 16) then
 		return
 	end
+	local session = sessions[player]
 	local data = PlayerData.get(player)
-	if data == nil or Cards.parse(key) == nil then
+	if session == nil or data == nil or Cards.parse(key) == nil then
 		return
 	end
 	if #data.vault >= vaultSlots(data) then
 		notify(player, "Your vault is full. Rebirth to unlock more vault slots.", "error")
 		return
 	end
-	if not takeCard(data, key, 1) then
+	if fromSlot ~= nil then
+		if type(fromSlot) ~= "number" or fromSlot % 1 ~= 0 or fromSlot < 1 or fromSlot > slotCount(data) then
+			return
+		end
+		local slotKey = tostring(fromSlot)
+		if data.slots[slotKey] ~= key then
+			return
+		end
+		data.slots[slotKey] = nil
+		Plots.setCard(session.plot, fromSlot, nil)
+	elseif not takeCard(data, key, 1) then
 		return
 	end
 	table.insert(data.vault, key)
+	notify(player, Cards.getDisplayName(key) .. " is safe in your vault.", "good")
 	touch(player, true)
 end)
 

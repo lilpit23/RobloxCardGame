@@ -52,6 +52,7 @@ local function newData()
 		stats = { fused = 0, earned = 0 }, -- lifetime counters for achievements
 		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
 		season = { id = 0, xp = 0, claimed = 0 }, -- monthly season pass progress
+		boosts = { luckUntil = 0, cashUntil = 0 }, -- os.time() when bought potions run out
 		receipts = {}, -- developer product PurchaseIds already granted
 		lastSeen = 0, -- os.time() of the last save, for offline earnings
 	}

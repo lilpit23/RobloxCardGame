@@ -172,8 +172,9 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
 - [ ] **W5 Map polish.** Fountain and four roadside shops are done. Still to do: terrain or meshes
   for the ridge instead of blocks, a fast-travel pad between a store and the arena, houses and
   street furniture behind the stores.
-- [x] **W2 Store buildings per tier.** Done with parts: seven distinct buildings (`buildDecor` in
-  `Plots.luau`). Follow-up: replace with meshes, add interior props (tables, pack shelves, lights).
+- [x] **W2 Store buildings per tier.** Done: a card shop that gains a storey per upgrade
+  (`buildDecor` in `Plots.luau`, sketch in `docs/store-tiers.png`). Follow-up: stairs and usable
+  upper floors, interior props, meshes instead of blocks.
 - [ ] **W3 Card stands as 3D display cases** with a glow coloured by rarity and a beam for Mythic
   and Secret cards.
 
@@ -181,10 +182,12 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
 
 Needs the owner to create the passes/products in the Creator Dashboard and supply IDs.
 
-- [ ] **M1 Game passes.** Code is done (2x Cash, Auto Collector, +8 Deck Slots, VIP). The owner must
-  create the passes and put their ids in `Config.Monetization`; then test a purchase in Studio.
-- [ ] **M2 Developer products.** Code is done (aura bundles, receipt-safe). Needs ids and a test
-  purchase, including the retry path when a save fails.
+- [ ] **M1 Game passes.** Code is done for seven passes (2x Cash, 2x Aura, Auto Collector, +8 Deck
+  Slots, Bigger Vault, Lucky Clover, VIP). The owner must create them and put the ids in
+  `Config.Monetization`; then test a purchase.
+- [ ] **M2 Developer products.** Code is done (Luck Potion, Cash Potion, Time Warp, three aura
+  bundles; receipt-safe). Needs ids and a test purchase, including the retry path when a save
+  fails.
 - [x] **M3 Paid-random-item compliance.** Aura bundles are hidden when PolicyService says paid random
   items are restricted. Pack odds are always shown.
 

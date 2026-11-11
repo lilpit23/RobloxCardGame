@@ -92,10 +92,7 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
   waiting). Each week one set is **featured** and its packs get +50% luck.
 - **Full Art.** A rare effect (x8 cash) where the picture fills the card.
 - **Showcase.** Two big frames at each store entrance show the owner's two best deck cards.
-- **Store.** Game passes (2x Cash, Auto Collector, +8 Deck Slots, VIP) and aura bundles. Nothing
-  is on sale until you create the items on the Creator Dashboard and paste their ids into
-  `Config.Monetization`; until then they show as "Coming soon". Aura bundles are hidden from
-  players in regions where paid random items are restricted.
+- **Store.** Things players can buy with Robux. See "Selling things for Robux" below.
 
 ## The map
 
@@ -104,10 +101,15 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 Eight stores sit in a ring around a cul-de-sac plaza (one per player, eight players per server).
 One road leaves the plaza and runs through a tunnel in a rocky ridge to the PvE arena, where the
 Battle Tower stands. A fountain sits on the plaza island and four small shops line the road
-(scenery only). Each store is a building that grows with its tier: an open-air stall with a
-fence, a wooden shop with shelves, an emporium with long windows, a mega store with a roof frame
-and neon pillars, a tower with a grand entrance beam and aura beam, a marble palace with a golden
-dome and red carpet, and finally a hall with floating crystals and a halo. The whole map is built by `src/server/Plots.luau`; the diagram is drawn from
+(scenery only).
+
+![Store building at each tier](docs/store-tiers.png)
+
+Each store is a real building that grows as you upgrade it: a market stall with a striped
+canopy, then a one-storey card shop with a shopfront, awning and pitched roof, and after that one
+more storey per upgrade, up to six, with a neon rooftop sign, the aura beam, a golden dome and
+finally floating crystals and a halo. The deck always stands on the ground floor; the upper
+storeys are for show. The whole map is built by `src/server/Plots.luau`; the diagram is drawn from
 the same numbers by `node tools/make-map.js`.
 
 ## Setup
@@ -165,6 +167,41 @@ Cards show an emoji as placeholder art. To use real art, upload an image and add
 ## Working on the game
 
 `CLAUDE.md` has the project rules and `docs/AGENT_PLAN.md` is the task backlog.
+
+## Selling things for Robux
+
+The Store screen (💎, or **M**) lists everything below. Nothing can be bought until you create the
+item on Roblox and paste its id into the game; until then it shows "Coming soon".
+
+| Game pass (bought once) | What it does | Suggested price |
+| --- | --- | --- |
+| 2x Cash | Double cash from the deck, forever | 399 R$ |
+| 2x Aura | Double aura from cards, forever | 299 R$ |
+| Auto Collector | Cash goes straight to your balance, survives rebirth | 149 R$ |
+| +8 Deck Slots | Eight extra deck slots every run | 249 R$ |
+| Bigger Vault | Two extra vault slots | 199 R$ |
+| Lucky Clover | +5 luck, forever | 349 R$ |
+| VIP | Crown on the store sign and +2 luck | 99 R$ |
+
+| Product (bought any number of times) | What it does | Suggested price |
+| --- | --- | --- |
+| Luck Potion | +10 luck for 30 minutes | 49 R$ |
+| Cash Potion | Double cash for 30 minutes | 49 R$ |
+| Time Warp | One hour of your deck's income at once (up to the wallet cap) | 79 R$ |
+| Aura Bundle / Chest / Vault | 5,000 / 50,000 / 500,000 aura | 49 / 199 / 799 R$ |
+
+To switch them on:
+
+1. Publish the game, then open it on the Creator Dashboard (create.roblox.com).
+2. Under **Monetization → Passes**, create each pass, set its price and put it on sale. Under
+   **Monetization → Developer Products**, create each product.
+3. Copy each item's id (the number in its page address) into `src/shared/Config.luau`, replacing
+   the `id = 0` on the matching line, then publish the new build.
+4. Buy one of each in a private test to check it arrives.
+
+Prices are set on the dashboard; the suggested ones in the tables are only a starting point. Time
+Warp is hidden from players in places where paid random items are restricted, because the cash it
+gives can buy packs.
 
 ## Balance simulator
 

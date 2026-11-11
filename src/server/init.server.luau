@@ -146,13 +146,17 @@ local function storeMult(data)
 	local combos = Combos.evaluate(data.slots)
 	local setBonus = 1 + Config.SetCompleteBonus * Cards.completedSets(data.collection)
 	local passBonus = hasPass(data, "doubleCash") and 2 or 1
+	if data.boosts.cashUntil > os.time() then
+		passBonus = passBonus * 2 -- Cash Potion
+	end
 	local achievementBonus = Achievements.incomeMult(data.achievements)
 	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus * achievementBonus
 end
 
 -- Aura multiplier: Aura Magnet perk x deck combos.
 local function auraMult(data)
-	return Perks.auraMult(data.perks) * Combos.evaluate(data.slots).aura
+	local passBonus = hasPass(data, "doubleAura") and 2 or 1
+	return Perks.auraMult(data.perks) * Combos.evaluate(data.slots).aura * passBonus
 end
 
 local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
@@ -163,7 +167,8 @@ local function luckLevel(data)
 end
 
 local function vaultSlots(data)
-	return Rebirth.vaultSlots(data.rebirths) + Perks.vaultBonus(data.perks)
+	local passBonus = hasPass(data, "bigVault") and Config.Monetization.ExtraVaultSlots or 0
+	return Rebirth.vaultSlots(data.rebirths) + Perks.vaultBonus(data.perks) + passBonus
 end
 
 local function totals(data)
@@ -218,6 +223,7 @@ local function pushState(player)
 		packCounts = data.packCounts,
 		autoPack = data.autoPack,
 		autoRev = session.autoRev or 0,
+		boosts = data.boosts,
 		restricted = session.restricted,
 		incomePerSec = income,
 		auraPerSec = aura,
@@ -1416,9 +1422,25 @@ Monetization.init({
 	end,
 
 	grantProduct = function(player, data, product)
-		data.aura = data.aura + (product.aura or 0)
-		notify(player, "Thank you! +" .. Format.short(product.aura or 0) .. " aura", "good")
-		touch(player, false)
+		local now = os.time()
+		local message
+		if product.kind == "luck" then
+			-- buying again while one is running adds time
+			data.boosts.luckUntil = math.max(data.boosts.luckUntil, now) + product.minutes * 60
+			message = "+" .. Config.Monetization.PotionLuck .. " luck for " .. product.minutes .. " minutes"
+		elseif product.kind == "cash" then
+			data.boosts.cashUntil = math.max(data.boosts.cashUntil, now) + product.minutes * 60
+			message = "double cash for " .. product.minutes .. " minutes"
+		elseif product.kind == "warp" then
+			local income = totals(data)
+			local gained = addCash(data, income * product.seconds)
+			message = Format.cash(gained) .. " from your deck"
+		else
+			data.aura = data.aura + (product.aura or 0)
+			message = "+" .. Format.short(product.aura or 0) .. " aura"
+		end
+		notify(player, "Thank you! " .. product.name .. ": " .. message, "good")
+		touch(player, true)
 	end,
 })
 

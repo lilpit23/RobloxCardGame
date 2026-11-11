@@ -26,8 +26,8 @@ local TIER_STYLE = {
 	{ floor = Color3.fromRGB(235, 235, 240), material = Enum.Material.Marble, accent = Color3.fromRGB(170, 90, 240) },
 	{ floor = Color3.fromRGB(45, 45, 60), material = Enum.Material.SmoothPlastic, accent = Color3.fromRGB(255, 80, 170) },
 	{ floor = Color3.fromRGB(240, 195, 80), material = Enum.Material.Foil, accent = Color3.fromRGB(255, 240, 150) },
-	{ floor = Color3.fromRGB(120, 210, 230), material = Enum.Material.Glass, accent = Color3.fromRGB(120, 255, 255) },
-	{ floor = Color3.fromRGB(25, 20, 45), material = Enum.Material.Neon, accent = Color3.fromRGB(255, 120, 255) },
+	{ floor = Color3.fromRGB(225, 232, 240), material = Enum.Material.Marble, accent = Color3.fromRGB(120, 255, 255) },
+	{ floor = Color3.fromRGB(35, 30, 60), material = Enum.Material.SmoothPlastic, accent = Color3.fromRGB(255, 120, 255) },
 }
 
 local plots = {}
@@ -140,23 +140,28 @@ end
 -- Wall style of the store building at each tier (tier 1 is an open-air stall).
 local WALLS = {
 	false,
-	{ height = 12, color = Color3.fromRGB(200, 160, 110), material = Enum.Material.WoodPlanks },
-	{ height = 14, color = Color3.fromRGB(235, 230, 220), material = Enum.Material.Concrete },
-	{ height = 18, color = Color3.fromRGB(60, 62, 78), material = Enum.Material.Metal },
-	{ height = 20, color = Color3.fromRGB(70, 60, 95), material = Enum.Material.Metal },
-	{ height = 22, color = Color3.fromRGB(240, 238, 232), material = Enum.Material.Marble },
-	{ height = 24, color = Color3.fromRGB(28, 24, 48), material = Enum.Material.SmoothPlastic },
+	{ color = Color3.fromRGB(238, 222, 190), material = Enum.Material.SmoothPlastic, trim = Color3.fromRGB(120, 80, 50) },
+	{ color = Color3.fromRGB(225, 205, 185), material = Enum.Material.Brick, trim = Color3.fromRGB(110, 70, 55) },
+	{ color = Color3.fromRGB(205, 215, 230), material = Enum.Material.Concrete, trim = Color3.fromRGB(55, 65, 90) },
+	{ color = Color3.fromRGB(90, 85, 120), material = Enum.Material.Concrete, trim = Color3.fromRGB(45, 40, 70) },
+	{ color = Color3.fromRGB(240, 238, 232), material = Enum.Material.Marble, trim = Color3.fromRGB(215, 170, 70) },
+	{ color = Color3.fromRGB(40, 36, 64), material = Enum.Material.SmoothPlastic, trim = Color3.fromRGB(20, 18, 34) },
 }
 
--- Rebuilds the store building for the plot's tier. Each tier keeps what the one before had
--- and adds to it:
---   1 Card Stall       open-air stall: rail fence and crates
---   2 Card Shop        wooden back wall with shelves, half side walls
---   3 Card Emporium    full walls with long windows
---   4 Mega Card Store  roof frame, neon trim, glowing corner pillars
---   5 Aura Tower       grand entrance beam and the aura beam
---   6 Card Palace      marble, red carpet, golden dome
---   7 Hall of Legends  floating crystals and a halo over the store
+local GROUND_HEIGHT = 16 -- inside height of the shop floor
+local STOREY_HEIGHT = 14 -- each storey above it (13 of wall + a 1 stud floor slab)
+local STOREY_INSET = 2 -- every storey is this much narrower per side than the one below
+
+-- Rebuilds the store building for the plot's tier. Upgrading the store adds a storey:
+--   1 Card Stall       a market stall: posts and a striped canopy
+--   2 Card Shop        a one-storey shop with a shopfront, awning and a stepped roof
+--   3 Card Emporium    two storeys
+--   4 Mega Card Store  three storeys, flat roof with a neon rooftop sign
+--   5 Aura Tower       four storeys and the aura beam
+--   6 Card Palace      five storeys, marble and gold, a dome on the roof
+--   7 Hall of Legends  six storeys with floating crystals and a halo
+-- The shop floor (where the deck stands) is always the ground floor; upper storeys are
+-- for show.
 local function buildDecor(plot)
 	plot.decor:ClearAllChildren()
 	local tier = plot.tier
@@ -172,101 +177,133 @@ local function buildDecor(plot)
 		light.Color = part.Color
 		light.Range = range
 		light.Parent = part
+		return part
 	end
+	local white = Color3.fromRGB(245, 245, 245)
 
-	local edge = HALF - 0.5
 	if tier == 1 then
+		-- market stall: four posts holding a striped canopy over the cards
 		local wood = Color3.fromRGB(120, 85, 55)
 		for _, sx in ipairs({ -1, 1 }) do
-			add("FenceRail", Vector3.new(0.6, 0.6, SIZE - 2), sx * edge, 3.2, 0, wood, Enum.Material.Wood)
-			for z = -30, 30, 12 do
-				add("FencePost", Vector3.new(1, 3.4, 1), sx * edge, 2.7, z, wood, Enum.Material.Wood)
+			for _, z in ipairs({ -16, 30 }) do
+				add("StallPost", Vector3.new(1.2, 10, 1.2), sx * 30, 6, z, wood, Enum.Material.Wood)
 			end
 		end
-		add("FenceRail", Vector3.new(SIZE - 2, 0.6, 0.6), 0, 3.2, edge, wood, Enum.Material.Wood)
-		add("Crate", Vector3.new(4, 4, 4), 27, 3, 28, Color3.fromRGB(165, 125, 80), Enum.Material.WoodPlanks)
-		add("Crate", Vector3.new(3, 3, 3), 22.5, 2.5, 29, Color3.fromRGB(150, 110, 70), Enum.Material.WoodPlanks)
-		add("Crate", Vector3.new(4, 4, 4), -27, 3, 28, Color3.fromRGB(165, 125, 80), Enum.Material.WoodPlanks)
+		for stripe = 0, 7 do
+			local canopy = add("Canopy", Vector3.new(8, 0.5, 48), -28 + stripe * 8, 11.2, 7, stripe % 2 == 0 and Color3.fromRGB(220, 70, 70) or white, Enum.Material.Fabric)
+			canopy.CanCollide = false
+		end
+		add("Crate", Vector3.new(4, 4, 4), 27, 3, 26, Color3.fromRGB(165, 125, 80), Enum.Material.WoodPlanks)
+		add("Crate", Vector3.new(3, 3, 3), -27, 2.5, 27, Color3.fromRGB(150, 110, 70), Enum.Material.WoodPlanks)
 		return
 	end
 
 	local wall = WALLS[tier]
-	local height = wall.height
-	local top = 1 + height
-	local middle = 1 + height / 2
+	local edge = HALF - 0.5
+	local ceilingY = 1 + GROUND_HEIGHT -- underside of the first floor slab
 
-	-- back wall with shelves
-	add("BackWall", Vector3.new(SIZE, height, 1), 0, middle, edge, wall.color, wall.material)
-	for shelfY = 5, height - 3, 4 do
-		add("Shelf", Vector3.new(SIZE - 8, 0.4, 1.4), 0, shelfY, HALF - 1.7, Color3.fromRGB(90, 65, 45), Enum.Material.Wood)
+	-- Ground floor: the shop. Back wall with shelves, side walls with a window band, and an
+	-- open shopfront between two corner columns.
+	add("BackWall", Vector3.new(SIZE, GROUND_HEIGHT, 1), 0, 1 + GROUND_HEIGHT / 2, edge, wall.color, wall.material)
+	for shelfY = 5, GROUND_HEIGHT - 3, 4 do
+		add("Shelf", Vector3.new(SIZE - 8, 0.4, 1.4), 0, shelfY, HALF - 1.7, wall.trim, Enum.Material.Wood)
+	end
+	for _, sx in ipairs({ -1, 1 }) do
+		local x = sx * edge
+		add("WallBase", Vector3.new(1, 4, SIZE - 1), x, 3, -0.5, wall.color, wall.material)
+		add("WallTop", Vector3.new(1, GROUND_HEIGHT - 10, SIZE - 1), x, 11 + (GROUND_HEIGHT - 10) / 2, -0.5, wall.color, wall.material)
+		for z = -24, 24, 16 do
+			add("WallPier", Vector3.new(1.2, 6, 3), x, 8, z, wall.trim, wall.material)
+		end
+		local window = add("Window", Vector3.new(0.4, 6, SIZE - 1), x, 8, -0.5, Color3.fromRGB(170, 215, 255), Enum.Material.Glass)
+		window.Transparency = 0.6
+		add("ShopfrontColumn", Vector3.new(2, GROUND_HEIGHT, 2), sx * (HALF - 1), 1 + GROUND_HEIGHT / 2, -HALF + 1, wall.trim, wall.material)
+	end
+	add("Ceiling", Vector3.new(SIZE, 1, SIZE), 0, ceilingY + 0.5, 0, wall.trim, wall.material)
+	-- ceiling lights, so the shop is bright inside
+	for _, x in ipairs({ -20, 0, 20 }) do
+		for _, z in ipairs({ -18, 2, 22 }) do
+			local lamp = glow(add("CeilingLight", Vector3.new(5, 0.3, 5), x, ceilingY - 0.15, z, Color3.fromRGB(255, 244, 214), Enum.Material.Neon), 34)
+			lamp.CanCollide = false
+		end
+	end
+	-- striped awning over the shopfront
+	for stripe = 0, 7 do
+		local awning = add("Awning", Vector3.new(8, 0.6, 6), -28 + stripe * 8, ceilingY + 0.7, -HALF - 3, stripe % 2 == 0 and style.accent or white, Enum.Material.Fabric)
+		awning.CanCollide = false
 	end
 
-	if tier == 2 then
-		for _, sx in ipairs({ -1, 1 }) do
-			add("SideWall", Vector3.new(1, height, HALF), sx * edge, middle, HALF / 2, wall.color, wall.material)
-		end
-	else
-		-- full side walls with a long window band between y = 5 and y = 11
-		for _, sx in ipairs({ -1, 1 }) do
-			local x = sx * edge
-			add("WallBase", Vector3.new(1, 4, SIZE - 1), x, 3, -0.5, wall.color, wall.material)
-			add("WallTop", Vector3.new(1, height - 10, SIZE - 1), x, 11 + (height - 10) / 2, -0.5, wall.color, wall.material)
-			for z = -24, 24, 16 do
-				add("WallPier", Vector3.new(1.2, 6, 3), x, 8, z, wall.color, wall.material)
-			end
-			local window = add("Window", Vector3.new(0.4, 6, SIZE - 1), x, 8, -0.5, Color3.fromRGB(170, 215, 255), Enum.Material.Glass)
-			window.Transparency = 0.6
-		end
-	end
-
-	if tier >= 4 then
-		-- roof frame and cross beams (open, so the deck stays visible from above)
-		local beamColor = Color3.fromRGB(40, 40, 50)
+	-- Upper storeys: one more for every tier above the Card Shop, each a little narrower.
+	local roofY = ceilingY + 1 -- top of the building so far
+	local roofHalf = HALF
+	for storey = 1, tier - 2 do
+		local half = HALF - STOREY_INSET * storey
+		local baseY = roofY
+		local wallY = baseY + 6.5
+		local windowY = baseY + 6.5
 		for _, side in ipairs({ -1, 1 }) do
-			add("RoofBeam", Vector3.new(2, 2, SIZE), side * (HALF - 1), top + 1, 0, beamColor, Enum.Material.Metal)
-			add("RoofBeam", Vector3.new(SIZE, 2, 2), 0, top + 1, side * (HALF - 1), beamColor, Enum.Material.Metal)
-			add("NeonTrim", Vector3.new(0.4, 0.5, SIZE - 1), side * (HALF - 1.3), 11.5, -0.5, style.accent, Enum.Material.Neon)
-		end
-		for z = -16, 16, 16 do
-			add("CrossBeam", Vector3.new(SIZE - 4, 1, 1), 0, top + 1, z, beamColor, Enum.Material.Metal)
-		end
-		for _, sx in ipairs({ -1, 1 }) do
-			for _, sz in ipairs({ -1, 1 }) do
-				glow(add("Pillar", Vector3.new(2, top + 4, 2), sx * (HALF - 1), (top + 4) / 2 + 1, sz * (HALF - 1), style.accent, Enum.Material.Neon), 20)
+			add("StoreyWall", Vector3.new(half * 2, 13, 1), 0, wallY, side * (half - 0.5), wall.color, wall.material)
+			add("StoreyWall", Vector3.new(1, 13, half * 2 - 2), side * (half - 0.5), wallY, 0, wall.color, wall.material)
+			for index, share in ipairs({ -0.6, -0.2, 0.2, 0.6 }) do
+				-- alternate lit and dark windows so the building looks lived in
+				local lit = (storey + index) % 2 == 0
+				local color = lit and Color3.fromRGB(255, 232, 160) or Color3.fromRGB(150, 195, 235)
+				local material = lit and Enum.Material.Neon or Enum.Material.Glass
+				add("StoreyWindow", Vector3.new(6, 6, 0.3), share * half, windowY, side * (half + 0.05), color, material)
+				add("StoreyWindow", Vector3.new(0.3, 6, 6), side * (half + 0.05), windowY, share * half, color, material)
 			end
 		end
+		add("StoreyFloor", Vector3.new(half * 2, 1, half * 2), 0, baseY + 13.5, 0, wall.trim, wall.material)
+		add("StoreyTrim", Vector3.new(half * 2 + 1.5, 0.8, half * 2 + 1.5), 0, baseY + 0.4, 0, wall.trim, wall.material)
+		roofY = baseY + STOREY_HEIGHT
+		roofHalf = half
 	end
+
+	if tier <= 3 then
+		-- small shops get a stepped pitched roof
+		local roofColor = Color3.fromRGB(150, 60, 55)
+		for step = 0, 4 do
+			local depth = (roofHalf * 2 + 2) * (1 - step / 5)
+			add("Roof", Vector3.new(roofHalf * 2 + 2, 2, depth), 0, roofY + 1 + step * 2, 0, roofColor, Enum.Material.Slate)
+		end
+		add("Chimney", Vector3.new(4, 9, 4), roofHalf - 8, roofY + 5.5, roofHalf - 10, wall.trim, Enum.Material.Brick)
+		return
+	end
+
+	-- bigger stores get a flat roof with a parapet and things on top
+	for _, side in ipairs({ -1, 1 }) do
+		add("Parapet", Vector3.new(roofHalf * 2, 2, 1), 0, roofY + 1, side * (roofHalf - 0.5), wall.trim, wall.material)
+		add("Parapet", Vector3.new(1, 2, roofHalf * 2 - 2), side * (roofHalf - 0.5), roofY + 1, 0, wall.trim, wall.material)
+	end
+	for _, sx in ipairs({ -1, 1 }) do
+		add("SignLeg", Vector3.new(1, 6, 1), sx * 9, roofY + 3, -roofHalf + 3, wall.trim, Enum.Material.Metal)
+	end
+	glow(add("RoofSign", Vector3.new(24, 6, 1), 0, roofY + 9, -roofHalf + 3, style.accent, Enum.Material.Neon), 30)
 
 	if tier >= 5 then
-		-- grand entrance beam across the front, resting on the corner pillars
-		add("Lintel", Vector3.new(SIZE, 3, 3), 0, top + 6.5, -HALF + 1, wall.color, wall.material)
-		glow(add("LintelGlow", Vector3.new(SIZE - 8, 0.5, 1.5), 0, top + 4.8, -HALF + 1, style.accent, Enum.Material.Neon), 24)
-		local beam = add("AuraBeam", Vector3.new(4, 120, 4), 0, 61, HALF - 4, style.accent, Enum.Material.Neon)
+		local beam = add("AuraBeam", Vector3.new(4, 120, 4), 0, roofY + 60, roofHalf - 6, style.accent, Enum.Material.Neon)
 		beam.Transparency = 0.5
 		beam.CanCollide = false
 	end
 
 	if tier >= 6 then
-		-- palace: red carpet down the middle aisle and a golden dome over the back wall
-		local carpet = add("Carpet", Vector3.new(2.6, 0.1, SIZE - 10), 0, 1.05, 3, Color3.fromRGB(170, 30, 45), Enum.Material.Fabric)
-		carpet.CanCollide = false
-		local dome = add("Dome", Vector3.new(22, 22, 22), 0, top + 3, HALF - 9, Color3.fromRGB(245, 200, 80), Enum.Material.Metal)
+		local gold = Color3.fromRGB(245, 200, 80)
+		local dome = add("Dome", Vector3.new(24, 24, 24), 0, roofY + 2, 2, gold, Enum.Material.Metal)
 		dome.Shape = Enum.PartType.Ball
 		dome.CanCollide = false
-		add("DomeSpire", Vector3.new(1, 8, 1), 0, top + 17, HALF - 9, Color3.fromRGB(245, 200, 80), Enum.Material.Metal)
+		add("DomeSpire", Vector3.new(1, 8, 1), 0, roofY + 18, 2, gold, Enum.Material.Metal)
 	end
 
 	if tier >= 7 then
-		-- hall of legends: crystals floating over the corners and a glowing halo above
 		for _, sx in ipairs({ -1, 1 }) do
 			for _, sz in ipairs({ -1, 1 }) do
-				local crystal = add("Crystal", Vector3.new(3, 7, 3), sx * (HALF - 1), top + 13, sz * (HALF - 1), style.accent, Enum.Material.Neon)
+				local crystal = add("Crystal", Vector3.new(3, 7, 3), sx * (roofHalf - 1), roofY + 12, sz * (roofHalf - 1), style.accent, Enum.Material.Neon)
 				crystal.CFrame = crystal.CFrame * CFrame.Angles(0, math.pi / 4, 0)
 				crystal.CanCollide = false
 				glow(crystal, 26)
 			end
 		end
-		local haloY = top + 22
+		local haloY = roofY + 30
 		for _, side in ipairs({ -1, 1 }) do
 			add("Halo", Vector3.new(1, 1, 36), side * 18, haloY, 0, style.accent, Enum.Material.Neon).CanCollide = false
 			add("Halo", Vector3.new(36, 1, 1), 0, haloY, side * 18, style.accent, Enum.Material.Neon).CanCollide = false

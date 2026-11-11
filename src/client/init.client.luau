@@ -55,6 +55,7 @@ local state = {
 	slotCount = Config.BaseSlots,
 	incomePerSec = 0,
 	cashCap = math.huge,
+	boosts = { luckUntil = 0, cashUntil = 0 },
 	packsOpened = 0,
 	stats = { fused = 0, earned = 0 },
 	achievements = {},
@@ -157,7 +158,7 @@ local hud = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0, 0.5),
 	Position = UDim2.new(0, 12, 0.5, 0),
-	Size = UDim2.new(0, 210, 0, 424),
+	Size = UDim2.new(0, 210, 0, 440),
 }, screen)
 addScale(hud)
 make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
@@ -195,7 +196,7 @@ local controlsLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 28), {
 	TextStrokeTransparency = 0.3,
 	TextYAlignment = Enum.TextYAlignment.Top,
 })
-local rateLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 52), {
+local rateLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 68), {
 	TextYAlignment = Enum.TextYAlignment.Top,
 	LayoutOrder = 3,
 	TextSize = 13,
@@ -1767,22 +1768,27 @@ panels.Store = function()
 		end
 	end
 
-	-- Aura can be spent on random packs, so aura bundles are hidden where paid random items
-	-- are restricted.
-	if not state.restricted then
-		for _, productKey in ipairs(settings.ProductOrder) do
-			local product = settings.Products[productKey]
+	-- Boosts and bundles. Products that hand out cash (which buys random packs) are hidden
+	-- where paid random items are restricted.
+	for _, productKey in ipairs(settings.ProductOrder) do
+		local product = settings.Products[productKey]
+		if not (product.random and state.restricted) then
 			order = order + 1
-			local row = newRow(order, 60)
-			newLabel(row, product.name .. "   +" .. Format.short(product.aura) .. " aura", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), {
+			local row = newRow(order, 72)
+			newLabel(row, product.name, UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
 				Font = Enum.Font.FredokaOne,
 				TextSize = 19,
-				TextColor3 = COLORS.aura,
+				TextColor3 = product.kind == "aura" and COLORS.aura or COLORS.text,
+			})
+			newLabel(row, product.text, UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 30), {
+				TextSize = 13,
+				TextColor3 = COLORS.dim,
+				TextYAlignment = Enum.TextYAlignment.Top,
 			})
 			if product.id <= 0 then
-				newButton(row, "Coming soon", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.locked, nil).AutoButtonColor = false
+				newButton(row, "Coming soon", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
 			else
-				newButton(row, "Buy", UDim2.new(1, -160, 0, 8), buttonSize, Color3.fromRGB(200, 70, 180), function()
+				newButton(row, "Buy", buttonPosition, buttonSize, Color3.fromRGB(200, 70, 180), function()
 					MarketplaceService:PromptProductPurchase(player, product.id)
 				end)
 			end
@@ -2082,6 +2088,15 @@ local function refreshHud()
 	if #combos.active > 0 then
 		rate = rate .. "   ·   " .. #combos.active .. " combos"
 	end
+	-- bought potions that are still running
+	local cashLeft = state.boosts.cashUntil - os.time()
+	if cashLeft > 0 then
+		rate = rate .. string.format("\n⚡ 2x cash  %d:%02d", math.floor(cashLeft / 60), cashLeft % 60)
+	end
+	local luckLeft = state.boosts.luckUntil - os.time()
+	if luckLeft > 0 then
+		rate = rate .. string.format("\n🧪 Luck potion  %d:%02d", math.floor(luckLeft / 60), luckLeft % 60)
+	end
 	local eventLeft = state.luckEventEndsAt - os.time()
 	if eventLeft > 0 then
 		rate = rate .. string.format("\n🍀 Lucky event  %d:%02d", math.floor(eventLeft / 60), eventLeft % 60)
@@ -2330,8 +2345,9 @@ Remotes:WaitForChild("RequestState"):FireServer()
 task.spawn(function()
 	while true do
 		task.wait(1)
-		if state.luckEventEndsAt - os.time() > -2 then
-			refreshHud()
+		local now = os.time()
+		if state.luckEventEndsAt - now > -2 or state.boosts.cashUntil - now > -2 or state.boosts.luckUntil - now > -2 then
+			refreshHud() -- keep the countdowns ticking
 		end
 		if renderQueued and currentPanel and os.clock() - lastRenderAt >= 4 and not (currentPanel == "Battle" and battling) then
 			renderPanel()

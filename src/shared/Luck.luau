@@ -12,7 +12,7 @@ local Luck = {}
 Luck.PerCompletedSet = 2
 Luck.TowerFloorsPerLevel = 10
 
--- profile needs: upgrades, rebirths, perks, collection, slots, tower.
+-- profile needs: upgrades, rebirths, perks, collection, slots, tower, boosts.
 -- eventActive = a server lucky event is running. passes = { [passKey] = true } game passes owned.
 -- Returns the list of sources { { name, levels }, ... } (only non-zero ones) and the total.
 function Luck.sources(profile, eventActive, passes)
@@ -34,6 +34,12 @@ function Luck.sources(profile, eventActive, passes)
 	add("Deck combos", Combos.evaluate(profile.slots).luck)
 	if passes and passes.vip then
 		add("VIP pass", Config.Monetization.VipLuck)
+	end
+	if passes and passes.lucky then
+		add("Lucky Clover pass", Config.Monetization.LuckyLuck)
+	end
+	if profile.boosts and (profile.boosts.luckUntil or 0) > os.time() then
+		add("Luck Potion", Config.Monetization.PotionLuck)
 	end
 	if eventActive then
 		add("Lucky event", Config.LuckEvent.BonusLevels)

@@ -26,17 +26,38 @@ return {
 	Monetization = {
 		ExtraSlots = 8,
 		VipLuck = 2,
-		PassOrder = { "doubleCash", "autoCollect", "extraSlots", "vip" },
+		LuckyLuck = 5,
+		ExtraVaultSlots = 2,
+		PotionLuck = 10,
+
+		-- Game passes: bought once, kept forever. "robux" is only a suggested price; the real
+		-- price is whatever you set on the Creator Dashboard.
+		PassOrder = { "doubleCash", "doubleAura", "autoCollect", "extraSlots", "bigVault", "lucky", "vip" },
 		Passes = {
-			doubleCash = { id = 0, name = "2x Cash", text = "Your deck earns double cash, forever." },
-			autoCollect = { id = 0, name = "Auto Collector", text = "Cash goes straight to your balance and survives rebirth." },
-			extraSlots = { id = 0, name = "+8 Deck Slots", text = "Eight extra deck slots from the start of every run." },
-			vip = { id = 0, name = "VIP", text = "A crown on your store sign and +2 luck." },
+			doubleCash = { id = 0, robux = 399, name = "2x Cash", text = "Your deck earns double cash, forever." },
+			doubleAura = { id = 0, robux = 299, name = "2x Aura", text = "Your cards radiate double aura, forever." },
+			autoCollect = { id = 0, robux = 149, name = "Auto Collector", text = "Cash goes straight to your balance and survives rebirth." },
+			extraSlots = { id = 0, robux = 249, name = "+8 Deck Slots", text = "Eight extra deck slots from the start of every run." },
+			bigVault = { id = 0, robux = 199, name = "Bigger Vault", text = "Two extra vault slots: carry more cards through every rebirth." },
+			lucky = { id = 0, robux = 349, name = "Lucky Clover", text = "+5 luck, forever." },
+			vip = { id = 0, robux = 99, name = "VIP", text = "A crown on your store sign and +2 luck." },
 		},
-		ProductOrder = { "auraSmall", "auraBig" },
+
+		-- Developer products: can be bought again and again.
+		--   kind = "aura": adds aura.
+		--   kind = "luck": +PotionLuck luck for `minutes`.
+		--   kind = "cash": double cash for `minutes`.
+		--   kind = "warp": `seconds` of your current income at once (up to the wallet cap).
+		-- random = true marks products that hand out cash, which buys random packs; those are
+		-- hidden where paid random items are restricted.
+		ProductOrder = { "luckPotion", "cashPotion", "timeWarp", "auraSmall", "auraBig", "auraHuge" },
 		Products = {
-			auraSmall = { id = 0, name = "Aura Bundle", aura = 5000 },
-			auraBig = { id = 0, name = "Aura Chest", aura = 50000 },
+			luckPotion = { id = 0, robux = 49, kind = "luck", minutes = 30, name = "Luck Potion", text = "+10 luck for 30 minutes. Stacks up in time if you buy more." },
+			cashPotion = { id = 0, robux = 49, kind = "cash", minutes = 30, name = "Cash Potion", text = "Double cash for 30 minutes. Stacks up in time if you buy more." },
+			timeWarp = { id = 0, robux = 79, kind = "warp", seconds = 3600, random = true, name = "Time Warp", text = "One hour of your deck's income, right now." },
+			auraSmall = { id = 0, robux = 49, kind = "aura", aura = 5000, name = "Aura Bundle", text = "+5,000 aura." },
+			auraBig = { id = 0, robux = 199, kind = "aura", aura = 50000, name = "Aura Chest", text = "+50,000 aura." },
+			auraHuge = { id = 0, robux = 799, kind = "aura", aura = 500000, name = "Aura Vault", text = "+500,000 aura." },
 		},
 	},
 

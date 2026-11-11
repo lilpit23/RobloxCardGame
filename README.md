@@ -52,6 +52,27 @@ Rare cards also radiate **aura**, a second currency for Aura Packs, luck and per
     confirm), or list a card for a cash price so anyone in the server can buy it. There is no
     stealing and no PvP.
 
+## Pacing: what makes a run last
+
+- **Wallet cap.** You can hold at most twice the cash your next rebirth costs. When the wallet is
+  full the register stops filling, which is the signal to rebirth. Every rebirth raises the cap,
+  and the higher store tiers and sets only fit under the later caps.
+- **Rising pack prices.** Each cash pack costs 1.8% more than the last one of its kind opened in
+  the same run. Rebirth resets the prices.
+- **Auto Packer.** A permanent Aura Shrine perk that buys and opens the pack you choose every 10
+  seconds (down to 2 with upgrades), with an option to auto-sell spare low-rarity cards.
+- **Vault.** The safe in the front-left corner of your store, or the top of the Rebirth screen.
+  Cards in it survive a rebirth.
+
+## Controls
+
+| | Keyboard | Gamepad / console |
+| --- | --- | --- |
+| Open a screen | The letter shown on its button: **P** Packs, **C** Deck, **B** Book, **U** Upgrades, **T** Trade, **G** Battle, **Q** Quests, **R** Rebirth, **M** Store | **Y** jumps to the menu, **LB / RB** switch screens |
+| Close | The same letter again | **B** (or **Y**) |
+| Next card when opening a pack | **Space** or **Enter** | **A** |
+| Use a counter, safe or gate in the world | **E** | **X** |
+
 ## More systems
 
 - **Pack opening.** The pack wobbles harder the better its best card is, then bursts open with a

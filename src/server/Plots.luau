@@ -244,6 +244,22 @@ local function buildPlot(index, cframe, parent)
 		end
 	end)
 
+	-- Vault safe: cards kept here survive a rebirth
+	local safe = newPart(folder, "VaultSafe", Vector3.new(5, 5, 4), cframe * CFrame.new(-28.5, 3.5, -29), Color3.fromRGB(70, 75, 85), Enum.Material.DiamondPlate)
+	newPart(folder, "VaultDial", Vector3.new(1.6, 1.6, 0.4), cframe * CFrame.new(-28.5, 3.5, -31.1), Color3.fromRGB(215, 160, 50), Enum.Material.Neon)
+	newBillboard(safe, "🔐 VAULT", 3.6, 7, 1.5)
+	local vaultPrompt = Instance.new("ProximityPrompt")
+	vaultPrompt.ActionText = "Open"
+	vaultPrompt.ObjectText = "Vault"
+	vaultPrompt.MaxActivationDistance = 10
+	vaultPrompt.RequiresLineOfSight = false
+	vaultPrompt.Parent = safe
+	vaultPrompt.Triggered:Connect(function(player)
+		if callbacks.onVault then
+			callbacks.onVault(plot, player)
+		end
+	end)
+
 	-- Trade & market board
 	local board = newPart(folder, "TradeBoard", Vector3.new(10, 3, 3), cframe * CFrame.new(19, 2.5, -26), Color3.fromRGB(40, 170, 160))
 	newBillboard(board, "🤝 TRADE & MARKET", 3.2, 10, 1.6)

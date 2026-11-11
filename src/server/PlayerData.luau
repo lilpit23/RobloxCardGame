@@ -46,6 +46,8 @@ local function newData()
 		tower = 0, -- highest battle tower floor cleared
 		quests = { day = 0, list = {} }, -- today's quests, see Quests.luau
 		daily = { lastDay = 0, streak = 0 }, -- daily login reward
+		packCounts = {}, -- packs opened this run, per pack id (drives pack price; reset by rebirth)
+		autoPack = { packId = "", on = false, sell = 0 }, -- Auto Packer settings
 		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
 		season = { id = 0, xp = 0, claimed = 0 }, -- monthly season pass progress
 		receipts = {}, -- developer product PurchaseIds already granted

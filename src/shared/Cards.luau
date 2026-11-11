@@ -11,12 +11,12 @@ Cards.RarityOrder = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic
 -- an average pack must sell for well under the pack's price, or packs become free money.
 Cards.Rarities = {
 	Common = { order = 1, color = Color3.fromRGB(140, 150, 165), aura = 0, income = 1, symbol = "●", sell = 0.015 },
-	Uncommon = { order = 2, color = Color3.fromRGB(70, 185, 95), aura = 0, income = 5, symbol = "◆", sell = 0.04 },
-	Rare = { order = 3, color = Color3.fromRGB(55, 130, 235), aura = 0, income = 15, symbol = "★", sell = 0.08 },
-	Epic = { order = 4, color = Color3.fromRGB(160, 75, 230), aura = 1, income = 120, symbol = "★★", sell = 0.2 },
-	Legendary = { order = 5, color = Color3.fromRGB(245, 170, 40), aura = 5, income = 900, symbol = "★★★", sell = 0.7 },
-	Mythic = { order = 6, color = Color3.fromRGB(235, 55, 95), aura = 25, income = 8000, symbol = "✦", sell = 2.5 },
-	Secret = { order = 7, color = Color3.fromRGB(35, 35, 45), aura = 150, income = 80000, symbol = "✪", sell = 10 },
+	Uncommon = { order = 2, color = Color3.fromRGB(70, 185, 95), aura = 0, income = 3, symbol = "◆", sell = 0.04 },
+	Rare = { order = 3, color = Color3.fromRGB(55, 130, 235), aura = 0, income = 8, symbol = "★", sell = 0.08 },
+	Epic = { order = 4, color = Color3.fromRGB(160, 75, 230), aura = 1, income = 25, symbol = "★★", sell = 0.2 },
+	Legendary = { order = 5, color = Color3.fromRGB(245, 170, 40), aura = 5, income = 80, symbol = "★★★", sell = 0.7 },
+	Mythic = { order = 6, color = Color3.fromRGB(235, 55, 95), aura = 25, income = 300, symbol = "✦", sell = 2.5 },
+	Secret = { order = 7, color = Color3.fromRGB(35, 35, 45), aura = 150, income = 1500, symbol = "✪", sell = 10 },
 }
 
 -- Card EFFECTS (called "variants" in code). A pulled card can come with one effect.
@@ -32,10 +32,10 @@ Cards.VariantOrder = { "normal", "holo", "slimy", "lucky", "shadow", "gold", "fu
 
 Cards.Variants = {
 	normal = { name = "", mult = 1, chance = 0, color = Color3.fromRGB(25, 25, 30) },
-	holo = { name = "Shiny", mult = 2, chance = 0.07, shine = true, color = Color3.fromRGB(120, 235, 255) },
+	holo = { name = "Shiny", mult = 1.5, chance = 0.07, shine = true, color = Color3.fromRGB(120, 235, 255) },
 	slimy = {
 		name = "Slimy",
-		mult = 1.5,
+		mult = 1.25,
 		chance = 0.04,
 		deckIncome = 0.02,
 		color = Color3.fromRGB(110, 230, 90),
@@ -43,7 +43,7 @@ Cards.Variants = {
 	},
 	lucky = {
 		name = "Lucky",
-		mult = 1.5,
+		mult = 1.25,
 		chance = 0.03,
 		deckLuck = 0.5,
 		color = Color3.fromRGB(60, 200, 120),
@@ -51,7 +51,7 @@ Cards.Variants = {
 	},
 	shadow = {
 		name = "Shadow",
-		mult = 3,
+		mult = 2,
 		chance = 0.02,
 		auraFlat = 2,
 		color = Color3.fromRGB(120, 60, 200),
@@ -59,7 +59,7 @@ Cards.Variants = {
 	},
 	gold = {
 		name = "Golden",
-		mult = 5,
+		mult = 3,
 		chance = 0.015,
 		shine = true,
 		color = Color3.fromRGB(255, 205, 60),
@@ -67,7 +67,7 @@ Cards.Variants = {
 	},
 	fullart = {
 		name = "Full Art",
-		mult = 8,
+		mult = 4,
 		chance = 0.006,
 		fullArt = true, -- the picture fills the whole card
 		shine = true,
@@ -75,7 +75,7 @@ Cards.Variants = {
 	},
 	prism = {
 		name = "Prismatic",
-		mult = 20,
+		mult = 8,
 		chance = 0.003,
 		deckIncome = 0.05,
 		deckLuck = 1,

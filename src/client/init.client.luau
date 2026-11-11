@@ -4,6 +4,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 local MarketplaceService = game:GetService("MarketplaceService")
+local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -51,6 +53,9 @@ local state = {
 	luckEventEndsAt = 0,
 	slotCount = Config.BaseSlots,
 	incomePerSec = 0,
+	cashCap = math.huge,
+	packCounts = {},
+	autoPack = { packId = "", on = false, sell = 0 },
 	auraPerSec = 0,
 }
 
@@ -148,7 +153,7 @@ local hud = make("Frame", {
 	BackgroundTransparency = 1,
 	AnchorPoint = Vector2.new(0, 0.5),
 	Position = UDim2.new(0, 12, 0.5, 0),
-	Size = UDim2.new(0, 210, 0, 372),
+	Size = UDim2.new(0, 210, 0, 424),
 }, screen)
 addScale(hud)
 make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, hud)
@@ -171,6 +176,21 @@ end
 
 local cashLabel = newPill(1, COLORS.cash)
 local auraLabel = newPill(2, COLORS.aura)
+local autoLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 16), {
+	LayoutOrder = 4,
+	TextSize = 12,
+	TextStrokeTransparency = 0.3,
+	TextWrapped = false,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	Visible = false,
+})
+local controlsLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 28), {
+	LayoutOrder = 30,
+	TextSize = 11,
+	TextColor3 = COLORS.text,
+	TextStrokeTransparency = 0.3,
+	TextYAlignment = Enum.TextYAlignment.Top,
+})
 local rateLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 52), {
 	TextYAlignment = Enum.TextYAlignment.Top,
 	LayoutOrder = 3,
@@ -692,6 +712,26 @@ panels.Packs = function()
 	titleLabel.Text = "🎴 Pack Shop"
 	useList()
 	local tier = state.upgrades.store + 1
+
+	-- Auto Packer: opens the chosen pack on a timer (an Aura Shrine perk)
+	local packerInterval = Perks.packerInterval(state.perks)
+	local autoRow = newRow(0, 60)
+	autoRow.BackgroundColor3 = Color3.fromRGB(38, 58, 82)
+	if packerInterval == nil then
+		newLabel(autoRow, "🤖 Auto Packer — opens packs for you while you play. Unlock it in Upgrades → Aura Shrine.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 14 })
+	else
+		local autoPack = Packs.ById[state.autoPack.packId]
+		local chosen = autoPack and autoPack.name or "tap 🤖 on a pack below to choose"
+		newLabel(autoRow, "🤖 Auto Packer:  " .. chosen .. "\nOne pack every " .. packerInterval .. " seconds. Prices still rise with every pack.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), { TextSize = 13 })
+		local isOn = state.autoPack.on
+		newButton(autoRow, isOn and "ON" or "OFF", UDim2.new(1, -164, 0, 10), UDim2.new(0, 66, 0, 40), isOn and COLORS.good or COLORS.locked, function()
+			Remotes.AutoPackSet:FireServer(state.autoPack.packId, not isOn, state.autoPack.sell)
+		end)
+		local SELL_LABELS = { "Keep all", "Sell spare C", "Sell spare C+U", "Sell spare ≤R" }
+		newButton(autoRow, SELL_LABELS[state.autoPack.sell + 1] or "Keep all", UDim2.new(1, -92, 0, 10), UDim2.new(0, 84, 0, 40), COLORS.row, function()
+			Remotes.AutoPackSet:FireServer(state.autoPack.packId, isOn, (state.autoPack.sell + 1) % (Config.AutoSellMax + 1))
+		end).TextSize = 11
+	end
 	for order, pack in ipairs(Packs.List) do
 		local row = newRow(order, 100)
 		local swatch = make("Frame", {
@@ -713,13 +753,13 @@ panels.Packs = function()
 		if pack.sets == nil then
 			title = title .. "  ·  all sets"
 		end
-		newLabel(row, title, UDim2.new(0, 76, 0, 6), UDim2.new(1, -248, 0, 24), {
+		newLabel(row, title, UDim2.new(0, 76, 0, 6), UDim2.new(1, -292, 0, 24), {
 			Font = Enum.Font.FredokaOne,
 			TextSize = 19,
 			TextWrapped = false,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 		})
-		newLabel(row, table.concat(Packs.oddsLines(pack, packLuck), "\n"), UDim2.new(0, 76, 0, 32), UDim2.new(1, -248, 0, 64), {
+		newLabel(row, table.concat(Packs.oddsLines(pack, packLuck), "\n"), UDim2.new(0, 76, 0, 32), UDim2.new(1, -292, 0, 64), {
 			TextSize = 12,
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
@@ -728,6 +768,13 @@ panels.Packs = function()
 		local buttonPosition = UDim2.new(1, -160, 0, 14)
 		local buttonSize = UDim2.new(0, 148, 0, 40)
 		if tier >= pack.storeTier then
+			-- choose this pack for the Auto Packer
+			if packerInterval and pack.currency == "cash" then
+				local selected = state.autoPack.packId == pack.id
+				newButton(row, "🤖", UDim2.new(1, -204, 0, 14), UDim2.new(0, 38, 0, 40), selected and COLORS.good or COLORS.locked, function()
+					Remotes.AutoPackSet:FireServer(selected and "" or pack.id, not selected, state.autoPack.sell)
+				end)
+			end
 			-- bulk buttons under the main one
 			local bulkColor = pack.currency == "aura" and Color3.fromRGB(150, 55, 135) or Color3.fromRGB(60, 105, 195)
 			local x = -160
@@ -750,7 +797,7 @@ panels.Packs = function()
 			end)
 		else
 			local color = pack.currency == "aura" and Color3.fromRGB(200, 70, 180) or COLORS.button
-			newButton(row, currencyText(pack.currency, Perks.packCost(pack, state.perks)), buttonPosition, buttonSize, color, function()
+			newButton(row, currencyText(pack.currency, Packs.price(pack, state.packCounts[pack.id], 1, state.perks)), buttonPosition, buttonSize, color, function()
 				buyPack(pack)
 			end)
 		end
@@ -1165,8 +1212,8 @@ panels.Rebirth = function()
 	end
 
 	local vaultLines = math.ceil(state.vaultSlots / 5)
-	local vaultRow = newRow(3, 40 + vaultLines * 222)
-	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Add cards from the Deck screen.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+	local vaultRow = newRow(0, 40 + vaultLines * 222) -- first thing on the screen
+	newLabel(vaultRow, "🔐 Vault  (" .. #state.vault .. "/" .. state.vaultSlots .. ") — cards in here survive a rebirth. Use the 🔐 Vault button under a card in the Deck screen.", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
 		TextSize = 14,
 	})
 	local strip = make("Frame", {
@@ -1874,16 +1921,17 @@ end)
 local packsButton = nil
 local questsButton = nil
 local MENU = {
-	{ "Packs", "🎴 Packs", Color3.fromRGB(225, 80, 120) },
-	{ "Cards", "🃏 Deck", COLORS.button },
-	{ "Book", "📖 Book", Color3.fromRGB(150, 95, 230) },
-	{ "Upgrades", "🏪 Upgrade", COLORS.good },
-	{ "Trade", "🤝 Trade", Color3.fromRGB(40, 170, 160) },
-	{ "Battle", "⚔️ Battle", Color3.fromRGB(200, 60, 60) },
-	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50) },
-	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50) },
-	{ "Store", "💎 Store", Color3.fromRGB(120, 80, 200) },
+	{ "Packs", "🎴 Packs", Color3.fromRGB(225, 80, 120), "P" },
+	{ "Cards", "🃏 Deck", COLORS.button, "C" },
+	{ "Book", "📖 Book", Color3.fromRGB(150, 95, 230), "B" },
+	{ "Upgrades", "🏪 Upgrade", COLORS.good, "U" },
+	{ "Trade", "🤝 Trade", Color3.fromRGB(40, 170, 160), "T" },
+	{ "Battle", "⚔️ Battle", Color3.fromRGB(200, 60, 60), "G" },
+	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50), "Q" },
+	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50), "R" },
+	{ "Store", "💎 Store", Color3.fromRGB(120, 80, 200), "M" },
 }
+local keyBadges = {} -- the little key letters on the buttons (keyboard players only)
 local menuGrid = make("Frame", {
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, 0, 0, math.ceil(#MENU / 2) * 40),
@@ -1900,6 +1948,12 @@ for index, entry in ipairs(MENU) do
 	end)
 	button.LayoutOrder = index
 	button.TextSize = 15
+	table.insert(keyBadges, newLabel(button, entry[4], UDim2.new(1, -15, 0, 1), UDim2.new(0, 13, 0, 12), {
+		TextSize = 10,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundTransparency = 0.35,
+		BackgroundColor3 = Color3.new(0, 0, 0),
+	}))
 	if entry[1] == "Packs" then
 		packsButton = button
 	elseif entry[1] == "Quests" then
@@ -1912,6 +1966,9 @@ end
 ---------------------------------------------------------------------
 -- What a brand-new player should do next, or "" once they have the hang of it.
 local function tutorialHint()
+	if state.cashCap < math.huge and state.cash >= state.cashCap * 0.999 then
+		return "💰 Wallet full! Rebirth (🌟) to raise your money cap — vault your best cards first."
+	end
 	if state.rebirths > 0 then
 		return ""
 	end
@@ -1937,7 +1994,16 @@ local function refreshHud()
 	local hint = tutorialHint()
 	hintLabel.Text = hint
 	hintLabel.Visible = hint ~= ""
-	cashLabel.Text = "💵 " .. Format.cash(state.cash)
+	if state.cashCap < math.huge then
+		-- wallet cap: shown as "have / cap", red when full
+		cashLabel.Text = "💵 " .. Format.cash(state.cash) .. " / " .. Format.cash(state.cashCap)
+		cashLabel.TextSize = 17
+		cashLabel.TextColor3 = state.cash >= state.cashCap * 0.999 and COLORS.bad or COLORS.cash
+	else
+		cashLabel.Text = "💵 " .. Format.cash(state.cash)
+		cashLabel.TextSize = 22
+		cashLabel.TextColor3 = COLORS.cash
+	end
 	auraLabel.Text = "✨ " .. Format.short(state.aura) .. " Aura"
 	local rate = "+" .. Format.cash(state.incomePerSec) .. "/s"
 	if state.auraPerSec > 0 then
@@ -1980,6 +2046,40 @@ end)
 Remotes.Announce.OnClientEvent:Connect(function(playerName, key)
 	if Cards.parse(key) then
 		toast("🌟 " .. tostring(playerName) .. " pulled " .. Cards.getDisplayName(key) .. "!", "announce")
+	end
+end)
+
+-- The vault safe in the store opens the Rebirth screen, which starts with the vault.
+Remotes.OpenRebirth.OnClientEvent:Connect(function()
+	if currentPanel ~= "Rebirth" or not window.Visible then
+		openPanel("Rebirth")
+	end
+end)
+
+-- The Auto Packer just opened a pack: show the best card on the HUD ticker.
+Remotes.AutoPull.OnClientEvent:Connect(function(pulled)
+	if type(pulled) ~= "table" then
+		return
+	end
+	local bestKey, bestIncome, sold = nil, -1, 0
+	for _, entry in ipairs(pulled) do
+		if entry.sold then
+			sold = sold + 1
+		end
+		local income = Cards.getIncome(entry.key)
+		if Cards.parse(entry.key) and income > bestIncome then
+			bestKey, bestIncome = entry.key, income
+		end
+	end
+	if bestKey then
+		local def = Cards.parse(bestKey)
+		local text = "🤖 " .. Cards.getDisplayName(bestKey)
+		if sold > 0 then
+			text = text .. "  (sold " .. sold .. ")"
+		end
+		autoLabel.Text = text
+		autoLabel.TextColor3 = def.rarity == "Secret" and Color3.fromRGB(255, 90, 90) or Cards.Rarities[def.rarity].color:Lerp(Color3.new(1, 1, 1), 0.4)
+		autoLabel.Visible = true
 	end
 end)
 
@@ -2034,6 +2134,107 @@ end)
 Remotes.OpenShop.OnClientEvent:Connect(function()
 	if currentPanel ~= "Packs" or not window.Visible then
 		openPanel("Packs")
+	end
+end)
+
+---------------------------------------------------------------------
+-- Hotkeys: keyboard letters on PC, buttons on a gamepad / console
+---------------------------------------------------------------------
+local keyToPanel = {}
+for _, entry in ipairs(MENU) do
+	keyToPanel[Enum.KeyCode[entry[4]]] = entry[1]
+end
+
+local function usingGamepad()
+	return string.find(UserInputService:GetLastInputType().Name, "Gamepad") ~= nil
+end
+
+local function closeWindow()
+	window.Visible = false
+	currentPanel = nil
+	GuiService.SelectedObject = nil
+end
+
+-- Opens the panel `step` places along the menu from the current one (gamepad bumpers).
+local function cyclePanel(step)
+	local index = 0
+	for position, entry in ipairs(MENU) do
+		if entry[1] == currentPanel then
+			index = position
+		end
+	end
+	if index == 0 then
+		index = 1
+	else
+		index = (index - 1 + step) % #MENU + 1
+	end
+	if MENU[index][1] ~= currentPanel or not window.Visible then
+		openPanel(MENU[index][1])
+	end
+	task.defer(function()
+		if window.Visible then
+			GuiService:Select(window)
+		end
+	end)
+end
+
+local function refreshControls()
+	local inputType = UserInputService:GetLastInputType()
+	local keyboard = inputType == Enum.UserInputType.Keyboard or string.find(inputType.Name, "Mouse") ~= nil
+	for _, badge in ipairs(keyBadges) do
+		badge.Visible = keyboard
+	end
+	if usingGamepad() then
+		controlsLabel.Text = "🎮 Y: menu   LB / RB: switch screen\nA: select   B: close"
+	elseif keyboard then
+		controlsLabel.Text = "Press the letter on a button to open it,\nand again to close. Space: next card."
+	else
+		controlsLabel.Text = ""
+	end
+end
+
+UserInputService.LastInputTypeChanged:Connect(refreshControls)
+refreshControls()
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if UserInputService:GetFocusedTextBox() then
+		return -- typing a price
+	end
+	local key = input.KeyCode
+
+	-- during a pack reveal: Space / Enter / A moves on to the next card
+	if revealGui.Enabled then
+		if key == Enum.KeyCode.Space or key == Enum.KeyCode.Return or key == Enum.KeyCode.ButtonA then
+			clickSignal:Fire()
+		end
+		return
+	end
+
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		if processed then
+			return
+		end
+		local panel = keyToPanel[key]
+		if panel then
+			openPanel(panel)
+		end
+	elseif key == Enum.KeyCode.ButtonY then
+		-- Y: jump to the menu, or close whatever is open
+		if window.Visible then
+			closeWindow()
+		elseif GuiService.SelectedObject then
+			GuiService.SelectedObject = nil
+		else
+			GuiService.SelectedObject = packsButton
+		end
+	elseif key == Enum.KeyCode.ButtonB then
+		if window.Visible then
+			closeWindow()
+		end
+	elseif key == Enum.KeyCode.ButtonR1 then
+		cyclePanel(1)
+	elseif key == Enum.KeyCode.ButtonL1 then
+		cyclePanel(-1)
 	end
 end)
 

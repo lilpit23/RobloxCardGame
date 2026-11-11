@@ -67,6 +67,21 @@ type / set / effect / story combos (`Combos.luau`), a Luck stat with eight sourc
   smoke, gold sparkle); check performance with 64 slots x 8 players.
 - [ ] **D6 Balance.** Deck slot prices, combo sizes and the luck cap all need playtest tuning.
 
+## Track P — pacing (the owner played it and found it far too fast)
+
+Done: wallet cap that rises with each rebirth, pack prices that rise 1.8% per pack in a run,
+flatter rarity and effect multipliers, Auto Packer perk, simulator models the cap and inflation.
+
+- [ ] **P1 Tune against real play.** Ask the owner how long the first rebirth took and adjust
+  `Rebirth.Levels`, `Packs.InflationPerPack`, store tier and slot prices. Target: first rebirth in
+  1.5 to 2.5 hours of normal play, each later rebirth a little longer.
+- [ ] **P2 Simulate later rebirths.** The simulator stops at the first rebirth; extend it to carry
+  the vault and bonuses through several rebirths.
+- [ ] **P3 More long-term goals.** Achievements with permanent rewards, a prestige layer above
+  rebirth, tower floors beyond 50, set mastery (own every effect of every card in a set).
+- [ ] **P4 Slow the tower.** Battle Tower rewards are fixed amounts that can outrun the economy
+  early; scale them to the wallet cap.
+
 ## Track T — tooling and tests (do T1 first; it unblocks real verification)
 
 - [x] **T1 Toolchain + CI.** Done: selene, `luau-lsp analyze` and `rojo build` run in GitHub

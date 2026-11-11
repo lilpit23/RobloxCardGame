@@ -2,6 +2,7 @@
 -- SLOTS: each slot is one card, rolled from that slot's rarity odds — commons in the common
 -- slots, a guaranteed rare-or-better in the last slot, like a real booster pack.
 local Cards = require(script.Parent.Cards)
+local Perks = require(script.Parent.Perks)
 
 local Packs = {}
 
@@ -75,6 +76,24 @@ Packs.ById = {}
 for _, pack in ipairs(Packs.List) do
 	pack.size = #pack.slots
 	Packs.ById[pack.id] = pack
+end
+
+-- Cash packs get a little dearer every time you open one in the same run (reset by rebirth).
+-- This is the main brake on progress: early packs are cheap, the hundredth is not.
+Packs.InflationPerPack = 0.018
+
+-- Total price of the next `count` packs, given how many of this pack were already opened
+-- this run. Includes the Bulk Deal perk. Aura packs never inflate.
+function Packs.price(pack, opened, count, perks)
+	local base = Perks.packCost(pack, perks)
+	if pack.currency ~= "cash" then
+		return base * count
+	end
+	local total = 0
+	for index = 0, count - 1 do
+		total = total + math.floor(base * (1 + Packs.InflationPerPack) ^ ((opened or 0) + index))
+	end
+	return total
 end
 
 -- The pack new players get for free.

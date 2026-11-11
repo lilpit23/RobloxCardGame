@@ -7,7 +7,7 @@ const path = require('path');
 
 const HOURS = Number(process.argv[2] || 6);
 const shared = path.join(__dirname, '..', 'src', 'shared');
-const MODULES = ['Config', 'Format', 'Cards', 'Packs', 'Combos', 'Deck', 'Upgrades', 'Rebirth'];
+const MODULES = ['Config', 'Format', 'Cards', 'Perks', 'Packs', 'Combos', 'Deck', 'Upgrades', 'Rebirth'];
 
 const program = `
 local sources, HOURS = ...
@@ -34,6 +34,9 @@ local Upgrades, Rebirth, Format, Config = require({ __mod = "Upgrades" }), requi
 local rng = { NextNumber = function() return math.random() end, NextInteger = function(_, a, b) return math.random(a, b) end }
 
 local cash, time, tier, slotLevel, packsOpened = 0, 0, 1, 0, 0
+local packCounts = {} -- packs opened this run per pack id (prices rise with it)
+local CAP = Rebirth.cashCap(0)
+local function priceOf(pack) return Packs.price(pack, packCounts[pack.id], 1, nil) end
 local owned, deck = {}, {}
 local STEP = 10
 
@@ -53,11 +56,12 @@ end
 local function openPack(pack)
   for _, key in ipairs(Packs.open(pack, 0, rng)) do owned[key] = (owned[key] or 0) + 1 end
   packsOpened = packsOpened + 1
+  packCounts[pack.id] = (packCounts[pack.id] or 0) + 1
 end
 local function bestBooster(budget)
   local best = nil
   for _, pack in ipairs(Packs.List) do
-    if pack.kind == "booster" and pack.storeTier <= tier and pack.cost <= budget and (best == nil or pack.cost > best.cost) then
+    if pack.kind == "booster" and pack.storeTier <= tier and priceOf(pack) <= budget and (best == nil or pack.cost > best.cost) then
       best = pack
     end
   end
@@ -74,7 +78,7 @@ local rebirthLogged = false
 local dirty, sinceRebuild = false, 0
 while time < HOURS * 3600 do
   time = time + STEP
-  cash = cash + income() * STEP
+  cash = math.min(CAP, cash + income() * STEP) -- wallet cap until the first rebirth
   local changed = false
 
   local nextTier = Upgrades.StoreTiers[tier + 1]
@@ -87,9 +91,10 @@ while time < HOURS * 3600 do
   -- spend up to half the cash on the best booster available
   local budget, bought = cash * 0.5, 0
   local pack = bestBooster(budget)
-  while pack and bought < 10 and budget >= pack.cost do
-    budget = budget - pack.cost
-    cash = cash - pack.cost
+  while pack and bought < 10 and budget >= priceOf(pack) do
+    local price = priceOf(pack)
+    budget = budget - price
+    cash = cash - price
     openPack(pack)
     bought = bought + 1
     changed = true
@@ -126,7 +131,8 @@ while time < HOURS * 3600 do
     end
     if hasCards then
       rebirthLogged = true
-      log("first rebirth's cash and cards met (aura not simulated)")
+      log("FIRST REBIRTH possible: cash and cards met (aura not simulated). Stopping.")
+      break
     end
   end
 end

@@ -46,6 +46,10 @@ way so the repo stays the whole game.
   goes to one register per store (`session.pending`). Deck bonuses come only from `Combos.evaluate`
   and luck only from `Luck.sources`; add new bonus sources there so server and client agree.
 - Card effects are `Cards.Variants` (Shiny, Slimy, Lucky, Shadow, Golden, Prismatic).
+- Pacing levers, in order of strength: the wallet cap (`Rebirth.cashCap`; all cash must go
+  through `addCash`), pack price inflation (`Packs.price`, counts in `data.packCounts`), deck
+  slot and store tier prices, and the rarity / effect income multipliers in `Cards.luau`. The
+  multipliers stack, so small changes there move the whole game.
 - Money: passes and products live in `Config.Monetization` (id 0 = not on sale). Product grants
   must stay receipt-safe (`data.receipts`, save before returning PurchaseGranted). Anything
   bought with Robux that can turn into random cards must respect `session.restricted`.

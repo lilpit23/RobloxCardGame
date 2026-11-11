@@ -7,9 +7,24 @@ local Perks = {}
 
 local START_CASH = { 500, 5000, 50000, 500000, 5000000 }
 
-Perks.Order = { "startCash", "discount", "fortune", "aura", "offline", "vault" }
+Perks.Order = { "packer", "startCash", "discount", "fortune", "aura", "offline", "vault" }
+
+local PACKER_SECONDS = { 10, 7, 5, 3, 2 } -- seconds between automatic packs, by level
 
 Perks.Defs = {
+	packer = {
+		name = "Auto Packer",
+		max = #PACKER_SECONDS,
+		cost = function(level)
+			return 1500 * 4 ^ level
+		end,
+		describe = function(level)
+			if level < 1 then
+				return "Buys and opens a pack for you every " .. PACKER_SECONDS[1] .. " seconds. Pick the pack in the Pack Shop."
+			end
+			return "Opens a pack every " .. PACKER_SECONDS[level] .. " seconds. Pick the pack in the Pack Shop."
+		end,
+	},
 	startCash = {
 		name = "Head Start",
 		max = #START_CASH,
@@ -84,6 +99,11 @@ local function levelOf(perks, id)
 end
 
 Perks.level = levelOf
+
+-- Seconds between automatic packs, or nil if the Auto Packer is not owned.
+function Perks.packerInterval(perks)
+	return PACKER_SECONDS[levelOf(perks, "packer")]
+end
 
 function Perks.startCash(perks)
 	return START_CASH[levelOf(perks, "startCash")] or 0

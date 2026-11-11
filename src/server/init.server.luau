@@ -60,6 +60,9 @@ local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> clien
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
 local SeasonClaimRemote = newRemote("RemoteEvent", "SeasonClaim")
+local OpenRebirthRemote = newRemote("RemoteEvent", "OpenRebirth") -- server -> client
+local AutoPackSetRemote = newRemote("RemoteEvent", "AutoPackSet")
+local AutoPullRemote = newRemote("RemoteEvent", "AutoPull") -- server -> client
 local MarketStateRemote = newRemote("RemoteEvent", "MarketState") -- server -> client
 local MarketListRemote = newRemote("RemoteEvent", "MarketList")
 local MarketCancelRemote = newRemote("RemoteEvent", "MarketCancel")
@@ -203,6 +206,9 @@ local function pushState(player)
 		season = data.season,
 		featuredSet = Season.featuredSet(),
 		passes = dataPasses[data] or {},
+		cashCap = Rebirth.cashCap(data.rebirths),
+		packCounts = data.packCounts,
+		autoPack = data.autoPack,
 		restricted = session.restricted,
 		incomePerSec = income,
 		auraPerSec = aura,
@@ -335,6 +341,19 @@ local function firstEmptySlot(data)
 	return nil
 end
 
+-- Adds cash, respecting the wallet cap (see Rebirth.cashCap). Returns what was really added.
+-- bypassCap is for money a player is owed by someone else (market sales).
+local function addCash(data, amount, bypassCap)
+	if amount <= 0 then
+		return 0
+	end
+	if not bypassCap then
+		amount = math.min(amount, math.max(0, Rebirth.cashCap(data.rebirths) - data.cash))
+	end
+	data.cash = data.cash + amount
+	return amount
+end
+
 local function spend(data, currency, cost)
 	if currency ~= "cash" and currency ~= "aura" then
 		return false
@@ -365,6 +384,52 @@ local function isBulkSize(count)
 	return false
 end
 
+-- Opens `count` packs that have already been paid for: rolls the cards, adds them to the
+-- profile and returns the list for the client to show.
+-- autoSell (Auto Packer only): 1-3 sells spare plain cards up to that rarity (see Config).
+local function openPacks(player, data, pack, count, autoSell)
+	-- this week's featured set gets bonus luck
+	local luck = luckLevel(data)
+	if pack.sets and table.find(pack.sets, Season.featuredSet()) then
+		luck = luck + Season.FeaturedLuck
+	end
+
+	local pulled = {}
+	local rareCount = 0 -- Epic or better, for the quest
+	for _ = 1, count do
+		for _, key in ipairs(Packs.open(pack, luck, rng)) do
+			local def, variantId = Cards.parse(key)
+			local order = Cards.Rarities[def.rarity].order
+			if order >= 4 then
+				rareCount = rareCount + 1
+			end
+			if order >= 6 then
+				-- Mythic and Secret pulls are announced to the whole server
+				AnnounceRemote:FireAllClients(player.DisplayName, key)
+			end
+			local isNew = data.collection[key] == nil
+			local auraBonus = Cards.getAura(key) * Config.AuraPullBonus
+			data.aura = data.aura + auraBonus
+
+			local spare = variantId == "normal" and (data.inventory[key] or 0) >= Config.FuseCount
+			local sold = autoSell ~= nil and autoSell > 0 and order <= autoSell and spare and not isNew
+			if sold then
+				addCash(data, Cards.getSellValue(key))
+			else
+				addCard(data, key, 1)
+			end
+			table.insert(pulled, { key = key, isNew = isNew, auraBonus = auraBonus, sold = sold })
+		end
+	end
+
+	data.packsOpened = data.packsOpened + count
+	data.packCounts[pack.id] = (data.packCounts[pack.id] or 0) + count
+	seasonXp(player, Season.Xp.pack * count)
+	questProgress(player, "open_packs", count)
+	questProgress(player, "pull_rare", rareCount)
+	return pulled
+end
+
 BuyPackRemote.OnServerInvoke = function(player, packId, count)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
@@ -392,47 +457,63 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 		data.freePacks = data.freePacks - 1
 	elseif count == 1 and pack.kind == "booster" and data.gifts > 0 then
 		data.gifts = data.gifts - 1 -- a free booster gift
-	elseif not spend(data, pack.currency, Perks.packCost(pack, data.perks) * count) then
+	elseif not spend(data, pack.currency, Packs.price(pack, data.packCounts[pack.id], count, data.perks)) then
 		return { ok = false, error = "Not enough " .. pack.currency .. "." }
 	end
 
-	-- this week's featured set gets bonus luck
-	local luck = luckLevel(data)
-	if pack.sets and table.find(pack.sets, Season.featuredSet()) then
-		luck = luck + Season.FeaturedLuck
-	end
-
-	local keys = {}
-	for _ = 1, count do
-		for _, key in ipairs(Packs.open(pack, luck, rng)) do
-			table.insert(keys, key)
-		end
-	end
-
-	local pulled = {}
-	local rareCount = 0 -- Epic or better, for the quest
-	for _, key in ipairs(keys) do
-		local def = Cards.parse(key)
-		if def and Cards.Rarities[def.rarity].order >= 4 then
-			rareCount = rareCount + 1
-		end
-		if def and Cards.Rarities[def.rarity].order >= 6 then
-			-- Mythic and Secret pulls are announced to the whole server
-			AnnounceRemote:FireAllClients(player.DisplayName, key)
-		end
-		local isNew = data.collection[key] == nil
-		addCard(data, key, 1)
-		local auraBonus = Cards.getAura(key) * Config.AuraPullBonus
-		data.aura = data.aura + auraBonus
-		table.insert(pulled, { key = key, isNew = isNew, auraBonus = auraBonus })
-	end
-	data.packsOpened = data.packsOpened + count
-	seasonXp(player, Season.Xp.pack * count)
-	questProgress(player, "open_packs", count)
-	questProgress(player, "pull_rare", rareCount)
-
+	local pulled = openPacks(player, data, pack, count, nil)
 	touch(player, true)
 	return { ok = true, cards = pulled }
+end
+
+-- Auto Packer settings: which pack, on/off, and how much to auto-sell.
+AutoPackSetRemote.OnServerEvent:Connect(function(player, packId, on, sell)
+	if not allow(player, "AutoPackSet", 4, 8) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or type(packId) ~= "string" or type(on) ~= "boolean" or type(sell) ~= "number" then
+		return
+	end
+	if sell ~= sell or sell % 1 ~= 0 or sell < 0 or sell > Config.AutoSellMax then
+		return
+	end
+	local pack = Packs.ById[packId]
+	if packId ~= "" and (pack == nil or pack.currency ~= "cash") then
+		return
+	end
+	if Perks.packerInterval(data.perks) == nil then
+		notify(player, "Unlock the Auto Packer in Upgrades → Aura Shrine first.", "error")
+		return
+	end
+	data.autoPack = { packId = packId, on = on and packId ~= "", sell = sell }
+	touch(player, true)
+end)
+
+-- Runs once a second per player from the income loop.
+local function runAutoPacker(player, session, data)
+	local interval = Perks.packerInterval(data.perks)
+	local settings = data.autoPack
+	if interval == nil or not settings.on then
+		return
+	end
+	session.autoTimer = (session.autoTimer or 0) + 1
+	if session.autoTimer < interval then
+		return
+	end
+	session.autoTimer = 0
+	local pack = Packs.ById[settings.packId]
+	if pack == nil or pack.currency ~= "cash" or data.upgrades.store + 1 < pack.storeTier then
+		return
+	end
+	if not spend(data, "cash", Packs.price(pack, data.packCounts[pack.id], 1, data.perks)) then
+		return -- cannot afford it right now; try again next time
+	end
+	local pulled = openPacks(player, data, pack, 1, settings.sell)
+	AutoPullRemote:FireClient(player, pulled)
+	updateShowcase(player)
+	session.rev = session.rev + 1
+	session.dirty = true
 end
 
 ---------------------------------------------------------------------
@@ -509,11 +590,18 @@ SellCardRemote.OnServerEvent:Connect(function(player, key, amount)
 		return
 	end
 	amount = math.min(math.floor(amount), data.inventory[key] or 0)
-	if amount < 1 or not takeCard(data, key, amount) then
+	if amount < 1 then
 		return
 	end
 	local value = Cards.getSellValue(key) * amount
-	data.cash = data.cash + value
+	if data.cash + value > Rebirth.cashCap(data.rebirths) then
+		notify(player, "Your wallet is full. Spend some cash or rebirth before selling.", "error")
+		return
+	end
+	if not takeCard(data, key, amount) then
+		return
+	end
+	value = addCash(data, value)
 	notify(player, "Sold for " .. Format.cash(value), "cash")
 	questProgress(player, "sell", amount)
 	touch(player, true)
@@ -675,7 +763,7 @@ BattleRemote.OnServerInvoke = function(player)
 		data.tower = floor
 		seasonXp(player, Season.Xp.floor)
 		data.aura = data.aura + aura
-		data.cash = data.cash + cash
+		cash = addCash(data, cash)
 		result.aura = aura
 		result.cash = cash
 		touch(player, false)
@@ -733,7 +821,7 @@ DailyClaimRemote.OnServerEvent:Connect(function(player)
 	local income = totals(data)
 	local cash = 100 + math.floor(income * 120)
 	data.aura = data.aura + aura
-	data.cash = data.cash + cash
+	cash = addCash(data, cash)
 	session.questRev = session.questRev + 1
 	notify(player, "Day " .. daily.streak .. " reward: +" .. Format.short(aura) .. " aura and " .. Format.cash(cash), "good")
 	touch(player, false)
@@ -757,7 +845,7 @@ SeasonClaimRemote.OnServerEvent:Connect(function(player)
 	local reward = Season.reward(level, data.season.id, income)
 	data.season.claimed = level
 	if reward.kind == "cash" then
-		data.cash = data.cash + reward.amount
+		addCash(data, reward.amount)
 	elseif reward.kind == "aura" then
 		data.aura = data.aura + reward.amount
 	elseif reward.kind == "gift" then
@@ -837,6 +925,7 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	data.inventory = {}
 	data.slots = {}
 	data.upgrades = { store = 0, slots = 0, luck = 0, auto = 0, charm = 0 }
+	data.packCounts = {} -- pack prices start low again
 	data.freePacks = 1
 	session.pending = 0
 	Plots.setPending(session.plot, 0)
@@ -959,7 +1048,7 @@ MarketBuyRemote.OnServerEvent:Connect(function(player, listingId)
 					end
 					table.remove(sellerData.listings, index)
 					addCard(data, listing.key, 1)
-					sellerData.cash = sellerData.cash + listing.price
+					addCash(sellerData, listing.price, true)
 					local name = Cards.getDisplayName(listing.key)
 					notify(player, "You bought " .. name .. " for " .. Format.cash(listing.price) .. "!", "good")
 					notify(seller, player.DisplayName .. " bought your " .. name .. " for " .. Format.cash(listing.price) .. "!", "cash")
@@ -1196,7 +1285,7 @@ Plots.init({
 			return
 		end
 		session.pending = 0
-		data.cash = data.cash + amount
+		addCash(data, amount)
 		questProgress(player, "collect", amount)
 		Plots.setPending(plot, 0)
 		touch(player, false)
@@ -1215,6 +1304,10 @@ Plots.init({
 
 	onTrade = function(_, player)
 		OpenTradeRemote:FireClient(player)
+	end,
+
+	onVault = function(_, player)
+		OpenRebirthRemote:FireClient(player)
 	end,
 
 	onTower = function(player)
@@ -1276,7 +1369,9 @@ task.spawn(function()
 					end
 				end
 				if income > 0 then
-					session.pending = session.pending + income * storeMult(data)
+					-- the register stops filling once the wallet cap is reached
+					local room = math.max(0, Rebirth.cashCap(data.rebirths) - data.cash)
+					session.pending = math.min(session.pending + income * storeMult(data), room)
 					if not hasAutoCollect(data) then
 						Plots.setPending(session.plot, session.pending)
 					end
@@ -1284,7 +1379,7 @@ task.spawn(function()
 
 				-- Auto Collector upgrade: bank everything straight away.
 				if hasAutoCollect(data) and session.pending >= 1 then
-					data.cash = data.cash + session.pending
+					addCash(data, session.pending)
 					questProgress(player, "collect", session.pending)
 					session.pending = 0
 					Plots.setPending(session.plot, 0)
@@ -1294,6 +1389,8 @@ task.spawn(function()
 					data.aura = data.aura + auraGain * auraMult(data)
 					session.dirty = true
 				end
+
+				runAutoPacker(player, session, data)
 
 				-- a free booster gift for every stretch of play time
 				session.playSeconds = session.playSeconds + 1
@@ -1432,7 +1529,7 @@ local function onPlayerAdded(player)
 		local income = totals(data)
 		local earned = math.floor(income * away * Config.OfflineRate * Perks.offlineMult(data.perks))
 		if earned >= 1 then
-			data.cash = data.cash + earned
+			earned = addCash(data, earned)
 			notify(player, "Welcome back! Your store earned " .. Format.cash(earned) .. " while you were away.", "good")
 		end
 	end
@@ -1450,7 +1547,7 @@ local function onPlayerRemoving(player)
 	local data = PlayerData.get(player)
 	if session and data then
 		-- bank uncollected cash so nothing is lost
-		data.cash = data.cash + session.pending
+		addCash(data, session.pending)
 		session.pending = 0
 	end
 	local trade = trades[player]

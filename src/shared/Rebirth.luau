@@ -92,7 +92,7 @@ function Rebirth.check(profile)
 	for _, id in ipairs(level.cards) do
 		local def = Cards.ById[id]
 		table.insert(requirements, {
-			text = "Own " .. def.name .. " (" .. def.rarity .. ", any variant)",
+			text = "Own " .. def.name .. "  (" .. def.rarity .. " from " .. Cards.Sets[def.set].name .. " packs, any effect)",
 			met = Rebirth.ownsCard(profile, id),
 		})
 	end

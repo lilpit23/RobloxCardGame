@@ -508,32 +508,6 @@ local SETS = {
 			},
 		},
 	},
-	{
-		-- Promo cards never come from packs: they are season pass rewards.
-		id = "promo",
-		promo = true,
-		code = "PRM",
-		name = "Promo",
-		icon = "🎁",
-		color = Color3.fromRGB(235, 80, 140),
-		sources = "Seasonal folklore figures",
-		mult = 16,
-		packCost = 250000,
-		cards = {
-			Epic = {
-				{ "Jack Frost", "❄️", "m" },
-				{ "The Easter Hare", "🐇", "b" },
-				{ "Cupid", "💘", "s" },
-			},
-			Legendary = {
-				{ "Father Time", "⏳", "m" },
-				{ "The Sandman", "🌙", "m" },
-			},
-			Mythic = {
-				{ "Santa Claus", "🎅", "s" },
-			},
-		},
-	},
 }
 
 ---------------------------------------------------------------------

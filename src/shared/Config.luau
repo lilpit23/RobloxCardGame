@@ -5,7 +5,8 @@ return {
 	AutosaveInterval = 120,
 
 	SetCompleteBonus = 0.25, -- +25% income for every set with all of its cards collected
-	PackBulkSizes = { 1, 3, 10 }, -- how many packs can be opened in one go
+	PackBulkSizes = { 1, 2, 3 }, -- how many packs anyone can open in one go
+	PassBulkSize = 10, -- opening this many at once needs the "megaOpen" game pass
 	CollectionBonusPerCard = 0.005, -- +0.5% income for every card (and variant) in the collection book
 	BaseSlots = 4, -- active deck slots a new store starts with
 	MaxSlots = 64,
@@ -32,7 +33,7 @@ return {
 
 		-- Game passes: bought once, kept forever. "robux" is only a suggested price; the real
 		-- price is whatever you set on the Creator Dashboard.
-		PassOrder = { "doubleCash", "doubleAura", "autoCollect", "extraSlots", "bigVault", "lucky", "vip" },
+		PassOrder = { "doubleCash", "doubleAura", "megaOpen", "autoCollect", "extraSlots", "bigVault", "lucky", "vip" },
 		Passes = {
 			doubleCash = { id = 0, robux = 399, name = "2x Cash", text = "Your deck earns double cash, forever." },
 			doubleAura = { id = 0, robux = 299, name = "2x Aura", text = "Your cards radiate double aura, forever." },
@@ -40,6 +41,7 @@ return {
 			extraSlots = { id = 0, robux = 249, name = "+8 Deck Slots", text = "Eight extra deck slots from the start of every run." },
 			bigVault = { id = 0, robux = 199, name = "Bigger Vault", text = "Two extra vault slots: carry more cards through every rebirth." },
 			lucky = { id = 0, robux = 349, name = "Lucky Clover", text = "+5 luck, forever." },
+			megaOpen = { id = 0, robux = 199, name = "10x Pack Opening", text = "Open 10 packs at once with the x10 button in the Pack Shop." },
 			vip = { id = 0, robux = 99, name = "VIP", text = "A crown on your store sign and +2 luck." },
 		},
 

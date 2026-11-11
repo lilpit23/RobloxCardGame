@@ -45,7 +45,6 @@ local state = {
 	daily = { lastDay = 0, streak = 0 },
 	today = 0,
 	gifts = 0,
-	season = { id = 0, xp = 0, claimed = 0 },
 	featuredSet = "",
 	passes = {},
 	restricted = true,
@@ -272,6 +271,7 @@ make("UIListLayout", {
 	Padding = UDim.new(0, 6),
 	VerticalAlignment = Enum.VerticalAlignment.Bottom,
 	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	SortOrder = Enum.SortOrder.LayoutOrder,
 }, toastHolder)
 
 local TOAST_COLORS = {
@@ -282,7 +282,16 @@ local TOAST_COLORS = {
 	announce = Color3.fromRGB(215, 150, 30),
 }
 
+local MAX_TOASTS = 5
+local toasts = {} -- oldest first
+local toastOrder = 0
+
 local function toast(text, kind)
+	-- never more than MAX_TOASTS on screen: the oldest makes room
+	while #toasts >= MAX_TOASTS do
+		table.remove(toasts, 1):Destroy()
+	end
+	toastOrder = toastOrder + 1
 	local label = make("TextLabel", {
 		Size = UDim2.new(1, 0, 0, 36),
 		BackgroundColor3 = TOAST_COLORS[kind] or COLORS.button,
@@ -292,12 +301,21 @@ local function toast(text, kind)
 		TextColor3 = COLORS.text,
 		TextSize = 16,
 		TextWrapped = true,
+		LayoutOrder = toastOrder,
 	}, toastHolder)
 	round(label, 10)
+	table.insert(toasts, label)
 	task.delay(3.5, function()
+		if label.Parent == nil then
+			return -- already pushed out by newer messages
+		end
 		local tween = TweenService:Create(label, TweenInfo.new(0.4), { BackgroundTransparency = 1, TextTransparency = 1 })
 		tween:Play()
 		tween.Completed:Wait()
+		local index = table.find(toasts, label)
+		if index then
+			table.remove(toasts, index)
+		end
 		label:Destroy()
 	end)
 end
@@ -793,11 +811,23 @@ panels.Packs = function()
 			local x = -160
 			for _, size in ipairs(Config.PackBulkSizes) do
 				if size > 1 then
-					newButton(row, "x" .. size, UDim2.new(1, x, 0, 60), UDim2.new(0, 72, 0, 26), bulkColor, function()
+					newButton(row, "x" .. size, UDim2.new(1, x, 0, 60), UDim2.new(0, 46, 0, 26), bulkColor, function()
 						buyPack(pack, size)
 					end).TextSize = 14
-					x = x + 76
+					x = x + 50
 				end
+			end
+			-- x10 is a game pass perk; without the pass the button leads to the Store
+			if state.passes.megaOpen then
+				newButton(row, "x" .. Config.PassBulkSize, UDim2.new(1, x, 0, 60), UDim2.new(0, 48, 0, 26), Color3.fromRGB(120, 80, 200), function()
+					buyPack(pack, Config.PassBulkSize)
+				end).TextSize = 14
+			else
+				newButton(row, "x" .. Config.PassBulkSize .. " 💎", UDim2.new(1, x, 0, 60), UDim2.new(0, 48, 0, 26), COLORS.locked, function()
+					currentPanel = "Store"
+					body.CanvasPosition = Vector2.new(0, 0)
+					renderPanel()
+				end).TextSize = 11
 			end
 		end
 		if tier < pack.storeTier then
@@ -1291,9 +1321,6 @@ local function hasClaimable()
 	if state.today > 0 and state.daily.lastDay < state.today then
 		return true
 	end
-	if state.season.claimed < Season.levelFor(state.season.xp) then
-		return true
-	end
 	if Achievements.anyClaimable(state, state.achievements) then
 		return true
 	end
@@ -1306,56 +1333,11 @@ local function hasClaimable()
 end
 
 panels.Quests = function()
-	titleLabel.Text = "🎯 Quests & Season"
+	titleLabel.Text = "🎯 Daily Quests"
 	renderedQuestRev = state.questRev
 	useList()
 	local buttonPosition = UDim2.new(1, -160, 0, 14)
 	local buttonSize = UDim2.new(0, 148, 0, 44)
-
-	-- Season pass: a free reward track that resets every month
-	local season = state.season
-	local seasonLevel = Season.levelFor(season.xp)
-	local seasonRow = newRow(0, 96)
-	seasonRow.BackgroundColor3 = Color3.fromRGB(70, 52, 22)
-	newLabel(seasonRow, "🏅 " .. Season.name(season.id) .. "  ·  level " .. seasonLevel .. "/" .. Season.MaxLevel, UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 24), {
-		Font = Enum.Font.FredokaOne,
-		TextSize = 19,
-		TextColor3 = Color3.fromRGB(255, 215, 90),
-	})
-	local seasonBar = make("Frame", {
-		Position = UDim2.new(0, 14, 0, 36),
-		Size = UDim2.new(1, -190, 0, 18),
-		BackgroundColor3 = Color3.fromRGB(25, 25, 35),
-		BorderSizePixel = 0,
-	}, seasonRow)
-	round(seasonBar, 6)
-	local within = seasonLevel >= Season.MaxLevel and 1 or (season.xp % Season.XpPerLevel) / Season.XpPerLevel
-	local seasonFill = make("Frame", {
-		Size = UDim2.new(within, 0, 1, 0),
-		BackgroundColor3 = Color3.fromRGB(215, 160, 50),
-		BorderSizePixel = 0,
-	}, seasonBar)
-	round(seasonFill, 6)
-	newLabel(seasonBar, season.xp .. " XP   ·   pack +" .. Season.Xp.pack .. ", tower floor +" .. Season.Xp.floor .. ", quest +" .. Season.Xp.quest, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		ZIndex = 2,
-	})
-	local nextLevel = season.claimed + 1
-	if nextLevel > Season.MaxLevel then
-		newLabel(seasonRow, "Every reward claimed. A new season starts next month.", UDim2.new(0, 14, 0, 60), UDim2.new(1, -190, 0, 28), { TextSize = 13, TextColor3 = COLORS.dim })
-		newButton(seasonRow, "Complete ✓", UDim2.new(1, -160, 0, 26), buttonSize, COLORS.locked, nil).AutoButtonColor = false
-	else
-		local reward = Season.reward(nextLevel, season.id, state.incomePerSec)
-		newLabel(seasonRow, "Level " .. nextLevel .. " reward:  " .. Season.rewardText(reward), UDim2.new(0, 14, 0, 60), UDim2.new(1, -190, 0, 28), { TextSize = 13 })
-		if nextLevel <= seasonLevel then
-			newButton(seasonRow, "Claim", UDim2.new(1, -160, 0, 26), buttonSize, COLORS.good, function()
-				Remotes.SeasonClaim:FireServer()
-			end)
-		else
-			newButton(seasonRow, "Level " .. nextLevel, UDim2.new(1, -160, 0, 26), buttonSize, COLORS.locked, nil).AutoButtonColor = false
-		end
-	end
 
 	-- Daily login reward
 	local dailyRow = newRow(1, 72)

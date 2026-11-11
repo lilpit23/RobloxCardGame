@@ -63,7 +63,6 @@ local BattleRemote = newRemote("RemoteFunction", "Battle")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
-local SeasonClaimRemote = newRemote("RemoteEvent", "SeasonClaim")
 local OpenRebirthRemote = newRemote("RemoteEvent", "OpenRebirth") -- server -> client
 local AutoPackSetRemote = newRemote("RemoteEvent", "AutoPackSet")
 local AutoPullRemote = newRemote("RemoteEvent", "AutoPull") -- server -> client
@@ -213,7 +212,6 @@ local function pushState(player)
 		today = Quests.today(),
 		slotCount = slotCount(data),
 		gifts = data.gifts,
-		season = data.season,
 		featuredSet = Season.featuredSet(),
 		passes = dataPasses[data] or {},
 		cashCap = Rebirth.cashCap(data.rebirths),
@@ -285,26 +283,6 @@ local function ensureQuests(player, data)
 	local income = totals(data)
 	data.quests = { day = day, list = Quests.generate(day, player.UserId, income) }
 	return true
-end
-
--- Starts a fresh season pass when the month changes.
-local function ensureSeason(data)
-	local id = Season.currentId()
-	if data.season.id ~= id then
-		data.season = { id = id, xp = 0, claimed = 0 }
-	end
-end
-
-local function seasonXp(player, amount)
-	local session = sessions[player]
-	local data = PlayerData.get(player)
-	if session == nil or data == nil or amount <= 0 then
-		return
-	end
-	ensureSeason(data)
-	data.season.xp = data.season.xp + amount
-	session.questRev = session.questRev + 1
-	session.dirty = true
 end
 
 -- Adds progress to today's quests of one type.
@@ -391,13 +369,14 @@ end)
 ---------------------------------------------------------------------
 -- Packs
 ---------------------------------------------------------------------
-local function isBulkSize(count)
+-- Anyone can open 1 to 3 packs at once; 10 at once needs the game pass.
+local function isBulkSize(data, count)
 	for _, size in ipairs(Config.PackBulkSizes) do
 		if count == size then
 			return true
 		end
 	end
-	return false
+	return count == Config.PassBulkSize and hasPass(data, "megaOpen")
 end
 
 -- Opens `count` packs that have already been paid for: rolls the cards, adds them to the
@@ -440,7 +419,6 @@ local function openPacks(player, data, pack, count, autoSell)
 
 	data.packsOpened = data.packsOpened + count
 	data.packCounts[pack.id] = (data.packCounts[pack.id] or 0) + count
-	seasonXp(player, Season.Xp.pack * count)
 	questProgress(player, "open_packs", count)
 	questProgress(player, "pull_rare", rareCount)
 	return pulled
@@ -465,7 +443,7 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 	if count == nil then
 		count = 1
 	end
-	if type(count) ~= "number" or not isBulkSize(count) then
+	if type(count) ~= "number" or not isBulkSize(data, count) then
 		return { ok = false, error = "Something went wrong." }
 	end
 
@@ -878,7 +856,6 @@ BattleRemote.OnServerInvoke = function(player)
 	if win then
 		local aura, cash = Battle.reward(floor, Rebirth.cashCap(data.rebirths))
 		data.tower = floor
-		seasonXp(player, Season.Xp.floor)
 		data.aura = data.aura + aura
 		cash = addCash(data, cash)
 		result.aura = aura
@@ -905,7 +882,6 @@ QuestClaimRemote.OnServerEvent:Connect(function(player, index)
 		return
 	end
 	quest.claimed = true
-	seasonXp(player, Season.Xp.quest)
 	local aura = Quests.reward(data.rebirths)
 	data.aura = data.aura + aura
 	session.questRev = session.questRev + 1
@@ -942,37 +918,6 @@ DailyClaimRemote.OnServerEvent:Connect(function(player)
 	session.questRev = session.questRev + 1
 	notify(player, "Day " .. daily.streak .. " reward: +" .. Format.short(aura) .. " aura and " .. Format.cash(cash), "good")
 	touch(player, false)
-end)
-
-SeasonClaimRemote.OnServerEvent:Connect(function(player)
-	if not allow(player, "SeasonClaim", 4, 8) then
-		return
-	end
-	local session = sessions[player]
-	local data = PlayerData.get(player)
-	if session == nil or data == nil then
-		return
-	end
-	ensureSeason(data)
-	local level = data.season.claimed + 1
-	if level > Season.levelFor(data.season.xp) then
-		return
-	end
-	local income = totals(data)
-	local reward = Season.reward(level, data.season.id, income)
-	data.season.claimed = level
-	if reward.kind == "cash" then
-		addCash(data, reward.amount)
-	elseif reward.kind == "aura" then
-		data.aura = data.aura + reward.amount
-	elseif reward.kind == "gift" then
-		data.gifts = data.gifts + reward.amount
-	elseif reward.kind == "promo" then
-		addCard(data, reward.card, 1)
-	end
-	session.questRev = session.questRev + 1
-	notify(player, "🏅 Season level " .. level .. ": " .. Season.rewardText(reward), "good")
-	touch(player, true)
 end)
 
 AchievementClaimRemote.OnServerEvent:Connect(function(player, achievementId)
@@ -1709,7 +1654,6 @@ local function onPlayerAdded(player)
 	end
 	data.lastSeen = os.time()
 	ensureQuests(player, data)
-	ensureSeason(data)
 	updateShowcase(player)
 	broadcastMarket()
 

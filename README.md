@@ -85,11 +85,11 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 
 - **Pack opening.** The pack wobbles harder the better its best card is, then bursts open with a
   flash; big pulls shake the screen, and Mythic or Secret pulls are announced to the whole server.
-- **Season pass.** A free 30-level reward track that resets every month. Opening packs, clearing
-  tower floors and finishing quests earn season XP; rewards are cash, aura, free boosters and
-  **promo cards** that never appear in packs.
 - **Free boosters.** Every 15 minutes of play earns a free booster of any unlocked set (up to 3
   waiting). Each week one set is **featured** and its packs get +50% luck.
+- **Opening several packs.** Anyone can open 1, 2 or 3 packs at once. Opening 10 at once is the
+  "10x Pack Opening" game pass.
+- **Notifications.** At most five messages show at once; older ones make room for new ones.
 - **Full Art.** A rare effect (x8 cash) where the picture fills the card.
 - **Showcase.** Two big frames at each store entrance show the owner's two best deck cards.
 - **Store.** Things players can buy with Robux. See "Selling things for Robux" below.
@@ -155,7 +155,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Combos.luau` | Deck combos: type, set, effect and story combos and their bonuses |
 | `src/shared/Luck.luau` | Every source of the Luck stat |
 | `src/shared/Deck.luau` | How "Auto-fill Deck" chooses cards |
-| `src/shared/Season.luau` | Season pass levels and rewards, weekly featured set |
+| `src/shared/Season.luau` | The weekly featured set |
 | `src/shared/Achievements.luau` | Achievement goals and their permanent bonus |
 | `src/shared/Battle.luau` | Battle rules, tower enemy strength, tower rewards |
 | `src/shared/Quests.luau` | Quest types, goals and rewards, daily reward size |
@@ -181,6 +181,7 @@ item on Roblox and paste its id into the game; until then it shows "Coming soon"
 | +8 Deck Slots | Eight extra deck slots every run | 249 R$ |
 | Bigger Vault | Two extra vault slots | 199 R$ |
 | Lucky Clover | +5 luck, forever | 349 R$ |
+| 10x Pack Opening | Open 10 packs at once | 199 R$ |
 | VIP | Crown on the store sign and +2 luck | 99 R$ |
 
 | Product (bought any number of times) | What it does | Suggested price |

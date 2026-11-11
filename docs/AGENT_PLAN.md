@@ -126,8 +126,8 @@ flatter rarity and effect multipliers, Auto Packer perk, simulator models the ca
 - [x] **G8 Trading + market.** Done: two-sided trades with double confirm, and cash listings other
   players in the server can buy. Follow-ups: card pictures in the trade window, a cross-server
   market (MemoryStore), a sales tax to drain cash, trade history. Needs the S2 audit.
-- [ ] **G9 Limited-time content.** Lucky events, the weekly featured set, the monthly season pass and
-  promo cards are done. Still to do: a Golden Pack that drops in the plaza for whoever reaches it.
+- [ ] **G9 Limited-time content.** Lucky events and the weekly featured set are done. (A monthly season pass and promo cards
+  were built and then removed at the owner's request: the rewards were too strong.) Still to do: a Golden Pack that drops in the plaza for whoever reaches it.
 - [x] **G10 More cards.** Done: Neon Arcade set (24 cards) with Neon, Arcade and Glitch packs, plus the
   Omega Pack. Follow-up: a set filter in the collection book, and rebirths that need Neon cards.
 

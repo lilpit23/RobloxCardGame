@@ -901,9 +901,9 @@ local function sortValue(key)
 	if deckSort == "rarity" then
 		return Cards.Rarities[def.rarity].order * 1e9 + Cards.getIncome(key)
 	elseif deckSort == "set" then
-		return -(table.find(Cards.SetOrder, def.set) * 1000 + def.number)
+		return -((table.find(Cards.SetOrder, def.set) or 0) * 1000 + def.number)
 	elseif deckSort == "effect" then
-		return table.find(Cards.VariantOrder, variantId) * 1e12 + Cards.getIncome(key)
+		return (table.find(Cards.VariantOrder, variantId) or 0) * 1e12 + Cards.getIncome(key)
 	elseif deckSort == "copies" then
 		return state.inventory[key] or 0
 	end

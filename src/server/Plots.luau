@@ -527,14 +527,14 @@ local function buildPlaza(map, layout)
 		local angle = math.rad(120 + (index - 1) * 60)
 		local outward = Vector3.new(math.cos(angle), 0, math.sin(angle))
 		local base = outward * 17
-		local facing = CFrame.lookAt(base, base + outward)
-		newPart(map, "GlobalBoardPost", Vector3.new(1, 4, 1), facing + Vector3.new(0, 2.5, 0), Color3.fromRGB(40, 40, 48), Enum.Material.Metal)
-		local board = newPart(map, "GlobalBoard", Vector3.new(12, 10, 0.6), facing + Vector3.new(0, 9.5, 0), Color3.fromRGB(25, 25, 38))
-		local label = newSurfaceLabel(board, Enum.NormalId.Front, "Loading…")
-		label.TextScaled = false
-		label.TextSize = 30
-		label.TextYAlignment = Enum.TextYAlignment.Top
-		globalBoardLabels[index] = label
+		local outwardFacing = CFrame.lookAt(base, base + outward)
+		newPart(map, "GlobalBoardPost", Vector3.new(1, 4, 1), outwardFacing + Vector3.new(0, 2.5, 0), Color3.fromRGB(40, 40, 48), Enum.Material.Metal)
+		local globalBoard = newPart(map, "GlobalBoard", Vector3.new(12, 10, 0.6), outwardFacing + Vector3.new(0, 9.5, 0), Color3.fromRGB(25, 25, 38))
+		local globalLabel = newSurfaceLabel(globalBoard, Enum.NormalId.Front, "Loading…")
+		globalLabel.TextScaled = false
+		globalLabel.TextSize = 30
+		globalLabel.TextYAlignment = Enum.TextYAlignment.Top
+		globalBoardLabels[index] = globalLabel
 	end
 end
 

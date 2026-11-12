@@ -45,6 +45,7 @@ local state = {
 	challengeDay = 0,
 	titles = {},
 	title = "",
+	loadouts = {},
 	vaultSlots = 1,
 	luck = 0,
 	quests = { day = 0, list = {} },
@@ -1089,8 +1090,24 @@ panels.Cards = function()
 		renderPanel()
 	end).TextSize = 14
 
+	-- saved decks: one tap to remember the deck, one to swap back to it
+	local savedRow = newRow(4, 40)
+	savedRow.BackgroundTransparency = 1
+	newLabel(savedRow, "Saved decks:", UDim2.new(0, 4, 0, 0), UDim2.new(0, 96, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
+	for number = 1, Config.Loadouts do
+		local saved = state.loadouts[tostring(number)]
+		local size = type(saved) == "table" and #saved or 0
+		local x = 100 + (number - 1) * 176
+		newButton(savedRow, size > 0 and ("Load " .. number .. " (" .. size .. ")") or ("Deck " .. number .. " empty"), UDim2.new(0, x, 0, 3), UDim2.new(0, 108, 0, 34), size > 0 and COLORS.button or COLORS.locked, function()
+			Remotes.Loadout:FireServer("load", number)
+		end).TextSize = 12
+		newButton(savedRow, "Save", UDim2.new(0, x + 112, 0, 3), UDim2.new(0, 54, 0, 34), COLORS.good, function()
+			Remotes.Loadout:FireServer("save", number)
+		end).TextSize = 12
+	end
+
 	-- sort and filter
-	local sortRow = newRow(4, 40)
+	local sortRow = newRow(5, 40)
 	sortRow.BackgroundTransparency = 1
 	for index, sort in ipairs(SORTS) do
 		newButton(sortRow, sort[2], UDim2.new(0, (index - 1) * 80, 0, 2), UDim2.new(0, 76, 0, 34), deckSort == sort[1] and COLORS.button or COLORS.row, function()
@@ -1117,7 +1134,7 @@ panels.Cards = function()
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -12, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = 5,
+		LayoutOrder = 6,
 	}, body)
 	make("UIGridLayout", {
 		CellSize = UDim2.new(0, 120, 0, 241),
@@ -1237,7 +1254,7 @@ panels.Cards = function()
 
 	if order == 0 then
 		page:Destroy()
-		newLabel(newRow(5, 60), deckSetFilter == "all" and "No cards yet — open a pack from the Pack Shop!" or "No cards from that set. Tap the set button to change the filter.", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+		newLabel(newRow(6, 60), deckSetFilter == "all" and "No cards yet — open a pack from the Pack Shop!" or "No cards from that set. Tap the set button to change the filter.", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
 			TextSize = 18,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextColor3 = COLORS.dim,
@@ -2226,6 +2243,19 @@ panels.Store = function()
 		local resetRow = newRow(order + 2, 60)
 		resetRow.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
 		newLabel(resetRow, "🧪 Owner tool: wipe your own save to test the game from the start. Only you can see this.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), { TextSize = 13 })
+		local toolRow = newRow(order + 3, 46)
+		toolRow.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
+		for index, tool in ipairs({
+			{ "cash", "Fill wallet" },
+			{ "aura", "+1M aura" },
+			{ "cards", "+30 cards" },
+			{ "rebirth", "Rebirth ready" },
+			{ "tower", "+4 floors" },
+		}) do
+			newButton(toolRow, "🧪 " .. tool[2], UDim2.new((index - 1) / 5, 4, 0, 6), UDim2.new(1 / 5, -8, 0, 34), COLORS.locked, function()
+				Remotes.OwnerTool:FireServer(tool[1])
+			end).TextSize = 12
+		end
 		local resetButton
 		resetButton = newButton(resetRow, "Reset my save", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.bad, function()
 			if os.clock() < resetConfirmUntil then

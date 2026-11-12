@@ -49,6 +49,7 @@ local function newData()
 		challengeDay = 0, -- Quests.today() of the last daily challenge won
 		titles = {}, -- [titleId] = true for titles earned (see Titles.luau)
 		title = "", -- the title being worn, "" for none
+		loadouts = {}, -- saved decks: [tostring(1..Config.Loadouts)] = array of cardKeys
 		quests = { day = 0, list = {} }, -- today's quests, see Quests.luau
 		daily = { lastDay = 0, streak = 0 }, -- daily login reward
 		packCounts = {}, -- packs opened this run, per pack id (drives pack price; reset by rebirth)

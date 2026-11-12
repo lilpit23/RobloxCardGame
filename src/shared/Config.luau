@@ -8,6 +8,7 @@ return {
 	PackBulkSizes = { 1, 2, 3 }, -- how many packs anyone can open in one go
 	PassBulkSize = 10, -- opening this many at once needs the "megaOpen" game pass
 	CollectionBonusPerCard = 0.005, -- +0.5% income for every card (and variant) in the collection book
+	Loadouts = 3, -- how many decks a player can save and swap between
 	BaseSlots = 4, -- active deck slots a new store starts with
 	MaxSlots = 64,
 	FuseCount = 3, -- copies of the same card needed to fuse into the next variant

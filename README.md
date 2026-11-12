@@ -56,6 +56,9 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     how far different collections get.
     Keyboard: **1-5** play a card, **Tab** aims, **Space** passes (gamepad: **RB** aims, **X**
     passes).
+    **Saved decks:** the Deck screen can remember three decks and swap between them.
+    **Owner testing tools** (Store screen, creator or Studio only): fill the wallet, add aura,
+    add random cards, meet the next rebirth's requirements, skip tower floors, reset the save.
     **Weekly event:** one bonus for everyone that changes each week (Gold Rush +25% cash, Aura
     Bloom +50% aura, Lucky Week +3 luck, Tower Week double tower aura), set in `Season.luau`.
     **Titles** (set completions, Golden sets, tower bosses, rebirths, collection size) pay aura

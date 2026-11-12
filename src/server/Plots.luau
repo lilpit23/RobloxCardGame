@@ -104,13 +104,15 @@ local function slotPosition(index)
 	return x, STAND_FIRST_Z + row * STAND_SPACING_Z
 end
 
+local PEDESTAL_COLOR = Color3.fromRGB(60, 60, 70)
+
 local function buildStand(plot, index)
 	local x, z = slotPosition(index)
 	local folder = Instance.new("Folder")
 	folder.Name = "Stand" .. index
 	folder.Parent = plot.standsFolder
 
-	newPart(folder, "Pedestal", Vector3.new(4.4, 0.6, 1.2), plot.cframe * CFrame.new(x, 1.3, z), Color3.fromRGB(60, 60, 70))
+	local pedestal = newPart(folder, "Pedestal", Vector3.new(4.4, 0.6, 1.2), plot.cframe * CFrame.new(x, 1.3, z), PEDESTAL_COLOR)
 
 	local card = newPart(folder, "Card", Vector3.new(4, 5.6, 0.3), plot.cframe * CFrame.new(x, 4.4, z), Color3.fromRGB(20, 20, 25))
 	card.Transparency = 0.8
@@ -136,7 +138,7 @@ local function buildStand(plot, index)
 		end
 	end)
 
-	plot.stands[index] = { folder = folder, card = card, guis = { gui }, prompt = prompt }
+	plot.stands[index] = { folder = folder, card = card, pedestal = pedestal, guis = { gui }, prompt = prompt }
 end
 
 -- Wall style of the store building at each tier (tier 1 is an open-air stall).
@@ -816,13 +818,20 @@ function Plots.setCard(plot, index, key)
 			CardView.new(key).Parent = gui
 		end
 	end
-	if key then
+	local def = key and Cards.parse(key) or nil
+	if key and def then
 		stand.card.Transparency = 0
 		stand.prompt.ObjectText = Cards.getDisplayName(key)
 		stand.prompt.Enabled = true
+		-- the pedestal takes the rarity's colour, and glows from Legendary up
+		local rarity = Cards.Rarities[def.rarity]
+		stand.pedestal.Color = def.rarity == "Secret" and Color3.fromRGB(255, 70, 70) or rarity.color
+		stand.pedestal.Material = rarity.order >= 5 and Enum.Material.Neon or Enum.Material.SmoothPlastic
 	else
 		stand.card.Transparency = 0.8
 		stand.prompt.Enabled = false
+		stand.pedestal.Color = PEDESTAL_COLOR
+		stand.pedestal.Material = Enum.Material.SmoothPlastic
 	end
 end
 

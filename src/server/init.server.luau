@@ -66,6 +66,8 @@ local DuelStartRemote = newRemote("RemoteFunction", "DuelStart")
 local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
 local BattleDeckRemote = newRemote("RemoteEvent", "BattleDeck")
 local SetTitleRemote = newRemote("RemoteEvent", "SetTitle")
+local LoadoutRemote = newRemote("RemoteEvent", "Loadout")
+local OwnerToolRemote = newRemote("RemoteEvent", "OwnerTool")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
@@ -237,6 +239,7 @@ local function pushState(player)
 		challengeDay = data.challengeDay,
 		titles = data.titles,
 		title = data.title,
+		loadouts = data.loadouts,
 		vaultSlots = vaultSlots(data),
 		perks = data.perks,
 		tower = data.tower,
@@ -947,6 +950,63 @@ EquipBestRemote.OnServerEvent:Connect(function(player)
 	touch(player, true)
 end)
 
+-- Saved decks. action = "save" (remember the deck as it is now) or "load" (rebuild the deck
+-- from a saved one, using whichever of its cards the player still owns).
+LoadoutRemote.OnServerEvent:Connect(function(player, action, number)
+	if not allow(player, "Loadout", 2, 4) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil or type(number) ~= "number" or number % 1 ~= 0 or number < 1 or number > Config.Loadouts then
+		return
+	end
+	local count = slotCount(data)
+	local name = tostring(number)
+	if action == "save" then
+		local keys = {}
+		for index = 1, count do
+			local key = data.slots[tostring(index)]
+			if key then
+				table.insert(keys, key)
+			end
+		end
+		data.loadouts[name] = keys
+		notify(player, "Deck " .. number .. " saved (" .. #keys .. " cards).", "good")
+		touch(player, true)
+	elseif action == "load" then
+		local saved = data.loadouts[name]
+		if type(saved) ~= "table" or #saved == 0 then
+			notify(player, "Deck " .. number .. " is empty. Save a deck there first.", "error")
+			return
+		end
+		-- everything back to the inventory, then place the saved cards that are still owned
+		for index = 1, count do
+			local slotKey = tostring(index)
+			if data.slots[slotKey] then
+				addCard(data, data.slots[slotKey], 1)
+				data.slots[slotKey] = nil
+			end
+		end
+		local placed = 0
+		for _, key in ipairs(saved) do
+			if placed >= count then
+				break
+			end
+			if type(key) == "string" and Cards.parse(key) and takeCard(data, key, 1) then
+				placed = placed + 1
+				data.slots[tostring(placed)] = key
+			end
+		end
+		for slot = 1, count do
+			Plots.setCard(session.plot, slot, data.slots[tostring(slot)])
+		end
+		local missing = math.min(#saved, count) - placed
+		notify(player, "Deck " .. number .. " loaded." .. (missing > 0 and ("  " .. missing .. " of its cards are gone, so those slots are empty.") or ""), missing > 0 and "info" or "good")
+		touch(player, true)
+	end
+end)
+
 ---------------------------------------------------------------------
 -- Upgrades
 ---------------------------------------------------------------------
@@ -1034,6 +1094,52 @@ ResetDataRemote.OnServerEvent:Connect(function(player)
 	end
 	PlayerData.reset(player)
 	player:Kick("Your save was reset. Rejoin to start fresh.")
+end)
+
+-- Owner-only testing tools, so late-game screens can be reached without hours of play.
+-- Only the game's creator (or anyone in Studio) can use them; see isOwner.
+OwnerToolRemote.OnServerEvent:Connect(function(player, action)
+	if not allow(player, "OwnerTool", 2, 4) or not isOwner(player) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil then
+		return
+	end
+	if action == "cash" then
+		local cap = Rebirth.cashCap(data.rebirths)
+		addCash(data, cap < math.huge and cap or 1e15)
+		notify(player, "🧪 Wallet filled.", "info")
+	elseif action == "aura" then
+		data.aura = data.aura + 1000000
+		notify(player, "🧪 +1M aura.", "info")
+	elseif action == "cards" then
+		-- 30 random cards from every set, with random effects
+		for _ = 1, 30 do
+			local def = Cards.List[rng:NextInteger(1, #Cards.List)]
+			local variantId = Cards.VariantOrder[rng:NextInteger(1, #Cards.VariantOrder)]
+			addCard(data, Cards.makeKey(def.id, variantId), 3)
+		end
+		notify(player, "🧪 30 random cards added (3 copies each).", "info")
+	elseif action == "rebirth" then
+		local level = Rebirth.Levels[data.rebirths + 1]
+		if level == nil then
+			notify(player, "🧪 Already at the last rebirth.", "info")
+			return
+		end
+		for _, id in ipairs(level.cards) do
+			addCard(data, id, 1)
+		end
+		data.aura = math.max(data.aura, level.aura)
+		addCash(data, level.cash)
+		notify(player, "🧪 You now meet the next rebirth's requirements.", "info")
+	elseif action == "tower" then
+		data.tower = math.min(Battle.MaxFloor, data.tower + 4)
+		notify(player, "🧪 Skipped to tower floor " .. math.min(Battle.MaxFloor, data.tower + 1) .. ".", "info")
+	else
+		return
+	end
+	touch(player, true)
 end)
 
 -- Choose a card for one of the two storefront frames. side = "left", "right", or "auto" to go

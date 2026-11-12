@@ -11,6 +11,7 @@ const SETS = [
   ['midnight', 'Midnight Classics', '夜', '#8250c8'],
   ['olympus', 'Olympus', '神', '#3cbeaa'],
   ['knights', 'Knights and Outlaws', '騎', '#32965a'],
+  ['rome', 'Glory of Rome', '羅', '#aa232d'],
 ];
 // One Booster and one (darker) Elite cover per set, plus the Champion Pack.
 const PACKS = [];
@@ -75,7 +76,7 @@ const thumb = `<style>${base}
   .chip:nth-child(2) { background: #ff7ac0; } .chip:nth-child(3) { background: #7fd6ff; }
 </style><div class="bg" style="background-position: 30% 0"></div>${fan(38)}
 <div class="title">Aura<br>Packs</div><div class="tag">Open packs. Build your store. Collect them all.</div>
-<div class="chips"><div class="chip">6 sets · 222 cards</div><div class="chip">Rebirths</div><div class="chip">Battle Tower</div></div>`;
+<div class="chips"><div class="chip">7 sets · 259 cards</div><div class="chip">Rebirths</div><div class="chip">Battle Tower</div></div>`;
 
 const pack = (name, kanji, color, count) => `<style>${base}
   body { background: transparent; }
@@ -94,7 +95,7 @@ const pack = (name, kanji, color, count) => `<style>${base}
     filter: drop-shadow(0 4px 0 #1a0b2e); padding: 0 20px; }
   .count { position: absolute; left: 0; right: 0; bottom: 70px; text-align: center; font-weight: 800; font-size: 30px; color: rgba(20,10,35,.85); letter-spacing: .12em; }
 </style><div class="pack"><div class="crimp top"></div><div class="crimp bottom"></div>
-<div class="seal"><div class="kanji">${kanji}</div></div><div class="name">${name.replace(/ (Booster|Elite|Pack)$/, '<br>$1').replace(' to the ', ' to<br>the ').replace(' and ', ' and<br>')}</div>
+<div class="seal"><div class="kanji">${kanji}</div></div><div class="name">${name.replace(/ (Booster|Elite|Pack)$/, '<br>$1').replace(' to the ', ' to<br>the ').replace(' and ', ' and<br>').replace(' of ', ' of<br>')}</div>
 <div class="count">${count} CARDS</div><div class="shine"></div></div>`;
 
 (async () => {

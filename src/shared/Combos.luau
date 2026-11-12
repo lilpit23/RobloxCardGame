@@ -47,6 +47,11 @@ Combos.Stories = {
 	{ name = "Merry Men", cards = { "robin_hood", "little_john", "friar_tuck", "will_scarlet", "maid_marian" }, income = 0.75 },
 	{ name = "The Round Table", cards = { "king_arthur", "sir_lancelot", "sir_galahad", "sir_gawain", "sir_percival" }, aura = 1 },
 	{ name = "Sword in the Stone", cards = { "king_arthur", "merlin", "excalibur" }, luck = 4 },
+	{ name = "Bread and Circuses", cards = { "gladiator", "charioteer", "colosseum_fan" }, luck = 3 },
+	{ name = "Antony and Cleopatra", cards = { "mark_antony", "cleopatra" }, income = 0.5 },
+	{ name = "The Punic Wars", cards = { "scipio_africanus", "hannibal", "war_elephant" }, aura = 1 },
+	{ name = "The Emperors", cards = { "augustus", "trajan", "hadrian_the_builder", "marcus_aurelius" }, income = 1 },
+	{ name = "Founding of Rome", cards = { "romulus_and_remus", "capitoline_goose", "the_eternal_city" }, luck = 5 },
 }
 
 for _, story in ipairs(Combos.Stories) do

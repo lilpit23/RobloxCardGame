@@ -39,7 +39,9 @@ way so the repo stays the whole game.
   ruby slippers from the 1939 Oz film, a film's monster make-up) can still be protected, and
   some names are trademarked for merchandise. Before adding a set, check the work is public
   domain in the US, and say so in the pull request. Never add characters from works still under
-  copyright, renamed or not.
+  copyright, renamed or not. Real people are only acceptable when they are ancient history
+  (the Glory of Rome set): Roblox bans depicting current or recent political figures, and living
+  or recently dead people also have likeness rights. No modern politicians, ever.
 - A card's id is its name slugified (`winnie_the_pooh`) and is what gets saved. Renaming or
   removing a card orphans owned copies, so add a migration when that matters.
 - The active deck is `data.slots` (4 to 64 slots, shown as rows of cards in the store). Its cash

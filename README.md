@@ -252,13 +252,20 @@ and keeps its best cards in the vault. It does not model aura, luck upgrades or 
 hand, and it plays faster than a person, so treat the times as a lower bound. Re-run it after
 changing prices.
 
-Last run (after the price ladder was retuned):
+Two runs with the first four rebirth costs as they are now (the times swing a lot with luck):
 
-| Rebirth | Time in that run |
-| --- | --- |
-| 1 | 1h 14m |
-| 2 | 1h 29m |
-| 3 | 2h 05m |
+| Rebirth | Run A | Run B (24 hours) |
+| --- | --- | --- |
+| 1 | 1h 14m | 0h 54m |
+| 2 | 1h 29m | 0h 56m |
+| 3 | 2h 05m | 0h 57m |
+| 4 | not reached | 2h 17m |
+
+Run B then needed 8 hours for rebirth 5 and would have needed about 130 for rebirth 6: once
+every set is unlocked the simulated player's income stops growing (about $1.7B/s), while the
+costs kept climbing 20x. Rebirths 5 to 8 were therefore cut to climb about 3x ($20T, $60T,
+$200T, $600T) and their aura requirements to 1M, 3M, 8M and 20M. Those new numbers have not
+been through a full simulation yet.
 
 ## Art
 

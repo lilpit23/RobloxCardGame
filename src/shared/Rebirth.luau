@@ -8,15 +8,18 @@ local Rebirth = {}
 
 -- Levels[n] = what it takes to go from rebirth n-1 to rebirth n.
 -- cards = card ids you must own (any variant; display, inventory or vault all count).
+-- Costs climb about 20x per rebirth while each rebirth unlocks a new, richer set (1 to 4).
+-- After that every set is open and income only creeps up, so the costs climb about 3x.
+-- Aura per second does not grow with later sets at all, so the aura asked for flattens too.
 Rebirth.Levels = {
 	{ cash = 300000000, aura = 500, cards = { "piglet", "winnie_the_pooh" } }, -- Storybook Friends
 	{ cash = 5000000000, aura = 5000, cards = { "tigger", "mad_hatter", "jim_hawkins" } }, -- + High Seas
 	{ cash = 100000000000, aura = 40000, cards = { "long_john_silver", "zhu_bajie" } }, -- + Journey to the West
 	{ cash = 2000000000000, aura = 250000, cards = { "moby_dick", "nezha", "dr_watson" } }, -- + Midnight Classics
-	{ cash = 40000000000000, aura = 1500000, cards = { "sun_wukong", "sherlock_holmes" } },
-	{ cash = 800000000000000, aura = 10000000, cards = { "jade_emperor", "count_dracula" } },
-	{ cash = 16000000000000000, aura = 100000000, cards = { "hercules", "medusa" } }, -- + Olympus
-	{ cash = 320000000000000000, aura = 1000000000, cards = { "zeus", "king_arthur", "merlin" } }, -- + Knights and Outlaws
+	{ cash = 20000000000000, aura = 1000000, cards = { "sun_wukong", "sherlock_holmes" } },
+	{ cash = 60000000000000, aura = 3000000, cards = { "jade_emperor", "count_dracula" } },
+	{ cash = 200000000000000, aura = 8000000, cards = { "hercules", "medusa" } }, -- + Olympus
+	{ cash = 600000000000000, aura = 20000000, cards = { "zeus", "king_arthur", "merlin" } }, -- + Knights and Outlaws
 }
 
 Rebirth.IncomePerRebirth = 0.5 -- +50% income per rebirth

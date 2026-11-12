@@ -878,6 +878,10 @@ local function effectsGuide()
 	return table.concat(parts, "   ·   ")
 end
 
+-- What the collection book is showing (declared here because the Deck screen can jump to it).
+local bookSet = Cards.SetOrder[1] -- a set id, or "combos" for the combo book
+local bookCard = nil -- card id being looked at in detail, or nil for the binder page
+
 -- How the Deck screen is sorted and filtered.
 local deckSort = "income"
 local deckSetFilter = "all" -- a set id, or "all"
@@ -1143,8 +1147,6 @@ panels.Cards = function()
 end
 
 -- Collection book: one binder page per set ---------------------------------
-local bookSet = Cards.SetOrder[1]
-local bookCard = nil -- card id being looked at in detail, or nil for the binder page
 
 -- How many copies of an exact card + effect the player has, and where.
 local function countCopies(key)

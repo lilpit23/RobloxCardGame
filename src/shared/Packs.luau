@@ -56,8 +56,8 @@ end
 table.insert(Packs.List, {
 	id = "champion",
 	name = "Champion Pack",
-	currency = "cash",
-	cost = 20000000000000,
+	currency = "aura", -- the one pack bought with aura; aura packs never get dearer
+	cost = 500000,
 	storeTier = 7,
 	color = Color3.fromRGB(245, 245, 250),
 	slots = { CHAMPION, CHAMPION, CHAMPION, CHAMPION, CHAMPION },

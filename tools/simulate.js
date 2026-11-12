@@ -1,5 +1,5 @@
 // Balance simulator: plays a simple greedy player through the real game tables and prints
-// how long each milestone takes. Run:  cd tools && npm install && node simulate.js [hours]
+// how long each store tier and each rebirth takes. Run:  cd tools && npm install && node simulate.js [hours]
 // It loads the Luau modules from src/shared in a Lua VM with small stubs for Roblox types.
 const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 const fs = require('fs');
@@ -34,29 +34,48 @@ local Upgrades, Rebirth, Format, Config = require({ __mod = "Upgrades" }), requi
 local rng = { NextNumber = function() return math.random() end, NextInteger = function(_, a, b) return math.random(a, b) end }
 
 local cash, time, tier, slotLevel, packsOpened = 0, 0, 1, 0, 0
+local rebirths, runStart = 0, 0
 local packCounts = {} -- packs opened this run per pack id (prices rise with it)
-local CAP = Rebirth.cashCap(0)
-local function priceOf(pack) return Packs.price(pack, packCounts[pack.id], 1, nil) end
 local owned, deck = {}, {}
 local STEP = 10
 
-local function clock()
-  local h = math.floor(time / 3600)
-  local m = math.floor(time % 3600 / 60)
-  local s = math.floor(time % 60)
-  return string.format("%dh %02dm %02ds", h, m, s)
+local function clock(t)
+  t = t or time
+  return string.format("%dh %02dm", math.floor(t / 3600), math.floor(t % 3600 / 60))
 end
-local function log(text) print(string.format("%-12s %s", clock(), text)) end
+local function log(text) print(string.format("%-9s %s", clock(), text)) end
+local function priceOf(pack) return Packs.price(pack, packCounts[pack.id], 1, nil) end
 local deckScore = 0 -- cached: scoring the deck is the slow part
-local function income() return deckScore * Upgrades.StoreTiers[tier].mult end
-local function rebuildDeck(slots)
-  deck = Deck.autoFill(owned, slots)
+local function income()
+  return deckScore * Upgrades.StoreTiers[tier].mult * Rebirth.incomeMult(rebirths)
+end
+local function rebuildDeck()
+  deck = Deck.autoFill(owned, Config.BaseSlots + slotLevel)
   deckScore = Deck.score(deck)
 end
 local function openPack(pack)
-  for _, key in ipairs(Packs.open(pack, 0, rng)) do owned[key] = (owned[key] or 0) + 1 end
+  for _, key in ipairs(Packs.open(pack, rebirths, rng)) do owned[key] = (owned[key] or 0) + 1 end
   packsOpened = packsOpened + 1
   packCounts[pack.id] = (packCounts[pack.id] or 0) + 1
+end
+local function ownsId(id)
+  for key in pairs(owned) do
+    local def = Cards.parse(key)
+    if def and def.id == id then return true end
+  end
+  return false
+end
+-- the booster of the set holding a rebirth card the bot still lacks (nil if it has them all)
+local function wantedBooster()
+  local level = Rebirth.Levels[rebirths + 1]
+  if level == nil then return nil end
+  for _, id in ipairs(level.cards) do
+    if not ownsId(id) then
+      local pack = Packs.ById[Cards.ById[id].set .. "_booster"]
+      if pack.storeTier <= tier then return pack end
+    end
+  end
+  return nil
 end
 local function bestBooster(budget)
   local best = nil
@@ -70,29 +89,35 @@ end
 local function ownedCount() local n = 0 for _, c in pairs(owned) do n = n + c end return n end
 
 openPack(Packs.ById[Packs.StarterId]) -- the free starter pack
-rebuildDeck(Config.BaseSlots)
+rebuildDeck()
 log("start: free pack opened, earning " .. Format.cash(income()) .. "/s")
 
-local rebirthLevel = Rebirth.Levels[1]
-local rebirthLogged = false
 local dirty, sinceRebuild = false, 0
 while time < HOURS * 3600 do
   time = time + STEP
-  cash = math.min(CAP, cash + income() * STEP) -- wallet cap until the first rebirth
+  local cap = Rebirth.cashCap(rebirths)
+  cash = math.min(cap, cash + income() * STEP)
   local changed = false
 
   local nextTier = Upgrades.StoreTiers[tier + 1]
   if nextTier and cash >= nextTier.cost then
     cash = cash - nextTier.cost
     tier = tier + 1
-    log("store tier " .. tier .. " (" .. nextTier.name .. "), earning " .. Format.cash(income()) .. "/s")
+    log("  store tier " .. tier .. " (" .. nextTier.name .. "), earning " .. Format.cash(income()) .. "/s")
   end
 
-  -- spend up to half the cash on the best booster available
-  local budget, bought = cash * 0.5, 0
-  local pack = bestBooster(budget)
-  while pack and bought < 10 and budget >= priceOf(pack) do
+  -- spend half of what was just earned on packs and save the rest for the next store tier
+  -- or rebirth; alternate between the best booster and the set holding a card the next
+  -- rebirth needs
+  local budget, bought = math.min(cash, math.max(income() * STEP * 0.5, 100)), 0
+  while bought < 10 do
+    local wanted = wantedBooster()
+    local pack = (wanted and bought % 2 == 0 and priceOf(wanted) <= budget) and wanted or bestBooster(budget)
+    if pack == nil then break end
     local price = priceOf(pack)
+    -- a sensible player stops buying a pack once inflation has made it cost more than two
+    -- minutes of income, and saves for the next store tier or rebirth instead
+    if price > math.max(income() * 120, 200) and cash < cap * 0.9 then break end
     budget = budget - price
     cash = cash - price
     openPack(pack)
@@ -100,43 +125,41 @@ while time < HOURS * 3600 do
     changed = true
   end
 
-  -- buy a deck slot when there are spare cards to put in it
   local slotDef = Upgrades.Defs.slots
   while slotLevel < slotDef.max and cash >= slotDef.cost(slotLevel) and ownedCount() > Config.BaseSlots + slotLevel do
     cash = cash - slotDef.cost(slotLevel)
     slotLevel = slotLevel + 1
     changed = true
-    if (Config.BaseSlots + slotLevel) % 8 == 0 then
-      log((Config.BaseSlots + slotLevel) .. " deck slots")
-    end
   end
 
-  -- rebuild the deck at most once a simulated minute
   dirty = dirty or changed
   sinceRebuild = sinceRebuild + STEP
   if dirty and sinceRebuild >= 60 then
-    rebuildDeck(Config.BaseSlots + slotLevel)
+    rebuildDeck()
     dirty, sinceRebuild = false, 0
   end
 
-  if not rebirthLogged and cash >= rebirthLevel.cash then
-    local hasCards = true
-    for _, id in ipairs(rebirthLevel.cards) do
-      local found = false
-      for key in pairs(owned) do
-        local def = Cards.parse(key)
-        if def and def.id == id then found = true end
+  -- rebirth as soon as the cash and the cards are there (aura is not simulated)
+  local level = Rebirth.Levels[rebirths + 1]
+  if level and cash >= level.cash and wantedBooster() == nil then
+    local ready = true
+    for _, id in ipairs(level.cards) do ready = ready and ownsId(id) end
+    if ready then
+      rebirths = rebirths + 1
+      log("REBIRTH " .. rebirths .. " after " .. clock(time - runStart) .. " in this run (tier " .. tier .. ", " .. (Config.BaseSlots + slotLevel) .. " slots, " .. Format.cash(income()) .. "/s)")
+      -- keep the best cards the vault can hold; everything else resets
+      local kept = {}
+      for index = 1, math.min(#deck, Rebirth.vaultSlots(rebirths - 1)) do
+        kept[deck[index]] = (kept[deck[index]] or 0) + 1
       end
-      hasCards = hasCards and found
-    end
-    if hasCards then
-      rebirthLogged = true
-      log("FIRST REBIRTH possible: cash and cards met (aura not simulated). Stopping.")
-      break
+      owned, packCounts = kept, {}
+      cash, tier, slotLevel, runStart = 0, 1, 0, time
+      openPack(Packs.ById[Packs.StarterId])
+      rebuildDeck()
     end
   end
 end
-log("end: tier " .. tier .. ", " .. (Config.BaseSlots + slotLevel) .. " slots, " .. packsOpened .. " packs, earning " .. Format.cash(income()) .. "/s")
+log("end: " .. rebirths .. " rebirths, tier " .. tier .. ", " .. (Config.BaseSlots + slotLevel) .. " slots, " .. packsOpened .. " packs, earning " .. Format.cash(income()) .. "/s")
 `;
 
 const L = lauxlib.luaL_newstate();

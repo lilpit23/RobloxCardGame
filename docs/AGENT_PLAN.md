@@ -75,8 +75,9 @@ flatter rarity and effect multipliers, Auto Packer perk, simulator models the ca
 - [ ] **P1 Tune against real play.** Ask the owner how long the first rebirth took and adjust
   `Rebirth.Levels`, `Packs.InflationPerPack`, store tier and slot prices. Target: first rebirth in
   1.5 to 2.5 hours of normal play, each later rebirth a little longer.
-- [ ] **P2 Simulate later rebirths.** The simulator stops at the first rebirth; extend it to carry
-  the vault and bonuses through several rebirths.
+- [x] **P2 Simulate later rebirths.** Done: the simulator plays through several rebirths. Latest
+  run: rebirths 1 to 3 take about 1h15, 1h30 and 2h05. Follow-ups: model aura, luck and combos,
+  and check rebirths 4 to 8.
 - [ ] **P3 More long-term goals.** Achievements are done (permanent +3% income each). Still to do:
   a prestige layer above rebirth, tower floors beyond 50, set mastery (own every effect of every
   card in a set).

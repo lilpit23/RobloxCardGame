@@ -29,7 +29,8 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     Spartacus). Each unlocks at a higher store tier (there
     are seven). Every set has its own colour and emblem, a 5-card **Booster** (3 commons, 1
     uncommon, 1 guaranteed rare-or-better) and a pricier **Elite** pack. Later sets cost more and
-    earn more. Packs are bought with cash only. The collection book is a binder page per set with card numbers (secret cards are
+    earn more. The **Champion Pack**, which pulls Epic-or-better cards from every set, costs
+    500,000 aura and needs the top store tier. The collection book is a binder page per set with card numbers (secret cards are
     numbered past the set size), plus a **combo book** of every story combo. Completing a set
     gives +25% income.
 11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
@@ -216,18 +217,29 @@ To switch them on:
 4. Buy one of each in a private test to check it arrives.
 
 Prices are set on the dashboard; the suggested ones in the tables are only a starting point. Time
-Warp is hidden from players in places where paid random items are restricted, because the cash it
-gives can buy packs.
+Warp and the aura bundles are hidden from players in places where paid random items are
+restricted, because the cash and aura they give can buy packs.
 
 ## Balance simulator
 
 ```bash
-cd tools && npm install && node simulate.js 2
+cd tools && npm install && node simulate.js 8
 ```
 
-Plays a simple greedy player through the real game tables for the given number of hours and
-prints when each store tier, deck size and the first rebirth are reached. It opens packs faster
-than a person can, so treat the times as a lower bound. Re-run it after changing prices.
+Plays a simple player through the real game tables for the given number of hours, across
+several rebirths, and prints when each store tier and each rebirth is reached. The simulated
+player spends half its income on packs, saves the rest, chases the cards the next rebirth needs
+and keeps its best cards in the vault. It does not model aura, luck upgrades or combos chosen by
+hand, and it plays faster than a person, so treat the times as a lower bound. Re-run it after
+changing prices.
+
+Last run (after the price ladder was retuned):
+
+| Rebirth | Time in that run |
+| --- | --- |
+| 1 | 1h 14m |
+| 2 | 1h 29m |
+| 3 | 2h 05m |
 
 ## Art
 

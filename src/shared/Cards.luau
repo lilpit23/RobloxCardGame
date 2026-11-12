@@ -327,7 +327,7 @@ local SETS = {
 		color = Color3.fromRGB(130, 80, 200),
 		sources = "Dracula, Frankenstein, Sherlock Holmes, Jekyll and Hyde, The Invisible Man, Carmilla, The Phantom of the Opera, Sleepy Hollow, Poe",
 		mult = 64,
-		packCost = 12000000,
+		packCost = 5000000,
 		cards = {
 			Common = {
 				{ "Village Bat", "🦇", "b" },
@@ -390,7 +390,7 @@ local SETS = {
 		color = Color3.fromRGB(60, 190, 170),
 		sources = "Greek mythology (Homer, Hesiod, Ovid)",
 		mult = 256,
-		packCost = 500000000,
+		packCost = 60000000,
 		cards = {
 			Common = {
 				{ "Olive Farmer", "🫒", "s" },
@@ -453,7 +453,7 @@ local SETS = {
 		color = Color3.fromRGB(50, 150, 90),
 		sources = "Arthurian legend (Le Morte d'Arthur) and the Robin Hood ballads",
 		mult = 1024,
-		packCost = 20000000000,
+		packCost = 750000000,
 		cards = {
 			Common = {
 				{ "Stable Boy", "🐴", "w" },
@@ -516,7 +516,7 @@ local SETS = {
 		color = Color3.fromRGB(170, 35, 45),
 		sources = "Ancient Roman history and legend (Livy, Plutarch, Suetonius)",
 		mult = 4096,
-		packCost = 1000000000000,
+		packCost = 10000000000,
 		cards = {
 			Common = {
 				{ "Legionary Recruit", "🛡️", "w" },

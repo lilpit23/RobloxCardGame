@@ -59,16 +59,16 @@ return {
 		--   kind = "luck": +PotionLuck luck for `minutes`.
 		--   kind = "cash": double cash for `minutes`.
 		--   kind = "warp": `seconds` of your current income at once (up to the wallet cap).
-		-- random = true marks products that hand out cash, which buys random packs; those are
-		-- hidden where paid random items are restricted.
+		-- random = true marks products that hand out cash or aura, both of which can buy random
+		-- packs; those are hidden where paid random items are restricted.
 		ProductOrder = { "luckPotion", "cashPotion", "timeWarp", "auraSmall", "auraBig", "auraHuge" },
 		Products = {
 			luckPotion = { id = 0, robux = 49, kind = "luck", minutes = 30, name = "Luck Potion", text = "+10 luck for 30 minutes. Stacks up in time if you buy more." },
 			cashPotion = { id = 0, robux = 49, kind = "cash", minutes = 30, name = "Cash Potion", text = "Double cash for 30 minutes. Stacks up in time if you buy more." },
 			timeWarp = { id = 0, robux = 79, kind = "warp", seconds = 3600, random = true, name = "Time Warp", text = "One hour of your deck's income, right now." },
-			auraSmall = { id = 0, robux = 49, kind = "aura", aura = 5000, name = "Aura Bundle", text = "+5,000 aura." },
-			auraBig = { id = 0, robux = 199, kind = "aura", aura = 50000, name = "Aura Chest", text = "+50,000 aura." },
-			auraHuge = { id = 0, robux = 799, kind = "aura", aura = 500000, name = "Aura Vault", text = "+500,000 aura." },
+			auraSmall = { id = 0, random = true, robux = 49, kind = "aura", aura = 5000, name = "Aura Bundle", text = "+5,000 aura." },
+			auraBig = { id = 0, random = true, robux = 199, kind = "aura", aura = 50000, name = "Aura Chest", text = "+50,000 aura." },
+			auraHuge = { id = 0, random = true, robux = 799, kind = "aura", aura = 500000, name = "Aura Vault", text = "+500,000 aura." },
 		},
 	},
 

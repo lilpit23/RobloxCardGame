@@ -134,8 +134,14 @@ flatter rarity and effect multipliers, Auto Packer perk, simulator models the ca
 
 ## Track B — battles (PvE only; the owner has ruled out PvP and stealing for now)
 
-Done: card types with a five-way advantage cycle, `Battle.simulate` (pure, server-run), a 50-floor
-PvE tower that auto-picks the player's three strongest cards, playback UI.
+Done: card types with a five-way advantage cycle; turn-based duels (`Duel.luau`, pure and
+server-run): a saved 20-card battle deck, energy, a hand of five, six card roles, 50 floors with a
+boss every tenth; duel screen in the Battle panel; `tools/duel-sim.js` for tuning.
+
+- [ ] **B0 Duel follow-ups.** Stage the duel in the 3D arena (duel circle, camera, hit effects)
+  instead of only the panel; co-op (up to 4 players in one duel, still PvE); enemy variety
+  (healers, shielders), themed per set; gamepad shortcuts for hand cards; give more cards
+  hand-picked roles in `Duel.luau` (`ROLE_OVERRIDES`).
 
 - [ ] **B1 Team picker.** Let the player choose and save a three-card battle team instead of the
   automatic strongest three, so type matchups become a decision. Validate ownership on the server.
@@ -165,8 +171,8 @@ PvE tower that auto-picks the player's three strongest cards, playback UI.
 
 - [x] **W1 Map layout.** Done: cul-de-sac of eight stores around a plaza, road, tunnel through a
   ridge, PvE arena with the Battle Tower and its gate (`docs/map-layout.png`).
-- [ ] **W4 Tower defense mode.** The arena is ready for it (lane, two monster gates, tower), but
-  the PvE there is still the automatic Battle Tower fight. Build real tower defense: waves walk
+- [ ] **W4 Tower defense mode (parked).** The owner chose turn-based duels for the tower instead
+  (track B). Only if asked again: build real tower defense: waves walk
   from the monster gates along lanes to the tower, the player places cards from their deck as
   defenders on pads, cards attack by type, rewards per wave. Decide solo instances vs shared
   arena first, and keep it PvE only.

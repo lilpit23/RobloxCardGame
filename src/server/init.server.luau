@@ -18,6 +18,7 @@ local Deck = require(Shared:WaitForChild("Deck"))
 local Season = require(Shared:WaitForChild("Season"))
 local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
+local Duel = require(Shared:WaitForChild("Duel"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
@@ -60,7 +61,9 @@ local VaultTakeRemote = newRemote("RemoteEvent", "VaultTake")
 local QuestClaimRemote = newRemote("RemoteEvent", "QuestClaim")
 local DailyClaimRemote = newRemote("RemoteEvent", "DailyClaim")
 local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
-local BattleRemote = newRemote("RemoteFunction", "Battle")
+local DuelStartRemote = newRemote("RemoteFunction", "DuelStart")
+local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
+local BattleDeckRemote = newRemote("RemoteEvent", "BattleDeck")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
@@ -227,6 +230,7 @@ local function pushState(player)
 		freePacks = data.freePacks,
 		rebirths = data.rebirths,
 		vault = data.vault,
+		battleDeck = data.battleDeck,
 		vaultSlots = vaultSlots(data),
 		perks = data.perks,
 		tower = data.tower,
@@ -1079,38 +1083,140 @@ end)
 ---------------------------------------------------------------------
 -- The server picks the player's strongest team, runs the whole fight, and returns the log
 -- for the client to play back.
-BattleRemote.OnServerInvoke = function(player)
+-- The battle deck the player would fight with right now: their saved deck minus anything
+-- they no longer own, or an automatic one if that leaves nothing.
+local function battleDeckFor(data)
+	local deck = Duel.usableDeck(data, data.battleDeck)
+	if #deck == 0 then
+		deck = Duel.autoDeck(data)
+	end
+	return deck
+end
+
+-- Change the saved battle deck. action = "add" | "remove" | "auto" | "clear".
+-- Cards are not used up by battling; the deck is only a list of which ones to bring.
+BattleDeckRemote.OnServerEvent:Connect(function(player, action, key)
+	if not allow(player, "BattleDeck", 8, 16) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil or session.duel then
+		return
+	end
+	local deck = Duel.usableDeck(data, data.battleDeck)
+	if action == "auto" then
+		deck = Duel.autoDeck(data)
+	elseif action == "clear" then
+		deck = {}
+	elseif action == "add" and type(key) == "string" and Cards.parse(key) then
+		if #deck >= Duel.DeckSize then
+			notify(player, "Your battle deck is full (" .. Duel.DeckSize .. " cards). Remove one first.", "error")
+			return
+		end
+		local inDeck = 0
+		for _, deckKey in ipairs(deck) do
+			if deckKey == key then
+				inDeck = inDeck + 1
+			end
+		end
+		local owned = Duel.ownedCounts(data)[key] or 0
+		if inDeck >= math.min(owned, Duel.MaxCopies) then
+			notify(player, owned > inDeck and ("Only " .. Duel.MaxCopies .. " copies of a card fit in a battle deck.") or "You don't own another copy of that card.", "error")
+			return
+		end
+		table.insert(deck, key)
+	elseif action == "remove" and type(key) == "string" then
+		local index = table.find(deck, key)
+		if index == nil then
+			return
+		end
+		table.remove(deck, index)
+	else
+		return
+	end
+	data.battleDeck = deck
+	touch(player, true)
+end)
+
+-- Start a duel against the next tower floor. Returns { ok, view } or { ok = false, error }.
+DuelStartRemote.OnServerInvoke = function(player)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
 	if session == nil or data == nil then
 		return { ok = false, error = "Something went wrong." }
 	end
 	local now = os.clock()
-	if not allow(player, "Battle", 1, 2) or now - (session.lastBattle or 0) < Config.BattleCooldown then
-		return { ok = false, error = "Your team is catching its breath. Try again in a moment." }
+	if not allow(player, "DuelStart", 1, 2) or now - (session.lastBattle or 0) < Config.BattleCooldown then
+		return { ok = false, error = "Catch your breath. Try again in a moment." }
 	end
 	local floor = data.tower + 1
 	if floor > Battle.MaxFloor then
 		return { ok = false, error = "You have cleared the whole tower!" }
 	end
-	local team = Battle.bestTeam(data)
-	if #team == 0 then
+	local duel = Duel.new(floor, battleDeckFor(data), rng)
+	if duel == nil then
 		return { ok = false, error = "You need at least one card to battle." }
 	end
 	session.lastBattle = now
+	session.duel = duel
+	return { ok = true, view = Duel.view(duel) }
+end
 
-	local enemies = Battle.enemyTeam(floor)
-	local win, log = Battle.simulate(team, enemies, rng)
+-- One move in the current duel. action = { kind = "play" | "pass" | "discard" | "flee",
+-- hand = index into the hand, target = enemy index }.
+-- Returns { ok, view, events, aura, cash } or { ok = false, error }.
+DuelActRemote.OnServerInvoke = function(player, action)
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil or not allow(player, "DuelAct", 6, 12) then
+		return { ok = false, error = "Slow down a little." }
+	end
+	local duel = session.duel
+	if duel == nil then
+		return { ok = false, error = "That battle has ended.", ended = true }
+	end
+	if type(action) ~= "table" then
+		return { ok = false, error = "Pick a card from your hand." }
+	end
+	local hand, target = action.hand, action.target
+	if hand ~= nil and (type(hand) ~= "number" or hand % 1 ~= 0) then
+		return { ok = false, error = "Pick a card from your hand." }
+	end
+	if target ~= nil and (type(target) ~= "number" or target % 1 ~= 0) then
+		target = nil
+	end
 
-	local result = { ok = true, win = win, floor = floor, team = team, enemies = enemies, log = log }
-	if win then
-		local aura, cash = Battle.reward(floor, Rebirth.cashCap(data.rebirths))
-		data.tower = floor
-		data.aura = data.aura + aura
-		cash = addCash(data, cash)
-		result.aura = aura
-		result.cash = cash
-		touch(player, false)
+	local events, problem
+	if action.kind == "play" then
+		events, problem = Duel.play(duel, hand, target, rng)
+	elseif action.kind == "pass" then
+		events, problem = Duel.pass(duel, rng)
+	elseif action.kind == "discard" then
+		if not Duel.discard(duel, hand) then
+			return { ok = false, error = "Pick a card from your hand." }
+		end
+		events = {}
+	elseif action.kind == "flee" then
+		session.duel = nil
+		return { ok = true, events = {}, view = { over = true, win = false, fled = true } }
+	end
+	if events == nil then
+		return { ok = false, error = problem or "You can't do that right now." }
+	end
+
+	local result = { ok = true, events = events, view = Duel.view(duel) }
+	if duel.over then
+		session.duel = nil
+		-- data.tower is re-checked so a floor can only ever pay out once
+		if duel.win and duel.floor == data.tower + 1 then
+			local aura, cash = Battle.reward(duel.floor, Rebirth.cashCap(data.rebirths))
+			data.tower = duel.floor
+			data.aura = data.aura + aura
+			result.aura = aura
+			result.cash = addCash(data, cash)
+			touch(player, false)
+		end
 	end
 	return result
 end

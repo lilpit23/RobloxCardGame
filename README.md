@@ -45,8 +45,12 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     **Luck** is a stat with many sources: Lucky Charms (cash), Aura Luck (aura), the Fortune perk,
     rebirths, completed sets, tower floors, deck combos and lucky events. Each level makes better
     rarities 10% more likely.
-13. **Battle Tower:** your three strongest cards fight a 50-floor tower for aura and cash. Each
-    type deals +30% damage to the next one in the cycle.
+13. **Battle Tower:** turn-based card duels up a 50-floor tower for aura and cash, with a boss
+    every tenth floor. You build a 20-card battle deck from cards you own (they are not used
+    up). Each round you gain 1 energy and play one card from a hand of five: strikes, blasts,
+    heals, shields, power-ups and weakens. Rarer cards cost more energy. Each type deals +30%
+    damage to the next one in the cycle. `node tools/duel-sim.js` shows how far different
+    collections get.
 14. **Aura Shrine:** permanent perks bought with aura that survive rebirth (starting cash, cheaper
     packs, more aura, better offline earnings, extra vault slots).
 15. **Lucky events:** every 20 minutes the whole server gets better pack odds for 5 minutes.
@@ -173,7 +177,8 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | `src/shared/Deck.luau` | How "Auto-fill Deck" chooses cards |
 | `src/shared/Season.luau` | The weekly featured set |
 | `src/shared/Achievements.luau` | Achievement goals and their permanent bonus |
-| `src/shared/Battle.luau` | Battle rules, tower enemy strength, tower rewards |
+| `src/shared/Battle.luau` | Tower height and floor rewards |
+| `src/shared/Duel.luau` | Turn-based duel rules: card roles, energy, hand, enemies per floor |
 | `src/shared/Quests.luau` | Quest types, goals and rewards, daily reward size |
 | `src/shared/Rebirth.luau` | Rebirth requirements (cash, aura, cards), bonuses, vault size |
 

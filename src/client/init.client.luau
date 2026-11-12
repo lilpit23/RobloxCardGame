@@ -23,6 +23,7 @@ local Luck = require(Shared:WaitForChild("Luck"))
 local Season = require(Shared:WaitForChild("Season"))
 local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
+local Duel = require(Shared:WaitForChild("Duel"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local player = Players.LocalPlayer
@@ -39,6 +40,7 @@ local state = {
 	freePacks = 0,
 	rebirths = 0,
 	vault = {},
+	battleDeck = {},
 	vaultSlots = 1,
 	luck = 0,
 	quests = { day = 0, list = {} },
@@ -2164,153 +2166,489 @@ panels.Store = function()
 	})
 end
 
--- Battle tower -----------------------------------------------------------------------
-local battling = false
+-- Battle tower: turn-based duels ------------------------------------------------------
+local battling = false -- a duel is in progress, so server updates must not rebuild the screen
 local renderedTower = -1
+local duel = nil -- what the server last told us about the duel in progress
+local duelTarget = 1 -- which enemy the next card is aimed at
+local duelLog = {} -- the last few things that happened
+local duelBusy = false -- waiting for the server, or playing back a round
+local duelEnding = nil -- the result line, once the duel is over
+local deckEditing = false
 
-local function newUnitBox(parent, unit, column, index)
-	local box = make("Frame", {
-		Position = UDim2.new(column * 0.5, column == 0 and 10 or 5, 0, 8 + (index - 1) * 78),
-		Size = UDim2.new(0.5, -15, 0, 70),
-		BackgroundColor3 = Color3.fromRGB(30, 30, 44),
-		BorderSizePixel = 0,
-	}, parent)
-	round(box, 8)
-	newLabel(box, unit.glyph or "?", UDim2.new(0, 6, 0, 10), UDim2.new(0, 44, 0, 44), {
-		TextScaled = true,
-		TextXAlignment = Enum.TextXAlignment.Center,
-	})
-	newLabel(box, unit.name, UDim2.new(0, 58, 0, 4), UDim2.new(1, -64, 0, 18), {
-		TextSize = 12,
-		TextWrapped = false,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-	})
-	local typeInfo = Cards.Types[unit.type]
-	newLabel(box, (typeInfo and (typeInfo.icon .. " " .. typeInfo.name) or "") .. "   ATK " .. Format.short(unit.attack), UDim2.new(0, 58, 0, 22), UDim2.new(1, -64, 0, 16), {
-		TextSize = 11,
-		TextColor3 = COLORS.dim,
-	})
+local function typeText(typeId)
+	local info = Cards.Types[typeId]
+	return info and (info.icon .. " " .. info.name) or ""
+end
+
+-- "⚡2  ⚔️ Strike"
+local function roleLine(card)
+	local role = Duel.Roles[card.role]
+	return "⚡" .. card.cost .. "  " .. role.icon .. " " .. role.name
+end
+
+local function newBar(parent, position, size, color, fraction, text)
 	local bar = make("Frame", {
-		Position = UDim2.new(0, 58, 0, 44),
-		Size = UDim2.new(1, -68, 0, 16),
+		Position = position,
+		Size = size,
 		BackgroundColor3 = Color3.fromRGB(15, 15, 22),
 		BorderSizePixel = 0,
-	}, box)
+	}, parent)
 	round(bar, 5)
 	local fill = make("Frame", {
-		Size = UDim2.new(1, 0, 1, 0),
-		BackgroundColor3 = column == 0 and COLORS.good or COLORS.bad,
+		Size = UDim2.new(math.clamp(fraction, 0, 1), 0, 1, 0),
+		BackgroundColor3 = color,
 		BorderSizePixel = 0,
 	}, bar)
 	round(fill, 5)
-	local hpLabel = newLabel(bar, Format.short(unit.maxHp) .. " HP", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+	newLabel(bar, text, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
 		TextSize = 11,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		ZIndex = 2,
 	})
-	return { unit = unit, box = box, fill = fill, hpLabel = hpLabel }
+	return bar
+end
+
+local function newNoteRow(order, text)
+	local row = newRow(order, 44)
+	row.BackgroundTransparency = 1
+	newLabel(row, text, UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), { TextSize = 12, TextColor3 = COLORS.dim })
+end
+
+local function endDuel()
+	duel = nil
+	duelEnding = nil
+	duelLog = {}
+	duelBusy = false
+	battling = false
+end
+
+-- Send one move to the server, then play back what happened line by line.
+local function duelAct(action)
+	if duel == nil or duelBusy or duelEnding then
+		return
+	end
+	duelBusy = true
+	local ok, result = pcall(function()
+		return Remotes.DuelAct:InvokeServer(action)
+	end)
+	if not ok or type(result) ~= "table" or not result.ok then
+		duelBusy = false
+		if ok and type(result) == "table" and result.ended then
+			endDuel()
+		end
+		toast(ok and type(result) == "table" and result.error or "Could not reach the server. Try again.", "error")
+		if currentPanel == "Battle" then
+			renderPanel()
+		end
+		return
+	end
+	local final = result.view
+	if final.fled then
+		endDuel()
+		if currentPanel == "Battle" then
+			renderPanel()
+		end
+		return
+	end
+
+	-- show the new hand and energy straight away, but let the health bars catch up one
+	-- event at a time
+	local finalHp, finalOver = final.hp, final.over
+	final.hp = duel.hp
+	final.over = false
+	for index, enemy in ipairs(final.enemies) do
+		enemy.finalHp = enemy.hp
+		enemy.hp = duel.enemies[index] and duel.enemies[index].hp or enemy.hp
+	end
+	duel = final
+	for _, event in ipairs(result.events) do
+		table.insert(duelLog, event.text)
+		while #duelLog > 4 do
+			table.remove(duelLog, 1)
+		end
+		if event.enemy and event.enemyHp and duel.enemies[event.enemy] then
+			duel.enemies[event.enemy].hp = event.enemyHp
+		end
+		if event.hp then
+			duel.hp = event.hp
+		end
+		if event.kind == "hit" or event.kind == "hurt" then
+			playSound("hit")
+		elseif event.kind == "heal" or event.kind == "shield" or event.kind == "charge" then
+			playSound("flip")
+		end
+		if currentPanel == "Battle" and window.Visible then
+			renderPanel()
+		end
+		task.wait(0.5)
+	end
+	duel.hp = finalHp
+	duel.over = finalOver
+	for _, enemy in ipairs(duel.enemies) do
+		enemy.hp = enemy.finalHp
+	end
+	local target = duel.enemies[duelTarget]
+	if target == nil or target.hp <= 0 then
+		for index, enemy in ipairs(duel.enemies) do
+			if enemy.hp > 0 then
+				duelTarget = index
+				break
+			end
+		end
+	end
+	if duel.over then
+		if duel.win then
+			duelEnding = "🏆 VICTORY!  +" .. Format.short(result.aura or 0) .. " aura, " .. Format.cash(result.cash or 0)
+			playSound("bigPull")
+		else
+			duelEnding = "💀 Defeat. Tune your battle deck, or pull stronger cards, and try again."
+		end
+	end
+	duelBusy = false
+	if currentPanel == "Battle" then
+		renderPanel()
+	end
+end
+
+local function renderDuel()
+	titleLabel.Text = "⚔️ Floor " .. duel.floor .. "  ·  Round " .. duel.round
+	useList()
+
+	-- you: health, energy, what is waiting on you
+	local youRow = newRow(1, 62)
+	newBar(youRow, UDim2.new(0, 12, 0, 8), UDim2.new(1, -124, 0, 20), COLORS.good, duel.hp / duel.maxHp, "You: " .. Duel.short(duel.hp) .. " / " .. Duel.short(duel.maxHp))
+	local status = "⚡ Energy " .. duel.energy .. " / " .. Duel.MaxEnergy
+	if duel.shields > 0 then
+		status = status .. "    🛡️ x" .. duel.shields
+	end
+	if duel.charges > 0 then
+		status = status .. "    🔥 x" .. duel.charges
+	end
+	status = status .. "    🂠 " .. duel.deckLeft .. " left to draw"
+	newLabel(youRow, status, UDim2.new(0, 12, 0, 32), UDim2.new(1, -124, 0, 24), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 16,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+	})
+	newButton(youRow, "Flee", UDim2.new(1, -104, 0, 12), UDim2.new(0, 92, 0, 38), COLORS.locked, function()
+		if duelEnding then
+			return
+		end
+		duelAct({ kind = "flee" })
+	end).TextSize = 14
+
+	-- the enemies; tap one to aim at it
+	local enemyRow = newRow(2, 96)
+	enemyRow.BackgroundTransparency = 1
+	local count = #duel.enemies
+	for index, enemy in ipairs(duel.enemies) do
+		local alive = enemy.hp > 0
+		local box = make("TextButton", {
+			Text = "",
+			AutoButtonColor = false,
+			Position = UDim2.new((index - 1) / count, index == 1 and 0 or 3, 0, 0),
+			Size = UDim2.new(1 / count, count == 1 and 0 or -3, 1, 0),
+			BackgroundColor3 = Color3.fromRGB(46, 28, 36),
+			BackgroundTransparency = alive and 0 or 0.6,
+			BorderSizePixel = 0,
+		}, enemyRow)
+		round(box, 10)
+		if alive and index == duelTarget then
+			make("UIStroke", { Color = Color3.fromRGB(255, 215, 90), Thickness = 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, box)
+		end
+		newLabel(box, enemy.glyph or "?", UDim2.new(0, 6, 0, 6), UDim2.new(0, 40, 0, 40), {
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Center,
+		})
+		newLabel(box, enemy.name, UDim2.new(0, 50, 0, 4), UDim2.new(1, -56, 0, 18), {
+			TextSize = 13,
+			TextWrapped = false,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		local detail = typeText(enemy.type) .. "  ·  hits for " .. Duel.short(enemy.attack)
+		newLabel(box, detail, UDim2.new(0, 50, 0, 24), UDim2.new(1, -56, 0, 16), {
+			TextSize = 11,
+			TextColor3 = COLORS.dim,
+			TextWrapped = false,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		local marks = {}
+		if enemy.winding then
+			table.insert(marks, "⚠️ BIG HIT NEXT")
+		end
+		if enemy.weak > 0 then
+			table.insert(marks, "🌀 x" .. enemy.weak)
+		end
+		if alive and index == duelTarget then
+			table.insert(marks, "🎯 target")
+		end
+		newLabel(box, table.concat(marks, "   "), UDim2.new(0, 8, 0, 48), UDim2.new(1, -16, 0, 16), {
+			TextSize = 11,
+			TextColor3 = Color3.fromRGB(255, 190, 120),
+			TextWrapped = false,
+		})
+		newBar(box, UDim2.new(0, 8, 0, 70), UDim2.new(1, -16, 0, 18), COLORS.bad, enemy.hp / enemy.maxHp, alive and (Duel.short(enemy.hp) .. " HP") or "KO")
+		box.Activated:Connect(function()
+			if alive and duelTarget ~= index and not duelBusy then
+				duelTarget = index
+				renderPanel()
+			end
+		end)
+	end
+
+	-- what just happened
+	local logRow = newRow(3, 78)
+	local logText = #duelLog > 0 and table.concat(duelLog, "\n") or "Pick a card to play. Rarer cards cost more ⚡ — pass a round to save up for them."
+	newLabel(logRow, logText, UDim2.new(0, 12, 0, 4), UDim2.new(1, -24, 1, -8), {
+		TextSize = 13,
+		TextYAlignment = Enum.TextYAlignment.Bottom,
+		TextWrapped = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+
+	if duelEnding then
+		local endRow = newRow(4, 64)
+		newLabel(endRow, duelEnding, UDim2.new(0, 14, 0, 0), UDim2.new(1, -180, 1, 0), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 17,
+			TextColor3 = duel.win and COLORS.cash or COLORS.bad,
+		})
+		newButton(endRow, "Continue", UDim2.new(1, -160, 0, 10), UDim2.new(0, 148, 0, 44), COLORS.good, function()
+			endDuel()
+			renderPanel()
+		end)
+		return
+	end
+
+	-- your hand
+	local hand = make("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -12, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 4,
+	}, body)
+	make("UIGridLayout", {
+		CellSize = UDim2.new(0, 120, 0, 262),
+		CellPadding = UDim2.new(0, 6, 0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, hand)
+	local aim = duel.enemies[duelTarget]
+	for index, key in ipairs(duel.hand) do
+		local card = Duel.card(key)
+		if card then
+			newCardCell(hand, key, index, function(cell)
+				local affordable = card.cost <= duel.energy
+				newLabel(cell, roleLine(card), UDim2.new(0, 4, 0, 163), UDim2.new(1, -8, 0, 16), {
+					TextSize = 12,
+					TextXAlignment = Enum.TextXAlignment.Center,
+					TextColor3 = affordable and Color3.fromRGB(255, 215, 90) or COLORS.dim,
+					TextWrapped = false,
+				})
+				local text = card.text
+				if aim and (card.role == "attack" or card.role == "blast") then
+					if card.role == "attack" and Cards.typeBeats(card.type, aim.type) then
+						text = text .. "  (strong vs target)"
+					elseif card.role == "attack" and Cards.typeBeats(aim.type, card.type) then
+						text = text .. "  (weak vs target)"
+					end
+				end
+				newLabel(cell, text, UDim2.new(0, 4, 0, 180), UDim2.new(1, -8, 0, 40), {
+					TextSize = 11,
+					TextXAlignment = Enum.TextXAlignment.Center,
+					TextYAlignment = Enum.TextYAlignment.Top,
+					TextColor3 = COLORS.dim,
+				})
+				newButton(cell, affordable and "Play" or ("Need ⚡" .. card.cost), UDim2.new(0, 4, 0, 224), UDim2.new(1, -44, 0, 34), affordable and COLORS.good or COLORS.locked, function()
+					if not affordable then
+						toast("Not enough energy yet. Play a cheaper card, or Pass to save up.", "error")
+						return
+					end
+					duelAct({ kind = "play", hand = index, target = duelTarget })
+				end).TextSize = 13
+				newButton(cell, "✖", UDim2.new(1, -38, 0, 224), UDim2.new(0, 34, 0, 34), COLORS.bad, function()
+					duelAct({ kind = "discard", hand = index })
+				end).TextSize = 14
+			end)
+		end
+	end
+
+	local passRow = newRow(5, 46)
+	passRow.BackgroundTransparency = 1
+	newButton(passRow, "⏭ Pass  (save your energy for a bigger card)", UDim2.new(0, 0, 0, 2), UDim2.new(1, 0, 0, 40), COLORS.button, function()
+		duelAct({ kind = "pass" })
+	end).TextSize = 14
+	newNoteRow(6, "✖ throws a card away for free; you draw back up to " .. Duel.HandSize .. " at the start of each round.")
 end
 
 panels.Battle = function()
-	titleLabel.Text = "⚔️ Battle Tower  (" .. state.tower .. "/" .. Battle.MaxFloor .. " floors cleared)"
 	renderedTower = state.tower
+	if duel then
+		renderDuel()
+		return
+	end
+	titleLabel.Text = "⚔️ Battle Tower  (" .. state.tower .. "/" .. Battle.MaxFloor .. " floors cleared)"
 	useList()
 
 	local floor = state.tower + 1
 	local cleared = floor > Battle.MaxFloor
-	local infoRow = newRow(1, 84)
-	local arena = newRow(2, 8 + Battle.TeamSize * 78)
-	local logRow = newRow(3, 40)
-	local logLabel = newLabel(logRow, "", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 14 })
-
-	local viewsA, viewsB = {}, {}
-	local function drawArena(team, enemies)
-		arena:ClearAllChildren()
-		round(arena, 10)
-		viewsA, viewsB = {}, {}
-		for index, unit in ipairs(team) do
-			viewsA[index] = newUnitBox(arena, unit, 0, index)
-		end
-		for index, unit in ipairs(enemies) do
-			viewsB[index] = newUnitBox(arena, unit, 1, index)
-		end
-	end
-	drawArena(Battle.bestTeam(state), cleared and {} or Battle.enemyTeam(floor))
-
+	local infoRow = newRow(1, 92)
 	if cleared then
 		newLabel(infoRow, "You cleared the whole tower. More floors are coming!", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
 			Font = Enum.Font.FredokaOne,
 			TextSize = 18,
 		})
+	else
+		local aura, cash = Battle.reward(floor, state.cashCap)
+		local boss = floor % Duel.BossEvery == 0
+		newLabel(infoRow, (boss and "👑 BOSS  ·  " or "") .. "Floor " .. floor .. "   ·   win: +" .. Format.short(aura) .. " aura, " .. Format.cash(cash), UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 24), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 18,
+		})
+		local names = {}
+		for _, enemy in ipairs(Duel.enemies(floor)) do
+			table.insert(names, enemy.name .. " (" .. typeText(enemy.type) .. ", " .. Duel.short(enemy.maxHp) .. " HP)")
+		end
+		newLabel(infoRow, "Enemies: " .. table.concat(names, ",  "), UDim2.new(0, 14, 0, 32), UDim2.new(1, -190, 0, 54), {
+			TextSize = 12,
+			TextColor3 = COLORS.dim,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		})
+		newButton(infoRow, "FIGHT", UDim2.new(1, -160, 0, 24), UDim2.new(0, 148, 0, 44), COLORS.bad, function()
+			if battling then
+				return
+			end
+			battling = true
+			local ok, result = pcall(function()
+				return Remotes.DuelStart:InvokeServer()
+			end)
+			if not ok or type(result) ~= "table" or not result.ok then
+				battling = false
+				toast(ok and type(result) == "table" and result.error or "Could not start the battle.", "error")
+				return
+			end
+			duel = result.view
+			duelTarget = 1
+			duelLog = {}
+			duelEnding = nil
+			duelBusy = false
+			deckEditing = false
+			body.CanvasPosition = Vector2.new(0, 0)
+			if currentPanel == "Battle" then
+				renderPanel()
+			end
+		end)
+	end
+
+	newNoteRow(2, "Each round you gain 1 ⚡ and play one card. Rarer cards cost more ⚡ and hit harder. Type advantage: +30% damage  (⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️).")
+
+	-- the battle deck
+	local saved = Duel.usableDeck(state, state.battleDeck)
+	local automatic = #saved == 0
+	local deck = automatic and Duel.autoDeck(state) or saved
+	local deckRow = newRow(3, 46)
+	newLabel(deckRow, "Battle deck: " .. #deck .. "/" .. Duel.DeckSize .. (automatic and " (automatic)" or "") .. "   ·   " .. Duel.short(Duel.deckHealth(deck)) .. " health", UDim2.new(0, 14, 0, 0), UDim2.new(1, -300, 1, 0), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 15,
+		TextWrapped = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	newButton(deckRow, "Auto-build", UDim2.new(1, -284, 0, 6), UDim2.new(0, 96, 0, 34), COLORS.button, function()
+		Remotes.BattleDeck:FireServer("auto")
+	end).TextSize = 13
+	newButton(deckRow, deckEditing and "Done" or "Edit deck", UDim2.new(1, -184, 0, 6), UDim2.new(0, 96, 0, 34), deckEditing and COLORS.good or Color3.fromRGB(150, 95, 230), function()
+		deckEditing = not deckEditing
+		renderPanel()
+	end).TextSize = 13
+	newButton(deckRow, "Clear", UDim2.new(1, -84, 0, 6), UDim2.new(0, 76, 0, 34), COLORS.locked, function()
+		Remotes.BattleDeck:FireServer("clear")
+	end).TextSize = 13
+
+	if deckEditing then
+		-- every card you own, strongest first, with + and - buttons
+		local inDeck = {}
+		for _, key in ipairs(saved) do
+			inDeck[key] = (inDeck[key] or 0) + 1
+		end
+		local owned = Duel.ownedCounts(state)
+		local options = {}
+		for key in pairs(owned) do
+			local card = Duel.card(key)
+			if card then
+				table.insert(options, card)
+			end
+		end
+		table.sort(options, function(a, b)
+			local deckA, deckB = inDeck[a.key] and 1 or 0, inDeck[b.key] and 1 or 0
+			if deckA ~= deckB then
+				return deckA > deckB
+			elseif a.power ~= b.power then
+				return a.power > b.power
+			end
+			return a.key < b.key
+		end)
+		if automatic then
+			newNoteRow(4, "Your deck is empty, so your strongest cards are picked for you. Add a card to start your own deck.")
+		end
+		for index, card in ipairs(options) do
+			local have = inDeck[card.key] or 0
+			local most = math.min(owned[card.key], Duel.MaxCopies)
+			fillLazily(newRow(4 + index, 40), function(row)
+				newCardLine(row, card.key, UDim2.new(0, 12, 0, 2), UDim2.new(1, -190, 0, 18))
+				newLabel(row, roleLine(card) .. "  ·  " .. card.text, UDim2.new(0, 12, 0, 20), UDim2.new(1, -190, 0, 16), {
+					TextSize = 11,
+					TextColor3 = COLORS.dim,
+					TextWrapped = false,
+					TextTruncate = Enum.TextTruncate.AtEnd,
+				})
+				newLabel(row, have .. "/" .. most, UDim2.new(1, -172, 0, 0), UDim2.new(0, 40, 1, 0), {
+					TextSize = 14,
+					TextXAlignment = Enum.TextXAlignment.Center,
+					TextColor3 = have > 0 and COLORS.cash or COLORS.dim,
+				})
+				newButton(row, "−", UDim2.new(1, -126, 0, 5), UDim2.new(0, 56, 0, 30), have > 0 and COLORS.bad or COLORS.locked, function()
+					Remotes.BattleDeck:FireServer("remove", card.key)
+				end)
+				newButton(row, "+", UDim2.new(1, -64, 0, 5), UDim2.new(0, 56, 0, 30), have < most and COLORS.good or COLORS.locked, function()
+					Remotes.BattleDeck:FireServer("add", card.key)
+				end)
+			end)
+		end
 		return
 	end
 
-	local aura, cash = Battle.reward(floor, state.cashCap)
-	newLabel(infoRow, "Floor " .. floor .. "   ·   win: +" .. Format.short(aura) .. " aura, " .. Format.cash(cash), UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
-		Font = Enum.Font.FredokaOne,
-		TextSize = 19,
-	})
-	newLabel(infoRow, "Your 3 strongest cards fight for you. Type advantage deals +30% damage:\n⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️", UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 44), {
-		TextSize = 12,
-		TextColor3 = COLORS.dim,
-		TextYAlignment = Enum.TextYAlignment.Top,
-	})
-
-	newButton(infoRow, "FIGHT", UDim2.new(1, -160, 0, 20), UDim2.new(0, 148, 0, 44), COLORS.bad, function()
-		if battling then
-			return
-		end
-		battling = true
-		local ok, result = pcall(function()
-			return Remotes.Battle:InvokeServer()
+	if #deck == 0 then
+		newNoteRow(4, "You have no cards yet — open a pack first.")
+		return
+	end
+	local grid = make("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -12, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 4,
+	}, body)
+	make("UIGridLayout", {
+		CellSize = UDim2.new(0, 120, 0, 222),
+		CellPadding = UDim2.new(0, 6, 0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, grid)
+	for index, key in ipairs(deck) do
+		local card = Duel.card(key)
+		newCardCell(grid, key, index, function(cell)
+			newLabel(cell, roleLine(card), UDim2.new(0, 4, 0, 163), UDim2.new(1, -8, 0, 16), {
+				TextSize = 12,
+				TextXAlignment = Enum.TextXAlignment.Center,
+				TextColor3 = Color3.fromRGB(255, 215, 90),
+				TextWrapped = false,
+			})
+			newLabel(cell, card.text, UDim2.new(0, 4, 0, 180), UDim2.new(1, -8, 0, 40), {
+				TextSize = 11,
+				TextXAlignment = Enum.TextXAlignment.Center,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				TextColor3 = COLORS.dim,
+			})
 		end)
-		if not ok or type(result) ~= "table" or not result.ok then
-			battling = false
-			toast(ok and type(result) == "table" and result.error or "Could not start the battle.", "error")
-			return
-		end
-
-		-- Play back the fight the server already decided.
-		for _, unit in ipairs(result.team) do
-			unit.hp = unit.maxHp
-		end
-		for _, unit in ipairs(result.enemies) do
-			unit.hp = unit.maxHp
-		end
-		drawArena(result.team, result.enemies)
-		for _, entry in ipairs(result.log) do
-			if currentPanel ~= "Battle" then
-				break
-			end
-			local attackers = entry.side == "a" and viewsA or viewsB
-			local targets = entry.side == "a" and viewsB or viewsA
-			local attacker, target = attackers[entry.attacker], targets[entry.target]
-			if attacker and target then
-				target.fill.Size = UDim2.new(math.clamp(entry.hpLeft / target.unit.maxHp, 0, 1), 0, 1, 0)
-				target.hpLabel.Text = entry.hpLeft > 0 and (Format.short(entry.hpLeft) .. " HP") or "KO"
-				if entry.hpLeft <= 0 then
-					target.box.BackgroundTransparency = 0.6
-				end
-				logLabel.Text = attacker.unit.name .. " hits " .. target.unit.name .. " for " .. Format.short(entry.damage) .. (entry.strong and "  — type advantage!" or "")
-				playSound("hit")
-			end
-			task.wait(0.3)
-		end
-
-		if result.win then
-			logLabel.Text = "🏆 VICTORY!  +" .. Format.short(result.aura) .. " aura, " .. Format.cash(result.cash)
-			logLabel.TextColor3 = COLORS.cash
-			playSound("bigPull")
-		else
-			logLabel.Text = "💀 Defeat. Pull stronger cards (or better types) and try again."
-			logLabel.TextColor3 = COLORS.bad
-		end
-		task.wait(1.6)
-		battling = false
-		if currentPanel == "Battle" then
-			renderPanel()
-		end
-	end)
+	end
 end
 
 local lastRenderAt = 0

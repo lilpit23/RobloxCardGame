@@ -544,7 +544,7 @@ local function buildRoad(map, layout)
 
 	-- signpost where the road leaves the plaza
 	local post = newPart(map, "Signpost", Vector3.new(0.8, 9, 0.8), CFrame.new(layout.plazaRadius + 12, 4.5, ROAD_WIDTH / 2 + 3), Color3.fromRGB(105, 75, 50), Enum.Material.Wood)
-	newBillboard(post, "⚔️ Tower Defense →", 6, 12, 1.6)
+	newBillboard(post, "⚔️ Battle Tower →", 6, 12, 1.6)
 end
 
 -- Little shops lining the road between the plaza and the tunnel (scenery only).

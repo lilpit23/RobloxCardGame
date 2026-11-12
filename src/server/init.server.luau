@@ -175,13 +175,14 @@ local function storeMult(data)
 		passBonus = passBonus * 2 -- Cash Potion
 	end
 	local achievementBonus = Achievements.incomeMult(data.achievements)
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus * achievementBonus
+	local weekly = Season.event().cash or 1
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus * achievementBonus * weekly
 end
 
 -- Aura multiplier: Aura Magnet perk x deck combos.
 local function auraMult(data)
 	local passBonus = hasPass(data, "doubleAura") and 2 or 1
-	return Perks.auraMult(data.perks) * Combos.evaluate(data.slots).aura * passBonus
+	return Perks.auraMult(data.perks) * Combos.evaluate(data.slots).aura * passBonus * (Season.event().aura or 1)
 end
 
 local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
@@ -1302,7 +1303,7 @@ DuelActRemote.OnServerInvoke = function(player, action)
 			-- pays once a day; replays are just for fun
 			if duel.day == Quests.today() and data.challengeDay ~= duel.day then
 				data.challengeDay = duel.day
-				local aura = Quests.reward(data.rebirths) * Config.ChallengeAuraQuests
+				local aura = Quests.reward(data.rebirths) * Config.ChallengeAuraQuests * (Season.event().tower or 1)
 				data.aura = data.aura + aura
 				result.aura = aura
 				result.cash = 0
@@ -1314,6 +1315,7 @@ DuelActRemote.OnServerInvoke = function(player, action)
 			end
 		elseif duel.win and duel.floor == data.tower + 1 then
 			local aura, cash = Battle.reward(duel.floor, Rebirth.cashCap(data.rebirths))
+			aura = aura * (Season.event().tower or 1)
 			data.tower = duel.floor
 			data.aura = data.aura + aura
 			result.aura = aura

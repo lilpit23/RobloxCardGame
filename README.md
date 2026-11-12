@@ -54,6 +54,10 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     berserk. Beating a boss for the first time drops a Legendary card. A daily challenge gives
     everyone the same preset deck for aura and a free booster. `node tools/duel-sim.js` shows
     how far different collections get.
+    Keyboard: **1-5** play a card, **Tab** aims, **Space** passes (gamepad: **RB** aims, **X**
+    passes).
+    **Weekly event:** one bonus for everyone that changes each week (Gold Rush +25% cash, Aura
+    Bloom +50% aura, Lucky Week +3 luck, Tower Week double tower aura), set in `Season.luau`.
     **Titles** (set completions, Golden sets, tower bosses, rebirths, collection size) pay aura
     once and can be worn over your head; pick one in the Quests screen. Three **all-server
     leaderboards** in the plaza show the most rebirths, highest tower floor and biggest

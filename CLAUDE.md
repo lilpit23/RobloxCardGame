@@ -57,6 +57,8 @@ way so the repo stays the whole game.
 - The active deck is `data.slots` (4 to 64 slots, shown as rows of cards in the store). Its cash
   goes to one register per store (`session.pending`). Deck bonuses come only from `Combos.evaluate`
   and luck only from `Luck.sources`; add new bonus sources there so server and client agree.
+- The weekly event (`Season.event()`) is applied in `storeMult`, `auraMult`, `Luck.sources` and
+  the tower rewards. New weekly bonuses go in `Season.Events` and are applied in those places.
 - Card effects are `Cards.Variants` (Shiny, Slimy, Lucky, Shadow, Golden, Prismatic).
 - Pacing levers, in order of strength: the wallet cap (`Rebirth.cashCap`; all cash must go
   through `addCash`), pack price inflation (`Packs.price`, counts in `data.packCounts`), deck

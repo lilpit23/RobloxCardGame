@@ -151,6 +151,20 @@ local function addScale(instance)
 	return scale
 end
 
+-- Like addScale, but shrinks to fit a narrow screen as well as a short one: the instance is
+-- drawn as if the screen were at least `width` x `height`.
+local function addFitScale(instance, width, height)
+	local scale = make("UIScale", {}, instance)
+	local camera = workspace.CurrentCamera
+	local function update()
+		local size = camera.ViewportSize
+		scale.Scale = math.clamp(math.min(size.X / width, size.Y / height), 0.45, 1.25)
+	end
+	camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
+	update()
+	return scale
+end
+
 ---------------------------------------------------------------------
 -- Screen layout
 ---------------------------------------------------------------------
@@ -189,6 +203,14 @@ end
 
 local cashLabel = newPill(1, COLORS.cash)
 local auraLabel = newPill(2, COLORS.aura)
+local eventLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 16), {
+	LayoutOrder = 3,
+	TextSize = 12,
+	TextColor3 = Color3.fromRGB(255, 215, 90),
+	TextStrokeTransparency = 0.3,
+	TextWrapped = false,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+})
 local autoLabel = newLabel(hud, "", UDim2.new(), UDim2.new(1, 0, 0, 16), {
 	LayoutOrder = 4,
 	TextSize = 12,
@@ -1669,6 +1691,16 @@ panels.Quests = function()
 	local buttonPosition = UDim2.new(1, -160, 0, 14)
 	local buttonSize = UDim2.new(0, 148, 0, 44)
 
+	-- this week's event
+	local weekly = Season.event()
+	local eventRow = newRow(0, 40)
+	eventRow.BackgroundColor3 = Color3.fromRGB(60, 45, 80)
+	newLabel(eventRow, "🎉 This week:  " .. weekly.name .. "  —  " .. weekly.text, UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 15,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+	})
+
 	-- Daily login reward
 	local dailyRow = newRow(1, 72)
 	local claimedToday = state.daily.lastDay >= state.today
@@ -2282,7 +2314,7 @@ local duelTop = make("Frame", {
 	BorderSizePixel = 0,
 }, duelGui)
 round(duelTop, 12)
-addScale(duelTop)
+addFitScale(duelTop, 600, 620)
 local duelTitle = newLabel(duelTop, "", UDim2.new(0, 14, 0, 4), UDim2.new(1, -28, 0, 24), {
 	Font = Enum.Font.FredokaOne,
 	TextSize = 18,
@@ -2300,7 +2332,7 @@ local duelBottom = make("Frame", {
 	Size = UDim2.new(0, 640, 0, 272),
 	BackgroundTransparency = 1,
 }, duelGui)
-addScale(duelBottom)
+addFitScale(duelBottom, 660, 560)
 local duelControls = make("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0) }, duelBottom)
 
 local TYPE_GLOW = {
@@ -2662,7 +2694,7 @@ function renderDuelHud()
 				TextYAlignment = Enum.TextYAlignment.Top,
 				TextColor3 = COLORS.dim,
 			})
-			newButton(cell, affordable and "Play" or ("Need ⚡" .. card.cost), UDim2.new(0, 4, 0, 186), UDim2.new(1, -42, 0, 30), affordable and COLORS.good or COLORS.locked, function()
+			newButton(cell, affordable and ("Play  [" .. index .. "]") or ("Need ⚡" .. card.cost), UDim2.new(0, 4, 0, 186), UDim2.new(1, -42, 0, 30), affordable and COLORS.good or COLORS.locked, function()
 				if not affordable then
 					toast("Not enough energy yet. Play a cheaper card, or Pass to save up.", "error")
 					return
@@ -2848,6 +2880,7 @@ panels.Battle = function()
 		})
 	else
 		local aura, cash = Battle.reward(floor, state.cashCap)
+		aura = aura * (Season.event().tower or 1)
 		local boss = floor % Duel.BossEvery == 0
 		newLabel(infoRow, (boss and "👑 BOSS  ·  " or "") .. "Floor " .. floor .. "   ·   win: +" .. Format.short(aura) .. " aura, " .. Format.cash(cash) .. (boss and ", a Legendary card" or ""), UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 24), {
 			Font = Enum.Font.FredokaOne,
@@ -2882,7 +2915,7 @@ panels.Battle = function()
 		TextColor3 = Color3.fromRGB(255, 215, 90),
 	})
 	local dailyText = won and "✅ Won today. Come back tomorrow for a new one (you can replay for fun)."
-		or ("Win with a preset " .. #challenge.deck .. "-card deck: +" .. Format.short(Quests.reward(state.rebirths) * Config.ChallengeAuraQuests) .. " aura and a free booster.")
+		or ("Win with a preset " .. #challenge.deck .. "-card deck: +" .. Format.short(Quests.reward(state.rebirths) * Config.ChallengeAuraQuests * (Season.event().tower or 1)) .. " aura and a free booster.")
 	newLabel(dailyRow, dailyText, UDim2.new(0, 14, 0, 30), UDim2.new(1, -190, 0, 30), {
 		TextSize = 12,
 		TextColor3 = COLORS.dim,
@@ -3057,6 +3090,8 @@ local MENU = {
 	{ "Store", "💎 Store", Color3.fromRGB(120, 80, 200), "M" },
 }
 local keyBadges = {} -- the little key letters on the buttons (keyboard players only)
+local menuButtons = {} -- [panel name] = its menu button
+local menuGlows = {} -- [panel name] = the yellow outline the tutorial puts on a button
 local menuGrid = make("Frame", {
 	BackgroundTransparency = 1,
 	Size = UDim2.new(1, 0, 0, math.ceil(#MENU / 2) * 40),
@@ -3079,6 +3114,7 @@ for index, entry in ipairs(MENU) do
 		BackgroundTransparency = 0.35,
 		BackgroundColor3 = Color3.new(0, 0, 0),
 	}))
+	menuButtons[entry[1]] = button
 	if entry[1] == "Packs" then
 		packsButton = button
 	elseif entry[1] == "Quests" then
@@ -3090,12 +3126,16 @@ end
 -- State updates from the server
 ---------------------------------------------------------------------
 -- What a brand-new player should do next, or "" once they have the hang of it.
+-- Returns the hint text and, when it points at a menu button, that button's panel name.
 local function tutorialHint()
+	if duel then
+		return "", nil -- the duel has its own instructions
+	end
 	if state.cashCap < math.huge and state.cash >= state.cashCap * 0.999 then
-		return "💰 Wallet full! Rebirth (🌟) to raise your money cap — vault your best cards first."
+		return "💰 Wallet full! Rebirth (🌟) to raise your money cap — vault your best cards first.", nil
 	end
 	if state.rebirths > 0 then
-		return ""
+		return "", nil
 	end
 	local owned = next(state.inventory) ~= nil
 	local displayed = next(state.slots) ~= nil
@@ -3104,21 +3144,43 @@ local function tutorialHint()
 		discovered = discovered + 1
 	end
 	if state.freePacks > 0 and not owned and not displayed then
-		return "🎁 Open your free pack — tap the 🎁 FREE! button"
+		return "🎁 Open your free pack — tap the 🎁 FREE! button", "Packs"
 	end
 	if owned and not displayed then
-		return "🃏 Open Deck and tap Auto-fill Deck to start earning"
+		return "🃏 Open Deck and tap Auto-fill Deck to start earning", "Cards"
 	end
 	if displayed and discovered < 8 and state.upgrades.auto < 1 and state.cash < 100 then
-		return "💵 Walk over the green cash register in your store to collect"
+		return "💵 Walk over the green cash register in your store to collect", nil
 	end
-	return ""
+	if displayed and state.packsOpened < 3 and state.cash >= 150 then
+		return "🎴 Buy another Booster in Packs — more cards means more cash", "Packs"
+	end
+	if displayed and owned and state.upgrades.slots == 0 and state.cash >= Upgrades.Defs.slots.cost(0) then
+		return "🏪 Buy a Deck Slot in Upgrade so one more card can earn", "Upgrades"
+	end
+	if state.tower == 0 and discovered >= 6 and state.packsOpened >= 3 then
+		return "⚔️ Try the Battle Tower — open Battle and press FIGHT", "Battle"
+	end
+	return "", nil
 end
 
 local function refreshHud()
-	local hint = tutorialHint()
+	local hint, hintPanel = tutorialHint()
 	hintLabel.Text = hint
 	hintLabel.Visible = hint ~= ""
+	-- the menu button the hint is about gets a yellow outline
+	for name, button in pairs(menuButtons) do
+		local glow = menuGlows[name]
+		if name == hintPanel and glow == nil then
+			glow = make("UIStroke", { Color = Color3.fromRGB(255, 225, 90), Thickness = 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, button)
+			menuGlows[name] = glow
+		end
+		if glow then
+			glow.Enabled = name == hintPanel
+		end
+	end
+	local weekly = Season.event()
+	eventLabel.Text = "🎉 " .. weekly.name .. ": " .. weekly.text
 	if state.cashCap < math.huge then
 		-- wallet cap: shown as "have / cap", red when full
 		cashLabel.Text = "💵 " .. Format.cash(state.cash) .. " / " .. Format.cash(state.cashCap)
@@ -3296,6 +3358,14 @@ for _, entry in ipairs(MENU) do
 	keyToPanel[Enum.KeyCode[entry[4]]] = entry[1]
 end
 
+local DUEL_HAND_KEYS = {
+	[Enum.KeyCode.One] = 1,
+	[Enum.KeyCode.Two] = 2,
+	[Enum.KeyCode.Three] = 3,
+	[Enum.KeyCode.Four] = 4,
+	[Enum.KeyCode.Five] = 5,
+}
+
 local function usingGamepad()
 	return string.find(UserInputService:GetLastInputType().Name, "Gamepad") ~= nil
 end
@@ -3359,6 +3429,34 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			clickSignal:Fire()
 		end
 		return
+	end
+
+	-- during a duel (with no menu open): 1-5 play a card, Tab aims, Space passes;
+	-- on a gamepad RB aims and X passes
+	if duelGui.Visible and not window.Visible then
+		local handIndex = DUEL_HAND_KEYS[key]
+		if handIndex and not processed then
+			local card = duel and duel.hand[handIndex] and Duel.card(duel.hand[handIndex])
+			if card and card.cost <= duel.energy then
+				duelAct({ kind = "play", hand = handIndex, target = duelTarget })
+			elseif card then
+				toast("Not enough energy yet. Play a cheaper card, or Pass to save up.", "error")
+			end
+			return
+		elseif (key == Enum.KeyCode.Tab or key == Enum.KeyCode.ButtonR1) and duel and not duelBusy and not duelEnding then
+			for step = 1, #duel.enemies do
+				local index = (duelTarget + step - 1) % #duel.enemies + 1
+				if duel.enemies[index].hp > 0 then
+					duelTarget = index
+					break
+				end
+			end
+			renderDuelHud()
+			return
+		elseif (key == Enum.KeyCode.Space and not processed) or key == Enum.KeyCode.ButtonX then
+			duelAct({ kind = "pass" })
+			return
+		end
 	end
 
 	if input.UserInputType == Enum.UserInputType.Keyboard then

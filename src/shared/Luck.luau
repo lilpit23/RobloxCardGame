@@ -6,6 +6,7 @@ local Combos = require(script.Parent.Combos)
 local Config = require(script.Parent.Config)
 local Perks = require(script.Parent.Perks)
 local Rebirth = require(script.Parent.Rebirth)
+local Season = require(script.Parent.Season)
 
 local Luck = {}
 
@@ -44,6 +45,7 @@ function Luck.sources(profile, eventActive, passes)
 	if eventActive then
 		add("Lucky event", Config.LuckEvent.BonusLevels)
 	end
+	add("This week's event", Season.event().luck)
 	return list, total
 end
 

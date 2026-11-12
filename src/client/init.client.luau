@@ -6,6 +6,7 @@ local SoundService = game:GetService("SoundService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -714,12 +715,73 @@ local renderPanel -- defined below; panels call it to refresh themselves
 local renderedRev = -1
 local panels = {}
 
+-- Long lists (the deck screen, the trade lists) can hold thousands of cards. Building a
+-- card's picture and buttons is the slow part, so those screens only lay out empty boxes and
+-- the loop below fills in the ones on screen (plus a little either side) as you scroll, and
+-- empties them again once they are far away.
+local lazyFrames = {} -- { frame, build = function(frame), built, keep = { [child] = true } }
+local lazyPending = false -- something still needs building (or the layout isn't ready yet)
+local lazyCanvasY, lazyWindowY = -1, -1
+local LAZY_BUILDS_PER_FRAME = 16
+
+local function fillLazily(frame, build)
+	local keep = {}
+	for _, child in ipairs(frame:GetChildren()) do
+		keep[child] = true
+	end
+	table.insert(lazyFrames, { frame = frame, build = build, built = false, keep = keep })
+	lazyPending = true
+end
+
 local function clearBody()
+	table.clear(lazyFrames)
 	for _, child in ipairs(body:GetChildren()) do
 		child:Destroy()
 	end
 	actionButton.Visible = false
 end
+
+RunService.RenderStepped:Connect(function()
+	if #lazyFrames == 0 or not window.Visible then
+		return
+	end
+	local canvasY, windowY = body.CanvasPosition.Y, body.AbsoluteWindowSize.Y
+	if not lazyPending and canvasY == lazyCanvasY and windowY == lazyWindowY then
+		return -- nothing moved since the last look
+	end
+	lazyCanvasY, lazyWindowY = canvasY, windowY
+	local top = body.AbsolutePosition.Y
+	local margin = windowY * 0.75
+	local budget = LAZY_BUILDS_PER_FRAME
+	local pending = false
+	for _, entry in ipairs(lazyFrames) do
+		local height = entry.frame.AbsoluteSize.Y
+		if height <= 0 then
+			pending = true -- not laid out yet; look again next frame
+		else
+			local y = entry.frame.AbsolutePosition.Y - top
+			if y + height > -margin and y < windowY + margin then
+				if not entry.built then
+					if budget > 0 then
+						budget = budget - 1
+						entry.built = true
+						entry.build(entry.frame)
+					else
+						pending = true
+					end
+				end
+			elseif entry.built and (y + height < -windowY * 3 or y > windowY * 4) then
+				entry.built = false
+				for _, child in ipairs(entry.frame:GetChildren()) do
+					if not entry.keep[child] then
+						child:Destroy()
+					end
+				end
+			end
+		end
+	end
+	lazyPending = pending
+end)
 
 local function useList()
 	make("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, body)
@@ -853,17 +915,22 @@ panels.Packs = function()
 end
 
 -- Deck + cards ----------------------------------------------------------
-local function newCardCell(parent, key, order)
+-- An empty box in a card grid. The card face is drawn, and `addControls(cell)` run, only
+-- when the box scrolls into view.
+local function newCardCell(parent, key, order, addControls)
 	local cell = make("Frame", {
 		BackgroundTransparency = 1,
 		LayoutOrder = order,
 	}, parent)
-	local holder = make("Frame", {
-		BackgroundTransparency = 1,
-		Position = UDim2.new(0, 4, 0, 4),
-		Size = UDim2.new(1, -8, 0, 157),
-	}, cell)
-	CardView.new(key).Parent = holder
+	fillLazily(cell, function()
+		local holder = make("Frame", {
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 4, 0, 4),
+			Size = UDim2.new(1, -8, 0, 157),
+		}, cell)
+		CardView.new(key).Parent = holder
+		addControls(cell)
+	end)
 	return cell
 end
 
@@ -1050,9 +1117,8 @@ panels.Cards = function()
 	local order = 0
 	for _, entry in ipairs(deckCards) do
 		local key, index = entry.key, entry.index
-		do
-			order = order + 1
-			local cell = newCardCell(page, key, order)
+		order = order + 1
+		newCardCell(page, key, order, function(cell)
 			newLabel(cell, "IN DECK", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 16), {
 				TextSize = 11,
 				TextXAlignment = Enum.TextXAlignment.Center,
@@ -1084,7 +1150,7 @@ panels.Cards = function()
 					Remotes.VaultStore:FireServer(key, index)
 				end).TextSize = 12
 			end
-		end
+		end)
 	end
 
 	local keys = {}
@@ -1095,45 +1161,48 @@ panels.Cards = function()
 	end
 	table.sort(keys, sortKeys)
 
+	local vaultHasRoom = #state.vault < state.vaultSlots
 	for _, key in ipairs(keys) do
 		order = order + 1
-		local cell = newCardCell(page, key, order)
-		newLabel(cell, "x" .. state.inventory[key], UDim2.new(1, -44, 0, 0), UDim2.new(0, 44, 0, 18), {
-			TextSize = 13,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			BackgroundTransparency = 0,
-			BackgroundColor3 = Color3.fromRGB(20, 20, 28),
-			ZIndex = 3,
-		})
-		newButton(cell, "To deck", UDim2.new(0, 4, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.button, function()
-			Remotes.PlaceCard:FireServer(key)
-		end).TextSize = 13
-		newButton(cell, "Sell " .. Format.cash(Cards.getSellValue(key)), UDim2.new(0.5, 2, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.bad, function()
-			Remotes.SellCard:FireServer(key, 1)
-		end).TextSize = 11
-
-		local _, variantId = Cards.parse(key)
-		local nextVariant = Cards.nextVariant(variantId)
-		local canFuse = nextVariant ~= nil and state.inventory[key] >= Config.FuseCount
-		local canVault = #state.vault < state.vaultSlots
-		-- third button row: Fuse and/or Vault share the width
-		local fusePosition, fuseSize = UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32)
-		local vaultPosition, vaultSize = fusePosition, fuseSize
-		if canFuse and canVault then
-			fuseSize = UDim2.new(0.5, -6, 0, 32)
-			vaultPosition, vaultSize = UDim2.new(0.5, 2, 0, 203), UDim2.new(0.5, -6, 0, 32)
-		end
-		if canFuse then
-			local fuseText = "Fuse → " .. Cards.Variants[nextVariant].name
-			newButton(cell, fuseText, fusePosition, fuseSize, Color3.fromRGB(200, 70, 180), function()
-				Remotes.FuseCard:FireServer(key)
+		local copies = state.inventory[key]
+		newCardCell(page, key, order, function(cell)
+			newLabel(cell, "x" .. copies, UDim2.new(1, -44, 0, 0), UDim2.new(0, 44, 0, 18), {
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Center,
+				BackgroundTransparency = 0,
+				BackgroundColor3 = Color3.fromRGB(20, 20, 28),
+				ZIndex = 3,
+			})
+			newButton(cell, "To deck", UDim2.new(0, 4, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.button, function()
+				Remotes.PlaceCard:FireServer(key)
+			end).TextSize = 13
+			newButton(cell, "Sell " .. Format.cash(Cards.getSellValue(key)), UDim2.new(0.5, 2, 0, 167), UDim2.new(0.5, -6, 0, 32), COLORS.bad, function()
+				Remotes.SellCard:FireServer(key, 1)
 			end).TextSize = 11
-		end
-		if canVault then
-			newButton(cell, "🔐 Vault", vaultPosition, vaultSize, Color3.fromRGB(215, 160, 50), function()
-				Remotes.VaultStore:FireServer(key)
-			end).TextSize = 12
-		end
+
+			local _, variantId = Cards.parse(key)
+			local nextVariant = Cards.nextVariant(variantId)
+			local canFuse = nextVariant ~= nil and copies >= Config.FuseCount
+			local canVault = vaultHasRoom
+			-- third button row: Fuse and/or Vault share the width
+			local fusePosition, fuseSize = UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32)
+			local vaultPosition, vaultSize = fusePosition, fuseSize
+			if canFuse and canVault then
+				fuseSize = UDim2.new(0.5, -6, 0, 32)
+				vaultPosition, vaultSize = UDim2.new(0.5, 2, 0, 203), UDim2.new(0.5, -6, 0, 32)
+			end
+			if canFuse then
+				local fuseText = "Fuse → " .. Cards.Variants[nextVariant].name
+				newButton(cell, fuseText, fusePosition, fuseSize, Color3.fromRGB(200, 70, 180), function()
+					Remotes.FuseCard:FireServer(key)
+				end).TextSize = 11
+			end
+			if canVault then
+				newButton(cell, "🔐 Vault", vaultPosition, vaultSize, Color3.fromRGB(215, 160, 50), function()
+					Remotes.VaultStore:FireServer(key)
+				end).TextSize = 12
+			end
+		end)
 	end
 
 	if order == 0 then
@@ -1849,12 +1918,14 @@ local function renderActiveTrade()
 	newNote(order, "Your cards — tap Add to offer one:")
 	for _, key in ipairs(sortedInventoryKeys()) do
 		order = order + 1
-		local row = newRow(order, 36)
-		newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
-		newLabel(row, "x" .. state.inventory[key], UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
-		newButton(row, "Add", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), COLORS.button, function()
-			Remotes.TradeOffer:FireServer(key, true)
-		end).TextSize = 13
+		local copies = state.inventory[key]
+		fillLazily(newRow(order, 36), function(row)
+			newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
+			newLabel(row, "x" .. copies, UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
+			newButton(row, "Add", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), COLORS.button, function()
+				Remotes.TradeOffer:FireServer(key, true)
+			end).TextSize = 13
+		end)
 	end
 end
 
@@ -1942,13 +2013,15 @@ panels.Trade = function()
 			end
 		end)
 		for index, key in ipairs(sortedInventoryKeys()) do
-			local row = newRow(2 + index, 36)
-			newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
-			newLabel(row, "x" .. state.inventory[key], UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
-			newButton(row, sellKey == key and "Selected" or "Select", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), sellKey == key and COLORS.good or COLORS.button, function()
-				sellKey = key
-				renderPanel()
-			end).TextSize = 13
+			local copies = state.inventory[key]
+			fillLazily(newRow(2 + index, 36), function(row)
+				newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
+				newLabel(row, "x" .. copies, UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
+				newButton(row, sellKey == key and "Selected" or "Select", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), sellKey == key and COLORS.good or COLORS.button, function()
+					sellKey = key
+					renderPanel()
+				end).TextSize = 13
+			end)
 		end
 	else
 		local order = 1

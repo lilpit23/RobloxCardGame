@@ -128,6 +128,15 @@ end
 -- Game passes owned, looked up by profile: [data] = { [passKey] = true }.
 local dataPasses = setmetatable({}, { __mode = "k" })
 
+-- [data] = a number that goes up whenever that profile's inventory or collection book
+-- changes. pushState only re-sends those two (big) tables when it has moved, so the
+-- once-a-second cash and aura updates stay tiny however many cards a player owns.
+local cardRevs = setmetatable({}, { __mode = "k" })
+
+local function cardsChanged(data)
+	cardRevs[data] = (cardRevs[data] or 0) + 1
+end
+
 local function hasPass(data, passKey)
 	local flags = dataPasses[data]
 	return flags ~= nil and flags[passKey] == true
@@ -202,13 +211,18 @@ local function pushState(player)
 	end
 	session.dirty = false
 	local income, aura = totals(data)
+	-- the card tables only travel when they changed (or the profile itself was replaced)
+	local cardsRev = cardRevs[data] or 0
+	local sendCards = session.sentCardsFor ~= data or session.sentCardsRev ~= cardsRev
+	session.sentCardsFor = data
+	session.sentCardsRev = cardsRev
 	StateRemote:FireClient(player, {
 		rev = session.rev,
 		cash = data.cash,
 		aura = data.aura,
-		inventory = data.inventory,
+		inventory = sendCards and data.inventory or nil,
 		slots = data.slots,
-		collection = data.collection,
+		collection = sendCards and data.collection or nil,
 		upgrades = data.upgrades,
 		freePacks = data.freePacks,
 		rebirths = data.rebirths,
@@ -344,6 +358,7 @@ local onRebirthReset = function(_player, _data) end
 local function addCard(data, key, amount)
 	data.inventory[key] = (data.inventory[key] or 0) + (amount or 1)
 	data.collection[key] = true
+	cardsChanged(data)
 end
 
 local function takeCard(data, key, amount)
@@ -356,6 +371,7 @@ local function takeCard(data, key, amount)
 	else
 		data.inventory[key] = owned - amount
 	end
+	cardsChanged(data)
 	return true
 end
 
@@ -396,6 +412,10 @@ end
 RequestStateRemote.OnServerEvent:Connect(function(player)
 	if not allow(player, "RequestState", 1, 3) then
 		return
+	end
+	local session = sessions[player]
+	if session then
+		session.sentCardsFor = nil -- the client asked for everything, card tables included
 	end
 	pushState(player)
 end)
@@ -710,6 +730,7 @@ FuseCardRemote.OnServerEvent:Connect(function(player, key, fromSlot)
 		end
 		data.slots[tostring(fromSlot)] = newKey
 		data.collection[newKey] = true
+		cardsChanged(data)
 		Plots.setCard(session.plot, fromSlot, newKey)
 	else
 		if not takeCard(data, key, Config.FuseCount) then
@@ -1255,6 +1276,7 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	data.cash = Perks.startCash(data.perks)
 	data.aura = 0
 	data.inventory = {}
+	cardsChanged(data)
 	data.slots = {}
 	data.upgrades = { store = 0, slots = 0, luck = 0, auto = 0, charm = 0 }
 	data.packCounts = {} -- pack prices start low again

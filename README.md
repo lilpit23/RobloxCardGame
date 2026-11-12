@@ -67,6 +67,10 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
   pulls a new personal best.
 - **Aura Shrine levels unlock with rebirths.** Level 1 of every permanent perk is open from the
   start; each rebirth opens one more level. Aura also arrives more slowly than before.
+- **Deck screen tools.** Sort by income, rarity, set, name, effect or copies, and filter to one set.
+  Cards in the deck can be fused where they stand (copies in the deck and inventory both count).
+  "Pick a combo" opens the combo book, where "Add to deck" puts a whole story combo in for you,
+  filling empty slots first and then swapping out your weakest cards.
 - **Card detail.** Tap any card in the collection book to see every effect version of it, how
   many you own and where they are (deck, vault).
 - **Storefront choice.** From that card detail screen, pick which cards hang in the two frames

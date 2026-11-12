@@ -878,6 +878,54 @@ local function effectsGuide()
 	return table.concat(parts, "   ·   ")
 end
 
+-- How the Deck screen is sorted and filtered.
+local deckSort = "income"
+local deckSetFilter = "all" -- a set id, or "all"
+
+local SORTS = {
+	{ "income", "💰 Income" },
+	{ "rarity", "⭐ Rarity" },
+	{ "set", "📚 Set" },
+	{ "name", "🔤 Name" },
+	{ "effect", "✨ Effect" },
+	{ "copies", "🔢 Copies" },
+}
+
+-- A number to sort a card by for the chosen sort (bigger first), with name as a tie-break.
+local function sortValue(key)
+	local def, variantId = Cards.parse(key)
+	if deckSort == "rarity" then
+		return Cards.Rarities[def.rarity].order * 1e9 + Cards.getIncome(key)
+	elseif deckSort == "set" then
+		return -(table.find(Cards.SetOrder, def.set) * 1000 + def.number)
+	elseif deckSort == "effect" then
+		return table.find(Cards.VariantOrder, variantId) * 1e12 + Cards.getIncome(key)
+	elseif deckSort == "copies" then
+		return state.inventory[key] or 0
+	end
+	return Cards.getIncome(key)
+end
+
+local function sortKeys(a, b)
+	if deckSort == "name" then
+		local nameA, nameB = Cards.getDisplayName(a), Cards.getDisplayName(b)
+		if nameA ~= nameB then
+			return nameA < nameB
+		end
+		return a < b
+	end
+	local valueA, valueB = sortValue(a), sortValue(b)
+	if valueA ~= valueB then
+		return valueA > valueB
+	end
+	return a < b
+end
+
+local function passesFilter(key)
+	local def = Cards.parse(key)
+	return def ~= nil and (deckSetFilter == "all" or def.set == deckSetFilter)
+end
+
 panels.Cards = function()
 	local used = 0
 	for index = 1, state.slotCount do
@@ -925,12 +973,37 @@ panels.Cards = function()
 
 	local toolsRow = newRow(3, 44)
 	toolsRow.BackgroundTransparency = 1
-	newButton(toolsRow, "⚗️ Fuse all spares (3 → 1)", UDim2.new(0, 0, 0, 2), UDim2.new(0.5, -4, 0, 38), Color3.fromRGB(200, 70, 180), function()
+	newButton(toolsRow, "⚗️ Fuse all spares", UDim2.new(0, 0, 0, 2), UDim2.new(1 / 3, -4, 0, 38), Color3.fromRGB(200, 70, 180), function()
 		Remotes.FuseAll:FireServer()
-	end).TextSize = 15
-	newButton(toolsRow, "💰 Sell spares (keep 3 of each)", UDim2.new(0.5, 4, 0, 2), UDim2.new(0.5, -4, 0, 38), COLORS.bad, function()
+	end).TextSize = 14
+	newButton(toolsRow, "💰 Sell spares (keep 3)", UDim2.new(1 / 3, 2, 0, 2), UDim2.new(1 / 3, -4, 0, 38), COLORS.bad, function()
 		Remotes.SellSpares:FireServer()
-	end).TextSize = 15
+	end).TextSize = 14
+	newButton(toolsRow, "📜 Pick a combo", UDim2.new(2 / 3, 4, 0, 2), UDim2.new(1 / 3, -4, 0, 38), Color3.fromRGB(150, 95, 230), function()
+		-- the combo book lists every combo with an "Add to deck" button
+		bookSet = "combos"
+		bookCard = nil
+		currentPanel = "Book"
+		body.CanvasPosition = Vector2.new(0, 0)
+		renderPanel()
+	end).TextSize = 14
+
+	-- sort and filter
+	local sortRow = newRow(4, 40)
+	sortRow.BackgroundTransparency = 1
+	for index, sort in ipairs(SORTS) do
+		newButton(sortRow, sort[2], UDim2.new(0, (index - 1) * 80, 0, 2), UDim2.new(0, 76, 0, 34), deckSort == sort[1] and COLORS.button or COLORS.row, function()
+			deckSort = sort[1]
+			renderPanel()
+		end).TextSize = 12
+	end
+	local filterSet = Cards.Sets[deckSetFilter]
+	newButton(sortRow, filterSet and (filterSet.icon .. " " .. filterSet.code .. " only") or "All sets", UDim2.new(0, #SORTS * 80 + 6, 0, 2), UDim2.new(1, -(#SORTS * 80 + 6), 0, 34), filterSet and COLORS.good or COLORS.row, function()
+		-- step through: all sets, then each set in turn
+		local position = table.find(Cards.SetOrder, deckSetFilter) or 0
+		deckSetFilter = Cards.SetOrder[position + 1] or "all"
+		renderPanel()
+	end).TextSize = 12
 
 	local guideRow = newRow(2, 58)
 	newLabel(guideRow, "Card effects  —  " .. effectsGuide(), UDim2.new(0, 14, 0, 4), UDim2.new(1, -28, 1, -8), {
@@ -943,7 +1016,7 @@ panels.Cards = function()
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -12, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = 4,
+		LayoutOrder = 5,
 	}, body)
 	make("UIGridLayout", {
 		CellSize = UDim2.new(0, 120, 0, 241),
@@ -951,10 +1024,29 @@ panels.Cards = function()
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, page)
 
-	local order = 0
+	-- copies of each card sitting in the deck (they count toward fusing)
+	local deckCopies = {}
+	local deckCards = {}
 	for index = 1, state.slotCount do
 		local key = state.slots[tostring(index)]
-		if key then
+		if key and Cards.parse(key) then
+			deckCopies[key] = (deckCopies[key] or 0) + 1
+			if passesFilter(key) then
+				table.insert(deckCards, { key = key, index = index })
+			end
+		end
+	end
+	table.sort(deckCards, function(a, b)
+		if a.key ~= b.key then
+			return sortKeys(a.key, b.key)
+		end
+		return a.index < b.index
+	end)
+
+	local order = 0
+	for _, entry in ipairs(deckCards) do
+		local key, index = entry.key, entry.index
+		do
 			order = order + 1
 			local cell = newCardCell(page, key, order)
 			newLabel(cell, "IN DECK", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 16), {
@@ -967,28 +1059,37 @@ panels.Cards = function()
 			newButton(cell, "Take out", UDim2.new(0, 4, 0, 167), UDim2.new(1, -8, 0, 32), COLORS.locked, function()
 				Remotes.RemoveCard:FireServer(index)
 			end).TextSize = 14
-			-- vault it straight from the deck
-			if #state.vault < state.vaultSlots then
-				newButton(cell, "🔐 Vault", UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32), Color3.fromRGB(215, 160, 50), function()
+			-- fuse and vault straight from the deck; copies in the deck and inventory both count
+			local _, deckVariant = Cards.parse(key)
+			local deckNext = Cards.nextVariant(deckVariant)
+			local deckCanFuse = deckNext ~= nil and (state.inventory[key] or 0) + deckCopies[key] >= Config.FuseCount
+			local deckCanVault = #state.vault < state.vaultSlots
+			local leftPosition, leftSize = UDim2.new(0, 4, 0, 203), UDim2.new(1, -8, 0, 32)
+			local rightPosition, rightSize = leftPosition, leftSize
+			if deckCanFuse and deckCanVault then
+				leftSize = UDim2.new(0.5, -6, 0, 32)
+				rightPosition, rightSize = UDim2.new(0.5, 2, 0, 203), UDim2.new(0.5, -6, 0, 32)
+			end
+			if deckCanFuse then
+				newButton(cell, "Fuse → " .. Cards.Variants[deckNext].name, leftPosition, leftSize, Color3.fromRGB(200, 70, 180), function()
+					Remotes.FuseCard:FireServer(key, index)
+				end).TextSize = 11
+			end
+			if deckCanVault then
+				newButton(cell, "🔐 Vault", rightPosition, rightSize, Color3.fromRGB(215, 160, 50), function()
 					Remotes.VaultStore:FireServer(key, index)
-				end).TextSize = 13
+				end).TextSize = 12
 			end
 		end
 	end
 
 	local keys = {}
 	for key in pairs(state.inventory) do
-		if Cards.parse(key) then
+		if passesFilter(key) then
 			table.insert(keys, key)
 		end
 	end
-	table.sort(keys, function(a, b)
-		local incomeA, incomeB = Cards.getIncome(a), Cards.getIncome(b)
-		if incomeA ~= incomeB then
-			return incomeA > incomeB
-		end
-		return a < b
-	end)
+	table.sort(keys, sortKeys)
 
 	for _, key in ipairs(keys) do
 		order = order + 1
@@ -1033,7 +1134,7 @@ panels.Cards = function()
 
 	if order == 0 then
 		page:Destroy()
-		newLabel(newRow(4, 60), "No cards yet — open a pack from the Pack Shop!", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
+		newLabel(newRow(5, 60), deckSetFilter == "all" and "No cards yet — open a pack from the Pack Shop!" or "No cards from that set. Tap the set button to change the filter.", UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), {
 			TextSize = 18,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextColor3 = COLORS.dim,
@@ -1202,13 +1303,14 @@ panels.Book = function()
 		end
 		local note = newRow(2, 34)
 		note.BackgroundTransparency = 1
-		newLabel(note, "✅ in your deck    🟡 owned, not in deck    ❌ not owned yet.  A combo needs every card in the deck.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
+		newLabel(note, "✅ in your deck    🟡 owned, not in deck    ❌ not owned yet.  \"Add to deck\" puts the whole combo in for you.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
 			TextSize = 12,
 			TextColor3 = COLORS.dim,
 		})
 		for index, story in ipairs(Combos.Stories) do
 			local parts = {}
 			local have = 0
+			local missing = 0
 			for _, id in ipairs(story.cards) do
 				local mark = "❌"
 				if inDeck[id] then
@@ -1216,21 +1318,36 @@ panels.Book = function()
 					have = have + 1
 				elseif Rebirth.ownsCard(state, id) then
 					mark = "🟡"
+				else
+					missing = missing + 1
 				end
 				table.insert(parts, mark .. " " .. Cards.ById[id].name)
 			end
 			local done = have >= #story.cards
 			local row = newRow(2 + index, 64)
-			newLabel(row, story.name .. "   " .. Combos.bonusText(story) .. (done and "   ACTIVE" or ""), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+			newLabel(row, story.name .. "   " .. Combos.bonusText(story) .. (done and "   ACTIVE" or ""), UDim2.new(0, 14, 0, 6), UDim2.new(1, -180, 0, 22), {
 				Font = Enum.Font.FredokaOne,
 				TextSize = 17,
 				TextColor3 = done and Color3.fromRGB(255, 215, 90) or COLORS.text,
 			})
-			newLabel(row, table.concat(parts, "    "), UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 30), {
+			newLabel(row, table.concat(parts, "    "), UDim2.new(0, 14, 0, 30), UDim2.new(1, -180, 0, 30), {
 				TextSize = 12,
 				TextColor3 = COLORS.dim,
 				TextYAlignment = Enum.TextYAlignment.Top,
 			})
+			-- one tap puts the whole combo in the deck
+			local comboPosition, comboSize = UDim2.new(1, -156, 0, 12), UDim2.new(0, 148, 0, 40)
+			if done then
+				newButton(row, "In deck ✓", comboPosition, comboSize, COLORS.locked, nil).AutoButtonColor = false
+			elseif missing > 0 then
+				local need = newButton(row, "Missing " .. missing .. (missing == 1 and " card" or " cards"), comboPosition, comboSize, COLORS.locked, nil)
+				need.TextSize = 14
+				need.AutoButtonColor = false
+			else
+				newButton(row, "Add to deck", comboPosition, comboSize, COLORS.good, function()
+					Remotes.ComboFill:FireServer(index)
+				end)
+			end
 		end
 		return
 	end

@@ -51,6 +51,7 @@ local BuyUpgradeRemote = newRemote("RemoteEvent", "BuyUpgrade")
 local RequestStateRemote = newRemote("RemoteEvent", "RequestState")
 local FuseCardRemote = newRemote("RemoteEvent", "FuseCard")
 local FuseAllRemote = newRemote("RemoteEvent", "FuseAll")
+local ComboFillRemote = newRemote("RemoteEvent", "ComboFill")
 local SellSparesRemote = newRemote("RemoteEvent", "SellSpares")
 local AchievementClaimRemote = newRemote("RemoteEvent", "AchievementClaim")
 local RebirthRemote = newRemote("RemoteEvent", "Rebirth")
@@ -657,29 +658,150 @@ SellCardRemote.OnServerEvent:Connect(function(player, key, amount)
 end)
 
 -- Fuse: FuseCount copies of the same card + variant become one copy of the next variant up.
-FuseCardRemote.OnServerEvent:Connect(function(player, key)
+-- Fuse FuseCount copies of a card into the next effect up.
+-- fromSlot (optional): fuse a card that is in the deck. Its copies can come from the
+-- inventory and from other deck slots, and the fused card takes that slot.
+FuseCardRemote.OnServerEvent:Connect(function(player, key, fromSlot)
 	if not allow(player, "FuseCard", 8, 16) then
 		return
 	end
+	local session = sessions[player]
 	local data = PlayerData.get(player)
 	local def, variantId = Cards.parse(key)
-	if data == nil or def == nil then
+	if session == nil or data == nil or def == nil then
 		return
 	end
 	local nextVariant = Cards.nextVariant(variantId)
 	if nextVariant == nil then
-		notify(player, "Prismatic cards can't be fused any further.", "error")
-		return
-	end
-	if not takeCard(data, key, Config.FuseCount) then
-		notify(player, "You need " .. Config.FuseCount .. " copies to fuse.", "error")
+		notify(player, "That card can't be fused any further.", "error")
 		return
 	end
 	local newKey = Cards.makeKey(def.id, nextVariant)
-	addCard(data, newKey, 1)
+
+	if fromSlot ~= nil then
+		if type(fromSlot) ~= "number" or fromSlot % 1 ~= 0 or fromSlot < 1 or fromSlot > slotCount(data) then
+			return
+		end
+		if data.slots[tostring(fromSlot)] ~= key then
+			return
+		end
+		-- the card in this slot is one copy; find the rest in the inventory, then the deck
+		local others = {}
+		for index = 1, slotCount(data) do
+			if index ~= fromSlot and data.slots[tostring(index)] == key then
+				table.insert(others, index)
+			end
+		end
+		local needed = Config.FuseCount - 1
+		local fromInventory = math.min(data.inventory[key] or 0, needed)
+		if fromInventory + #others < needed then
+			notify(player, "You need " .. Config.FuseCount .. " copies to fuse.", "error")
+			return
+		end
+		takeCard(data, key, fromInventory)
+		needed = needed - fromInventory
+		for _, index in ipairs(others) do
+			if needed <= 0 then
+				break
+			end
+			data.slots[tostring(index)] = nil
+			Plots.setCard(session.plot, index, nil)
+			needed = needed - 1
+		end
+		data.slots[tostring(fromSlot)] = newKey
+		data.collection[newKey] = true
+		Plots.setCard(session.plot, fromSlot, newKey)
+	else
+		if not takeCard(data, key, Config.FuseCount) then
+			notify(player, "You need " .. Config.FuseCount .. " copies to fuse.", "error")
+			return
+		end
+		addCard(data, newKey, 1)
+	end
+
 	notify(player, "Fused into " .. Cards.getDisplayName(newKey) .. "!", "good")
 	data.stats.fused = data.stats.fused + 1
 	questProgress(player, "fuse", 1)
+	touch(player, true)
+end)
+
+-- Puts a story combo's cards into the deck: fills empty slots first, then swaps out the
+-- weakest cards that are not part of the combo.
+ComboFillRemote.OnServerEvent:Connect(function(player, storyIndex)
+	if not allow(player, "ComboFill", 2, 4) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil or type(storyIndex) ~= "number" then
+		return
+	end
+	local story = Combos.Stories[storyIndex]
+	if story == nil then
+		return
+	end
+	local count = slotCount(data)
+	if #story.cards > count then
+		notify(player, story.name .. " needs " .. #story.cards .. " deck slots.", "error")
+		return
+	end
+
+	local needed, inDeck = {}, {}
+	for _, id in ipairs(story.cards) do
+		needed[id] = true
+	end
+	for _, key in pairs(data.slots) do
+		local def = Cards.parse(key)
+		if def then
+			inDeck[def.id] = true
+		end
+	end
+
+	-- the best spare copy of each missing card
+	local picks = {}
+	for _, id in ipairs(story.cards) do
+		if not inDeck[id] then
+			local best, bestIncome = nil, -1
+			for key, copies in pairs(data.inventory) do
+				local def = Cards.parse(key)
+				if def and def.id == id and copies > 0 and Cards.getIncome(key) > bestIncome then
+					best, bestIncome = key, Cards.getIncome(key)
+				end
+			end
+			if best == nil then
+				notify(player, "You don't have " .. Cards.ById[id].name .. " to add (check your vault).", "error")
+				return
+			end
+			table.insert(picks, best)
+		end
+	end
+	if #picks == 0 then
+		notify(player, story.name .. " is already in your deck.", "info")
+		return
+	end
+
+	for _, key in ipairs(picks) do
+		local slot = firstEmptySlot(data)
+		if slot == nil then
+			local weakestIncome = math.huge
+			for index = 1, count do
+				local deckKey = data.slots[tostring(index)]
+				local def = Cards.parse(deckKey)
+				if def and not needed[def.id] and Cards.getIncome(deckKey) < weakestIncome then
+					slot, weakestIncome = index, Cards.getIncome(deckKey)
+				end
+			end
+			if slot == nil then
+				break -- every slot already holds a combo card
+			end
+			addCard(data, data.slots[tostring(slot)], 1)
+		end
+		if takeCard(data, key, 1) then
+			data.slots[tostring(slot)] = key
+			Plots.setCard(session.plot, slot, key)
+		end
+	end
+	notify(player, "📖 " .. story.name .. " is in your deck!", "good")
 	touch(player, true)
 end)
 

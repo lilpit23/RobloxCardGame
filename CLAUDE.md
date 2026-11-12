@@ -61,7 +61,7 @@ way so the repo stays the whole game.
   the tower rewards. New weekly bonuses go in `Season.Events` and are applied in those places.
 - Card effects are `Cards.Variants` (Shiny, Slimy, Lucky, Shadow, Golden, Prismatic).
 - Pacing levers, in order of strength: the wallet cap (`Rebirth.cashCap`; all cash must go
-  through `addCash`), pack price inflation (`Packs.price`, counts in `data.packCounts`), deck
+  through `addCash`), pack price inflation (`Packs.price`, counts in `data.packCounts`, capped at `Packs.MaxInflation` times the base price), deck
   slot and store tier prices, and the rarity / effect income multipliers in `Cards.luau`. The
   multipliers stack, so small changes there move the whole game.
 - Aura Shrine perk levels are gated by rebirths (`Perks.maxLevel`); keep new permanent perks

@@ -71,9 +71,12 @@ end
 -- Cash packs get a little dearer every time you open one in the same run (reset by rebirth).
 -- This is the main brake on progress: early packs are cheap, the hundredth is not.
 Packs.InflationPerPack = 0.018
+-- ...but never more than this many times its starting price (reached after about 130 packs).
+Packs.MaxInflation = 10
 
 -- Total price of the next `count` packs, given how many of this pack were already opened
 -- this run. Includes the Bulk Deal perk. Aura packs never inflate.
+
 function Packs.price(pack, opened, count, perks)
 	local base = Perks.packCost(pack, perks)
 	if pack.currency ~= "cash" then
@@ -81,7 +84,8 @@ function Packs.price(pack, opened, count, perks)
 	end
 	local total = 0
 	for index = 0, count - 1 do
-		total = total + math.floor(base * (1 + Packs.InflationPerPack) ^ ((opened or 0) + index))
+		local growth = math.min(Packs.MaxInflation, (1 + Packs.InflationPerPack) ^ ((opened or 0) + index))
+		total = total + math.floor(base * growth)
 	end
 	return total
 end

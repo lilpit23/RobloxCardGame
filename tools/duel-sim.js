@@ -41,6 +41,10 @@ local function winrate(profile,floor,n)
   for i=1,n do local s=Duel.new(floor,deck,rng) while not s.over do assert(bot(s)) end if s.win then w=w+1 end rounds=rounds+s.round end
   return w/n,rounds/n,deck
 end
+print("daily challenge (bot win rate):")
+for day=0,13 do local c=Duel.challenge(day) local w,rounds=0,0
+  for i=1,60 do local st=Duel.new(c.floor,c.deck,rng,"daily",Duel.enemies(c.floor,c.power,c.set)) while not st.over do assert(bot(st)) end if st.win then w=w+1 end rounds=rounds+st.round end
+  print("  day "..day.." "..c.set.." floor "..c.floor.." deck "..#c.deck..": "..math.floor(w/60*100).."% "..string.format("%.0f",rounds/60).."r") end
 local function top(profile,label)
   local best=0 local line={} firstfail=nil
   for floor=1,50 do local w,r=winrate(profile,floor,30) if w>=0.5 then best=floor end if floor%5==0 or floor<4 then line[#line+1]=floor..":"..math.floor(w*100).."%/"..string.format("%.0f",r).."r" end if w==0 and floor>best+3 then break end if w<0.5 and not firstfail then firstfail=floor end end

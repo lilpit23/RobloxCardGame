@@ -6,7 +6,7 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
 ## Layout
 
 - `src/shared/` → `ReplicatedStorage.Shared`. Data tables and pure logic used by both sides:
-  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Format`, `CardView` (builds a card's GUI).
+  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Titles`, `Format`, `CardView` (builds a card's GUI).
 - `src/server/` → `ServerScriptService.Server`. `init.server.luau` holds the remotes and game
   rules; `PlayerData.luau` is the only code that touches DataStores; `Monetization.luau` handles game
   passes and product receipts; `Plots.luau` builds the map
@@ -36,7 +36,10 @@ way so the repo stays the whole game.
   which build a row or card only while it is on screen.
 - Tower duels: the rules are in `Duel.luau` and the live duel is `session.duel` on the server;
   the client only gets `Duel.view` and the event list. Battling never uses up cards. After
-  changing duel numbers run `node tools/duel-sim.js`.
+  changing duel numbers run `node tools/duel-sim.js`. The enemy figures and camera of a duel
+  are built on the client (`buildStage`); the server only moves the player to their duel pad.
+- Global leaderboards use OrderedDataStores, and like every DataStore call they live in
+  `PlayerData.luau`. Titles are data in `Titles.luau`; earned ones are saved in `data.titles`.
 - No stealing and no PvP (owner's decision). Cards only change hands through trading and the
   market, both in `init.server.luau`; any new way to move cards between players needs the same
   care (re-check ownership at the moment of the swap, never yield in the middle).

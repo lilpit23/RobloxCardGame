@@ -8,6 +8,7 @@
 local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
@@ -45,6 +46,9 @@ local function newData()
 		perks = {}, -- Aura Shrine levels, kept through rebirths: [perkId] = level
 		tower = 0, -- highest battle tower floor cleared
 		battleDeck = {}, -- array of cardKeys to bring to tower duels (empty = pick automatically)
+		challengeDay = 0, -- Quests.today() of the last daily challenge won
+		titles = {}, -- [titleId] = true for titles earned (see Titles.luau)
+		title = "", -- the title being worn, "" for none
 		quests = { day = 0, list = {} }, -- today's quests, see Quests.luau
 		daily = { lastDay = 0, streak = 0 }, -- daily login reward
 		packCounts = {}, -- packs opened this run, per pack id (drives pack price; reset by rebirth)
@@ -213,6 +217,74 @@ function PlayerData.save(player, release)
 	end)
 end
 
+-- Global leaderboards --------------------------------------------------------------------
+-- One OrderedDataStore per board, keyed by user id. Both calls are safe to fail: boards just
+-- keep their old contents (Studio without API access has no stores at all).
+local scoreStores: { [string]: any } = {}
+local nameCache: { [number]: string } = {}
+local sentScores = {} -- [player] = { [boardId] = last score written }
+
+local function scoreStore(boardId)
+	if scoreStores[boardId] == nil then
+		local ok, result = pcall(function()
+			return DataStoreService:GetOrderedDataStore(Config.DataStoreName .. "_Top_" .. boardId)
+		end)
+		scoreStores[boardId] = ok and result or false
+	end
+	return scoreStores[boardId] or nil
+end
+
+-- scores = { [boardId] = whole number }. Zero scores are not written.
+function PlayerData.submitScores(player, scores)
+	local profile = profiles[player]
+	if profile == nil or not profile.canSave then
+		return
+	end
+	nameCache[player.UserId] = player.DisplayName
+	local sent = sentScores[player] or {}
+	sentScores[player] = sent
+	for boardId, score in pairs(scores) do
+		score = math.floor(score)
+		local boardStore = scoreStore(boardId)
+		if boardStore and score > 0 and sent[boardId] ~= score then
+			local ok = pcall(function()
+				boardStore:SetAsync(tostring(player.UserId), score)
+			end)
+			if ok then
+				sent[boardId] = score
+			end
+		end
+	end
+end
+
+-- Returns { { name, score }, ... }, best first. Empty when the store cannot be read.
+function PlayerData.topScores(boardId, count)
+	local rows = {}
+	local boardStore = scoreStore(boardId)
+	if boardStore == nil then
+		return rows
+	end
+	local ok, page = pcall(function()
+		return boardStore:GetSortedAsync(false, count):GetCurrentPage()
+	end)
+	if not ok or type(page) ~= "table" then
+		return rows
+	end
+	for _, entry in ipairs(page) do
+		local userId = tonumber(entry.key)
+		local name = userId and nameCache[userId]
+		if userId and name == nil then
+			local found, result = pcall(function()
+				return Players:GetNameFromUserIdAsync(userId)
+			end)
+			name = found and result or "Player"
+			nameCache[userId] = name
+		end
+		table.insert(rows, { name = name or "Player", score = entry.value })
+	end
+	return rows
+end
+
 -- Wipes the player's progress back to a brand-new profile (keeps the session lock, so the
 -- wiped profile is what gets saved when they leave).
 function PlayerData.reset(player)
@@ -228,6 +300,7 @@ function PlayerData.release(player)
 	if profiles[player] then
 		PlayerData.save(player, true)
 		profiles[player] = nil
+		sentScores[player] = nil
 	end
 end
 

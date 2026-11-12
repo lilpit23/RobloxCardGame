@@ -75,6 +75,8 @@ return {
 	-- Server-wide lucky event: everyone gets bonus luck levels for a while.
 	LuckEvent = { Interval = 20 * 60, Duration = 5 * 60, BonusLevels = 5 },
 	BattleCooldown = 5, -- seconds between tower battles
+	ChallengeAuraQuests = 3, -- the daily challenge pays this many quest rewards' worth of aura
+	GlobalBoardInterval = 180, -- seconds between refreshes of the all-server leaderboards
 
 	-- Built-in Roblox sounds. Swap for your own "rbxassetid://..." ids; "" turns a sound off.
 	Sounds = {

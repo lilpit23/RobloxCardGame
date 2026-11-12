@@ -32,6 +32,8 @@ local TIER_STYLE = {
 
 local plots = {}
 local leaderboardLabels = {}
+local globalBoardLabels = {} -- [boardIndex] = TextLabel on an all-server leaderboard
+local duelSpots = {} -- [plotIndex] = CFrame where that plot's owner stands to duel
 local callbacks: { [string]: (...any) -> ...any } = {}
 
 local function newPart(parent, name, size, cframe, color, material)
@@ -519,6 +521,21 @@ local function buildPlaza(map, layout)
 		label.TextYAlignment = Enum.TextYAlignment.Top
 		table.insert(leaderboardLabels, label)
 	end
+
+	-- three all-server leaderboards on the far side of the island, facing outwards
+	for index = 1, 3 do
+		local angle = math.rad(120 + (index - 1) * 60)
+		local outward = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		local base = outward * 17
+		local facing = CFrame.lookAt(base, base + outward)
+		newPart(map, "GlobalBoardPost", Vector3.new(1, 4, 1), facing + Vector3.new(0, 2.5, 0), Color3.fromRGB(40, 40, 48), Enum.Material.Metal)
+		local board = newPart(map, "GlobalBoard", Vector3.new(12, 10, 0.6), facing + Vector3.new(0, 9.5, 0), Color3.fromRGB(25, 25, 38))
+		local label = newSurfaceLabel(board, Enum.NormalId.Front, "Loading…")
+		label.TextScaled = false
+		label.TextSize = 30
+		label.TextYAlignment = Enum.TextYAlignment.Top
+		globalBoardLabels[index] = label
+	end
 end
 
 -- The road from the plaza to the arena, with lamps, trees and a signpost.
@@ -666,7 +683,18 @@ local function buildArena(map, layout)
 		end
 	end
 
-	-- monster gates at the sides of the arena (where waves will come from)
+	-- duel pads: one per plot, four on each side of the lane. A player stands at the lane end
+	-- of their pad and faces outwards; their enemies appear at the far end.
+	for index = 1, Config.PlotCount do
+		local side = index % 2 == 0 and 1 or -1
+		local x = centerX - 58 + math.floor((index - 1) / 2) * 21
+		newDisc(map, "DuelPadGlow", 11.6, 0.3, Vector3.new(x, 0.42, side * 31), accent, Enum.Material.Neon)
+		newDisc(map, "DuelPad", 11, 0.34, Vector3.new(x, 0.45, side * 31), Color3.fromRGB(38, 34, 52), Enum.Material.Slate)
+		local stand = Vector3.new(x, 0.6, side * 24.5)
+		duelSpots[index] = CFrame.lookAt(stand, stand + Vector3.new(0, 0, side))
+	end
+
+	-- monster gates at the sides of the arena
 	for _, side in ipairs({ -1, 1 }) do
 		local z = side * (ARENA_RADIUS - 8)
 		local x = centerX - 10
@@ -753,6 +781,19 @@ function Plots.setLeaderboard(lines)
 	for _, label in ipairs(leaderboardLabels) do
 		label.Text = text
 	end
+end
+
+-- One of the all-server boards in the plaza. lines = array of strings, best first.
+function Plots.setGlobalBoard(index, title, lines)
+	local label = globalBoardLabels[index]
+	if label then
+		label.Text = title .. "\n" .. table.concat(lines, "\n")
+	end
+end
+
+-- Where a plot's owner stands for a tower duel (at ground level, facing their enemies).
+function Plots.getDuelSpot(plot)
+	return duelSpots[plot.index]
 end
 
 function Plots.setSlotCount(plot, count)

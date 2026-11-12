@@ -231,26 +231,92 @@ function Duel.floorPower(floor)
 	return 10 * 1.16 ^ (floor - 1)
 end
 
-function Duel.enemies(floor)
-	local power = Duel.floorPower(floor)
+-- The tower is themed by set: the first floors are haunted by Storybook characters, the last
+-- by Romans. Returns the set id for a floor.
+Duel.FloorsPerSet = 7
+function Duel.floorSet(floor)
+	return Cards.SetOrder[math.min(#Cards.SetOrder, math.floor((floor - 1) / Duel.FloorsPerSet) + 1)]
+end
+
+local SET_PREFIX = {
+	storybook = "Runaway",
+	seas = "Cursed",
+	west = "Demon",
+	midnight = "Haunted",
+	olympus = "Fallen",
+	knights = "Rogue",
+	rome = "Rebel",
+}
+
+-- Kinds of enemy. Brutes just hit; the others have a trick, shown on the duel screen.
+Duel.Kinds = {
+	brute = { name = "", text = "" },
+	healer = { name = "💚 Healer", text = "Heals its most hurt ally instead of attacking" },
+	armored = { name = "🛡️ Armoured", text = "Takes 35% less damage" },
+	berserker = { name = "😡 Berserker", text = "Hits harder every round" },
+}
+Duel.Armor = 0.35
+Duel.HealShare = 0.12 -- of the healed ally's full health
+Duel.BerserkGrowth = 1.12
+Duel.BossRegen = 0.04 -- of the boss's full health, each round (second boss onwards)
+Duel.EnrageBelow = 0.5 -- third boss onwards: below this share of health it hits harder
+Duel.EnrageDamage = 1.4
+
+local function kindFor(floor, index, isBoss)
+	if isBoss or index == 1 then
+		return "brute"
+	end
+	local roll = (floor * 5 + index * 3) % 6
+	if floor >= 6 and roll == 0 then
+		return "healer"
+	elseif floor >= 12 and roll == 1 then
+		return "armored"
+	elseif floor >= 18 and roll == 2 then
+		return "berserker"
+	elseif floor >= 26 and roll == 3 then
+		return "healer"
+	elseif floor >= 34 and roll == 4 then
+		return "armored"
+	end
+	return "brute"
+end
+
+-- power and setId are only given by the daily challenge, which borrows a floor's line-up but
+-- sets its own strength and theme.
+function Duel.enemies(floor, power, setId)
+	power = power or Duel.floorPower(floor)
 	local boss = floor % Duel.BossEvery == 0
+	local bossNumber = math.floor(floor / Duel.BossEvery)
 	local count = 3
 	if floor <= 3 then
 		count = 1
 	elseif floor <= 9 then
 		count = 2
 	end
+	setId = setId or Duel.floorSet(floor)
+	local pool = Cards.Sets[setId].cards
 	local list = {}
 	for index = 1, count do
-		local def = Cards.List[(floor * 7 + index * 13) % #Cards.List + 1]
+		local def = pool[(floor * 7 + index * 13) % #pool + 1]
 		local isBoss = boss and index == 1
+		local kind = kindFor(floor, index, isBoss)
 		local hp = math.max(10, math.floor(power * (isBoss and 6 or 2.5)))
+		local attack = power * (isBoss and 0.55 or 0.32)
+		if kind == "healer" then
+			attack = attack * 0.6
+		elseif kind == "berserker" then
+			attack = attack * 0.7
+		end
 		list[index] = {
-			name = (isBoss and "👑 " or "") .. "Shadow " .. def.name,
+			name = (isBoss and "👑 " or "") .. SET_PREFIX[setId] .. " " .. def.name,
 			glyph = def.glyph,
 			type = def.type,
 			boss = isBoss,
-			attack = math.max(1, math.floor(power * (isBoss and 0.55 or 0.32))),
+			kind = kind,
+			regen = isBoss and bossNumber >= 2, -- heals a little every round
+			armor = (kind == "armored" or (isBoss and bossNumber >= 4)) and Duel.Armor or 0,
+			enrages = isBoss and bossNumber >= 3,
+			attack = math.max(1, math.floor(attack)),
 			maxHp = hp,
 			hp = hp,
 			weak = {}, -- fractions taken off its next attacks
@@ -258,6 +324,35 @@ function Duel.enemies(floor)
 		}
 	end
 	return list
+end
+
+-- The daily challenge: everyone gets the same preset deck and the same enemies for the day,
+-- so it is a test of play rather than of collection. day = Quests.today().
+-- Returns { set = setId, deck = { cardKey, ... }, floor = the tower floor whose line-up you
+-- face, power = how strong those enemies are }.
+Duel.ChallengePower = 25 -- enemy strength for a Storybook deck; doubles with each later set
+function Duel.challenge(day)
+	local setIndex = day % #Cards.SetOrder + 1
+	local set = Cards.Sets[Cards.SetOrder[setIndex]]
+	local byRarity = {}
+	for _, def in ipairs(set.cards) do
+		byRarity[def.rarity] = byRarity[def.rarity] or {}
+		table.insert(byRarity[def.rarity], def)
+	end
+	local deck = {}
+	local function take(rarity, count, effect)
+		local pool = byRarity[rarity] or {}
+		for pick = 1, math.min(count, #pool) do
+			local def = pool[(day * 3 + pick * 5) % #pool + 1]
+			table.insert(deck, effect and Cards.makeKey(def.id, effect) or def.id)
+		end
+	end
+	take("Common", 4)
+	take("Uncommon", 4)
+	take("Rare", 3)
+	take("Epic", 2)
+	take("Legendary", 1, "holo")
+	return { set = set.id, deck = deck, floor = 11 + day % 8, power = Duel.ChallengePower * 2 ^ (setIndex - 1) }
 end
 
 local function shuffle(list, rng)
@@ -291,7 +386,7 @@ end
 
 -- A new duel. deck = array of card keys (already checked with usableDeck). Returns nil if
 -- the deck is empty.
-function Duel.new(floor, deck, rng)
+function Duel.new(floor, deck, rng, mode, enemies)
 	local pile = {}
 	for _, key in ipairs(deck) do
 		if Duel.card(key) then
@@ -305,13 +400,14 @@ function Duel.new(floor, deck, rng)
 	shuffle(pile, rng)
 	local state = {
 		floor = floor,
+		mode = mode or "tower",
 		round = 1,
 		energy = Duel.StartEnergy,
 		hp = health,
 		maxHp = health,
 		shields = {}, -- fractions blocked from the next hits
 		charges = {}, -- fractions added to the next attacks
-		enemies = Duel.enemies(floor),
+		enemies = enemies or Duel.enemies(floor),
 		deck = pile,
 		hand = {},
 		discard = {},
@@ -331,6 +427,10 @@ function Duel.view(state)
 			glyph = enemy.glyph,
 			type = enemy.type,
 			boss = enemy.boss,
+			kind = enemy.kind,
+			regen = enemy.regen,
+			armor = enemy.armor,
+			enrages = enemy.enrages,
 			attack = enemy.attack,
 			hp = enemy.hp,
 			maxHp = enemy.maxHp,
@@ -340,6 +440,7 @@ function Duel.view(state)
 	end
 	return {
 		floor = state.floor,
+		mode = state.mode,
 		round = state.round,
 		energy = state.energy,
 		hp = state.hp,
@@ -372,9 +473,15 @@ local function hitEnemy(state, events, card, index, damage)
 	elseif resisted then
 		damage = damage * Duel.Resisted
 	end
+	if enemy.armor > 0 then
+		damage = damage * (1 - enemy.armor)
+	end
 	damage = math.max(1, math.floor(damage))
 	enemy.hp = math.max(0, enemy.hp - damage)
 	local text = card.name .. " hits " .. enemy.name .. " for " .. short(damage)
+	if enemy.armor > 0 then
+		text = text .. " (armour)"
+	end
 	if strong then
 		text = text .. " — type advantage!"
 	elseif resisted then
@@ -383,7 +490,18 @@ local function hitEnemy(state, events, card, index, damage)
 	if enemy.hp <= 0 then
 		text = text .. "  KO!"
 	end
-	table.insert(events, { kind = "hit", text = text, enemy = index, enemyHp = enemy.hp })
+	table.insert(events, { kind = "hit", text = text, enemy = index, enemyHp = enemy.hp, damage = damage, strong = strong })
+end
+
+-- The living enemy missing the biggest share of its health, or nil if nobody is hurt.
+local function mostHurt(state)
+	local best, worst = nil, 1
+	for index, enemy in ipairs(state.enemies) do
+		if enemy.hp > 0 and enemy.hp / enemy.maxHp < worst then
+			best, worst = index, enemy.hp / enemy.maxHp
+		end
+	end
+	return best
 end
 
 -- The enemies' turn, then the start of the next round.
@@ -396,7 +514,16 @@ local function finishRound(state, events, rng)
 
 	for index, enemy in ipairs(state.enemies) do
 		if enemy.hp > 0 and state.hp > 0 then
-			if enemy.boss and not enemy.winding and state.round % 3 == 2 then
+			if enemy.regen and enemy.hp < enemy.maxHp then
+				enemy.hp = math.min(enemy.maxHp, enemy.hp + math.floor(enemy.maxHp * Duel.BossRegen))
+				table.insert(events, { kind = "mend", text = enemy.name .. " regenerates.", enemy = index, enemyHp = enemy.hp })
+			end
+			local hurtAlly = enemy.kind == "healer" and mostHurt(state) or nil
+			if hurtAlly then
+				local ally = state.enemies[hurtAlly]
+				ally.hp = math.min(ally.maxHp, ally.hp + math.floor(ally.maxHp * Duel.HealShare))
+				table.insert(events, { kind = "mend", text = enemy.name .. " heals " .. (hurtAlly == index and "itself" or ally.name) .. ".", enemy = hurtAlly, enemyHp = ally.hp })
+			elseif enemy.boss and not enemy.winding and state.round % 3 == 2 then
 				-- bosses spend a turn winding up, so you can see the big hit coming
 				enemy.winding = true
 				table.insert(events, { kind = "windup", text = "⚠️ " .. enemy.name .. " is winding up a huge attack!", enemy = index })
@@ -405,6 +532,10 @@ local function finishRound(state, events, rng)
 				if enemy.winding then
 					damage = damage * 2.2
 					enemy.winding = false
+				end
+				local enraged = enemy.enrages and enemy.hp < enemy.maxHp * Duel.EnrageBelow
+				if enraged then
+					damage = damage * Duel.EnrageDamage
 				end
 				local weak = table.remove(enemy.weak, 1)
 				if weak then
@@ -416,13 +547,16 @@ local function finishRound(state, events, rng)
 				end
 				damage = math.max(1, math.floor(damage))
 				state.hp = math.max(0, state.hp - damage)
-				local text = enemy.name .. " hits you for " .. short(damage)
+				local text = enemy.name .. (enraged and " is enraged and hits you for " or " hits you for ") .. short(damage)
+				if enemy.kind == "berserker" then
+					enemy.attack = math.max(enemy.attack + 1, math.floor(enemy.attack * Duel.BerserkGrowth))
+				end
 				if blocked then
 					text = text .. " (shield blocked " .. percent(blocked) .. ")"
 				elseif weak then
 					text = text .. " (weakened)"
 				end
-				table.insert(events, { kind = "hurt", text = text, enemy = index, hp = state.hp })
+				table.insert(events, { kind = "hurt", text = text, enemy = index, hp = state.hp, damage = damage, attack = enemy.attack })
 			end
 		end
 	end

@@ -19,6 +19,7 @@ local Season = require(Shared:WaitForChild("Season"))
 local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
 local Duel = require(Shared:WaitForChild("Duel"))
+local Titles = require(Shared:WaitForChild("Titles"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
@@ -64,6 +65,7 @@ local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
 local DuelStartRemote = newRemote("RemoteFunction", "DuelStart")
 local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
 local BattleDeckRemote = newRemote("RemoteEvent", "BattleDeck")
+local SetTitleRemote = newRemote("RemoteEvent", "SetTitle")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
@@ -231,6 +233,9 @@ local function pushState(player)
 		rebirths = data.rebirths,
 		vault = data.vault,
 		battleDeck = data.battleDeck,
+		challengeDay = data.challengeDay,
+		titles = data.titles,
+		title = data.title,
 		vaultSlots = vaultSlots(data),
 		perks = data.perks,
 		tower = data.tower,
@@ -1083,6 +1088,75 @@ end)
 ---------------------------------------------------------------------
 -- The server picks the player's strongest team, runs the whole fight, and returns the log
 -- for the client to play back.
+-- The title floating over a player's head (and nothing at all when they wear none).
+local function updateOverhead(player)
+	local data = PlayerData.get(player)
+	local character = player.Character
+	local head = character and character:FindFirstChild("Head")
+	if data == nil or head == nil then
+		return
+	end
+	local old = head:FindFirstChild("AuraTitle")
+	if old then
+		old:Destroy()
+	end
+	local text = Titles.name(data.title)
+	if text == "" then
+		return
+	end
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "AuraTitle"
+	gui.Size = UDim2.new(8, 0, 1, 0)
+	gui.StudsOffset = Vector3.new(0, 3.1, 0)
+	gui.MaxDistance = 70
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(255, 215, 90)
+	label.TextStrokeTransparency = 0
+	label.Text = "« " .. text .. " »"
+	label.Parent = gui
+	gui.Parent = head
+end
+
+-- Hands out any titles the player has just qualified for. Returns true if there were any.
+local function checkTitles(player, data)
+	local earned = Titles.newlyEarned(data, data.titles)
+	if #earned == 0 then
+		return false
+	end
+	for _, title in ipairs(earned) do
+		data.titles[title.id] = true
+		data.aura = data.aura + title.aura
+		local reward = title.aura > 0 and ("  +" .. Format.short(title.aura) .. " aura") or ""
+		notify(player, "🎖️ New title: " .. title.name .. "!" .. reward, "good")
+		if data.title == "" then
+			data.title = title.id
+		end
+	end
+	updateOverhead(player)
+	return true
+end
+
+-- Wear a title you have earned ("" takes it off).
+SetTitleRemote.OnServerEvent:Connect(function(player, id)
+	if not allow(player, "SetTitle", 4, 8) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or type(id) ~= "string" then
+		return
+	end
+	if id ~= "" and not (Titles.ById[id] and data.titles[id]) then
+		return
+	end
+	data.title = id
+	updateOverhead(player)
+	touch(player, true)
+end)
+
 -- The battle deck the player would fight with right now: their saved deck minus anything
 -- they no longer own, or an automatic one if that leaves nothing.
 local function battleDeckFor(data)
@@ -1140,7 +1214,7 @@ BattleDeckRemote.OnServerEvent:Connect(function(player, action, key)
 end)
 
 -- Start a duel against the next tower floor. Returns { ok, view } or { ok = false, error }.
-DuelStartRemote.OnServerInvoke = function(player)
+DuelStartRemote.OnServerInvoke = function(player, mode)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
 	if session == nil or data == nil then
@@ -1150,17 +1224,32 @@ DuelStartRemote.OnServerInvoke = function(player)
 	if not allow(player, "DuelStart", 1, 2) or now - (session.lastBattle or 0) < Config.BattleCooldown then
 		return { ok = false, error = "Catch your breath. Try again in a moment." }
 	end
-	local floor = data.tower + 1
-	if floor > Battle.MaxFloor then
-		return { ok = false, error = "You have cleared the whole tower!" }
+	local duel
+	if mode == "daily" then
+		-- same preset deck and enemies for everyone today
+		local challenge = Duel.challenge(Quests.today())
+		duel = Duel.new(challenge.floor, challenge.deck, rng, "daily", Duel.enemies(challenge.floor, challenge.power, challenge.set))
+		duel.day = Quests.today()
+	else
+		local floor = data.tower + 1
+		if floor > Battle.MaxFloor then
+			return { ok = false, error = "You have cleared the whole tower!" }
+		end
+		duel = Duel.new(floor, battleDeckFor(data), rng)
 	end
-	local duel = Duel.new(floor, battleDeckFor(data), rng)
 	if duel == nil then
 		return { ok = false, error = "You need at least one card to battle." }
 	end
 	session.lastBattle = now
 	session.duel = duel
-	return { ok = true, view = Duel.view(duel) }
+
+	-- walk the player onto their duel pad in the arena; the client stages the fight there
+	local spot = Plots.getDuelSpot(session.plot)
+	local character = player.Character
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		character:PivotTo(spot + Vector3.new(0, 3, 0))
+	end
+	return { ok = true, view = Duel.view(duel), spot = spot }
 end
 
 -- One move in the current duel. action = { kind = "play" | "pass" | "discard" | "flee",
@@ -1209,13 +1298,37 @@ DuelActRemote.OnServerInvoke = function(player, action)
 	if duel.over then
 		session.duel = nil
 		-- data.tower is re-checked so a floor can only ever pay out once
-		if duel.win and duel.floor == data.tower + 1 then
+		if duel.win and duel.mode == "daily" then
+			-- pays once a day; replays are just for fun
+			if duel.day == Quests.today() and data.challengeDay ~= duel.day then
+				data.challengeDay = duel.day
+				local aura = Quests.reward(data.rebirths) * Config.ChallengeAuraQuests
+				data.aura = data.aura + aura
+				result.aura = aura
+				result.cash = 0
+				if data.gifts < Config.GiftMax then
+					data.gifts = data.gifts + 1
+					result.gift = true
+				end
+				touch(player, true)
+			end
+		elseif duel.win and duel.floor == data.tower + 1 then
 			local aura, cash = Battle.reward(duel.floor, Rebirth.cashCap(data.rebirths))
 			data.tower = duel.floor
 			data.aura = data.aura + aura
 			result.aura = aura
 			result.cash = addCash(data, cash)
-			touch(player, false)
+			if duel.floor % Duel.BossEvery == 0 then
+				-- beating a boss for the first time drops a Legendary from that part of the tower
+				local pool = Cards.pool("Legendary", { Duel.floorSet(duel.floor) })
+				if #pool > 0 then
+					local key = pool[rng:NextInteger(1, #pool)].id
+					addCard(data, key, 1)
+					result.drop = key
+				end
+			end
+			checkTitles(player, data)
+			touch(player, true)
 		end
 	end
 	return result
@@ -1829,6 +1942,12 @@ task.spawn(function()
 		leaderboardTick = leaderboardTick + 1
 		if leaderboardTick % 5 == 0 then
 			updateLeaderboard()
+			for player in pairs(sessions) do
+				local data = PlayerData.get(player)
+				if data and checkTitles(player, data) then
+					touch(player, true)
+				end
+			end
 		end
 		for player, session in pairs(sessions) do
 			local data = PlayerData.get(player)
@@ -1902,6 +2021,60 @@ task.spawn(function()
 end)
 
 ---------------------------------------------------------------------
+-- Global leaderboards: the best players across every server, on boards in the plaza
+---------------------------------------------------------------------
+local GLOBAL_BOARDS = {
+	{ id = "rebirths", title = "🌟 MOST REBIRTHS", value = function(data)
+		return data.rebirths
+	end },
+	{ id = "tower", title = "⚔️ HIGHEST TOWER FLOOR", value = function(data)
+		return data.tower
+	end },
+	{ id = "collection", title = "📖 BIGGEST COLLECTION", value = function(data)
+		local count = 0
+		for _ in pairs(data.collection) do
+			count = count + 1
+		end
+		return count
+	end },
+}
+
+local function refreshGlobalBoards()
+	for _, player in ipairs(Players:GetPlayers()) do
+		local data = PlayerData.get(player)
+		if data then
+			local scores = {}
+			for _, board in ipairs(GLOBAL_BOARDS) do
+				scores[board.id] = board.value(data)
+			end
+			PlayerData.submitScores(player, scores)
+		end
+	end
+	for index, board in ipairs(GLOBAL_BOARDS) do
+		local rows = PlayerData.topScores(board.id, 8)
+		local lines = {}
+		for rank, row in ipairs(rows) do
+			table.insert(lines, rank .. ". " .. row.name .. "   " .. Format.short(row.score))
+		end
+		if #lines == 0 then
+			lines = { "No scores yet" }
+		end
+		Plots.setGlobalBoard(index, board.title, lines)
+	end
+end
+
+task.spawn(function()
+	task.wait(20)
+	while true do
+		local ok, problem = pcall(refreshGlobalBoards)
+		if not ok then
+			warn("[AuraPacks] Global leaderboards: " .. tostring(problem))
+		end
+		task.wait(Config.GlobalBoardInterval)
+	end
+end)
+
+---------------------------------------------------------------------
 -- Lucky event: bonus luck for the whole server every so often
 ---------------------------------------------------------------------
 local function markAllDirty()
@@ -1937,6 +2110,9 @@ local function onCharacterAdded(player, character)
 	if root and sessions[player] == session then
 		task.wait()
 		character:PivotTo(Plots.getSpawnCFrame(session.plot))
+	end
+	if character:WaitForChild("Head", 10) and sessions[player] == session then
+		updateOverhead(player)
 	end
 end
 

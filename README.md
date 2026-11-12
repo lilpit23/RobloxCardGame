@@ -49,8 +49,15 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     every tenth floor. You build a 20-card battle deck from cards you own (they are not used
     up). Each round you gain 1 energy and play one card from a hand of five: strikes, blasts,
     heals, shields, power-ups and weakens. Rarer cards cost more energy. Each type deals +30%
-    damage to the next one in the cycle. `node tools/duel-sim.js` shows how far different
-    collections get.
+    damage to the next one in the cycle. Duels are staged on your duel pad in the arena: the
+    enemies stand as giant shadow cards, themed on the sets, and some heal, wear armour or go
+    berserk. Beating a boss for the first time drops a Legendary card. A daily challenge gives
+    everyone the same preset deck for aura and a free booster. `node tools/duel-sim.js` shows
+    how far different collections get.
+    **Titles** (set completions, Golden sets, tower bosses, rebirths, collection size) pay aura
+    once and can be worn over your head; pick one in the Quests screen. Three **all-server
+    leaderboards** in the plaza show the most rebirths, highest tower floor and biggest
+    collection.
 14. **Aura Shrine:** permanent perks bought with aura that survive rebirth (starting cash, cheaper
     packs, more aura, better offline earnings, extra vault slots).
 15. **Lucky events:** every 20 minutes the whole server gets better pack odds for 5 minutes.

@@ -138,10 +138,15 @@ Done: card types with a five-way advantage cycle; turn-based duels (`Duel.luau`,
 server-run): a saved 20-card battle deck, energy, a hand of five, six card roles, 50 floors with a
 boss every tenth; duel screen in the Battle panel; `tools/duel-sim.js` for tuning.
 
-- [ ] **B0 Duel follow-ups.** Stage the duel in the 3D arena (duel circle, camera, hit effects)
-  instead of only the panel; co-op (up to 4 players in one duel, still PvE); enemy variety
-  (healers, shielders), themed per set; gamepad shortcuts for hand cards; give more cards
-  hand-picked roles in `Duel.luau` (`ROLE_OVERRIDES`).
+Also done: duels staged on per-plot duel pads in the arena (client-side enemy figures, camera,
+hit effects); enemy kinds (healer, armoured, berserker) and boss traits; boss drops; the daily
+challenge (`Duel.challenge`); titles (`Titles.luau`); all-server leaderboards (OrderedDataStores
+in `PlayerData.luau`, boards on the plaza island).
+
+- [ ] **B0 Duel follow-ups.** Co-op (up to 4 players in one duel, still PvE); show a duel's
+  enemies to other players (they are client-side only today); gamepad shortcuts for hand cards;
+  a phone layout for the duel hand; give more cards hand-picked roles in `Duel.luau`
+  (`ROLE_OVERRIDES`).
 
 - [ ] **B1 Team picker.** Let the player choose and save a three-card battle team instead of the
   automatic strongest three, so type matchups become a decision. Validate ownership on the server.

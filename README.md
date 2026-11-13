@@ -277,8 +277,9 @@ to match (rebirth 1 has since been made a little cheaper, so expect about an hou
 | 1 | 1h 28m |
 | 2 | 1h 14m |
 | 3 | 1h 07m |
+| 4 | 0h 56m |
 
-Rebirths 4 to 8 follow the same rule of thumb (each run earns about ten times the last until
+Rebirths 5 to 8 follow the same rule of thumb (each run earns about ten times the last until
 the store is maxed, then about five times) but have not been simulated yet.
 
 ## Art

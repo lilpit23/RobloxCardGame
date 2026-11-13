@@ -55,7 +55,7 @@ local function newData()
 		packCounts = {}, -- packs opened this run, per pack id (drives pack price; reset by rebirth)
 		autoPack = { packId = "", on = false, sell = 0 }, -- Auto Packer settings
 		achievements = {}, -- [achievementId] = true once claimed (permanent income bonus)
-		stats = { fused = 0, earned = 0 }, -- lifetime counters for achievements
+		stats = { fused = 0, earned = 0, duels = 0 }, -- lifetime counters (achievements, Auto battler unlock)
 		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
 		codes = {}, -- [CODE] = true for codes already redeemed
 		showcase = { left = "", right = "" }, -- cards chosen for the storefront frames ("" = automatic)

@@ -66,7 +66,7 @@ local state = {
 	boosts = { luckUntil = 0, cashUntil = 0 },
 	showcase = { left = "", right = "" },
 	packsOpened = 0,
-	stats = { fused = 0, earned = 0 },
+	stats = { fused = 0, earned = 0, duels = 0 },
 	achievements = {},
 	packCounts = {},
 	autoPack = { packId = "", on = false, sell = 0 },

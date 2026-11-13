@@ -18,7 +18,6 @@ local HALF = SIZE / 2
 -- The active deck is shown as rows of cards: 8 across, up to 8 rows (64 slots).
 local STAND_COLUMNS = 8
 local STAND_SPACING_X = 7
-local STAND_FIRST_Z = -14
 local STAND_SPACING_Z = 6
 
 local TIER_STYLE = {

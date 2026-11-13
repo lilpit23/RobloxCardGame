@@ -656,4 +656,69 @@ function Duel.play(state, handIndex, targetIndex, rng)
 	return events
 end
 
+-- A sensible move for the given view (what Duel.view returns): the Auto battler plays these.
+-- Returns an action for the server: { kind = "play", hand, target } or { kind = "pass" }.
+function Duel.suggest(view)
+	local bestScore, bestHand, bestTarget = 0, nil, nil
+	for handIndex, key in ipairs(view.hand) do
+		local card = Duel.card(key)
+		if card and card.cost <= view.energy then
+			local score, target = 0, nil
+			if card.role == "attack" then
+				for index, enemy in ipairs(view.enemies) do
+					if enemy.hp > 0 then
+						local damage = card.amount * (1 - (enemy.armor or 0))
+						if Cards.typeBeats(card.type, enemy.type) then
+							damage = damage * Duel.Strong
+						elseif Cards.typeBeats(enemy.type, card.type) then
+							damage = damage * Duel.Resisted
+						end
+						-- finishing an enemy off is worth extra: it stops hitting back
+						local value = math.min(damage, enemy.hp) + (damage >= enemy.hp and enemy.attack * 3 or 0)
+						if value > score then
+							score, target = value, index
+						end
+					end
+				end
+			elseif card.role == "blast" then
+				for _, enemy in ipairs(view.enemies) do
+					if enemy.hp > 0 then
+						score = score + math.min(card.amount * (1 - (enemy.armor or 0)), enemy.hp)
+					end
+				end
+			elseif card.role == "heal" then
+				score = math.min(card.amount, view.maxHp - view.hp) * 1.2
+			elseif card.role == "shield" then
+				if view.shields == 0 then
+					local incoming = 0
+					for _, enemy in ipairs(view.enemies) do
+						if enemy.hp > 0 then
+							incoming = math.max(incoming, enemy.attack * (enemy.winding and 2.2 or 1))
+						end
+					end
+					score = incoming * card.amount * 1.5
+				end
+			elseif card.role == "charge" then
+				score = view.charges == 0 and 1 or 0
+			else
+				-- weaken whoever hits hardest
+				local hardest = 0
+				for index, enemy in ipairs(view.enemies) do
+					if enemy.hp > 0 and enemy.attack > hardest then
+						hardest, target = enemy.attack, index
+					end
+				end
+				score = 0.5
+			end
+			if score > bestScore then
+				bestScore, bestHand, bestTarget = score, handIndex, target
+			end
+		end
+	end
+	if bestHand then
+		return { kind = "play", hand = bestHand, target = bestTarget }
+	end
+	return { kind = "pass" }
+end
+
 return Duel

@@ -423,10 +423,21 @@ skipButton.ZIndex = 5
 
 -- Sounds come from Config.Sounds; a missing or empty id just plays nothing.
 local sounds = {}
+-- Sounds are always played on this client only (PlayLocalSound), never for other players.
+local windowFocused = true
+UserInputService.WindowFocused:Connect(function()
+	windowFocused = true
+end)
+UserInputService.WindowFocusReleased:Connect(function()
+	windowFocused = false
+end)
 local function playSound(name)
 	local id = Config.Sounds[name]
 	if id == nil or id == "" then
 		return
+	end
+	if not windowFocused then
+		return -- no noise from a window you are not looking at
 	end
 	local sound = sounds[name]
 	if sound == nil then
@@ -1586,6 +1597,8 @@ local function rebirthSignature()
 	return table.concat(parts)
 end
 
+local resetConfirmUntil = 0 -- the Full reset button must be tapped twice within a few seconds
+
 panels.Rebirth = function()
 	titleLabel.Text = "🌟 Rebirth  (" .. state.rebirths .. " so far)"
 	useList()
@@ -1680,6 +1693,25 @@ panels.Rebirth = function()
 			})
 		end
 	end
+
+	-- full reset: small, red and at the very bottom so nobody hits it by accident
+	local wipeRow = newRow(900, 34)
+	wipeRow.BackgroundTransparency = 1
+	newLabel(wipeRow, "Start over completely? Wipes everything, rebirths and collection included.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -150, 1, 0), {
+		TextSize = 11,
+		TextColor3 = COLORS.dim,
+	})
+	local wipeButton
+	wipeButton = newButton(wipeRow, "Full reset", UDim2.new(1, -140, 0, 5), UDim2.new(0, 128, 0, 24), COLORS.bad, function()
+		if os.clock() < resetConfirmUntil then
+			resetConfirmUntil = 0
+			Remotes.ResetData:FireServer()
+		else
+			resetConfirmUntil = os.clock() + 4
+			wipeButton.Text = "Tap again to wipe"
+		end
+	end)
+	wipeButton.TextSize = 12
 end
 
 -- Quests + daily reward ----------------------------------------------------------
@@ -1712,7 +1744,10 @@ panels.Quests = function()
 	local weekly = Season.event()
 	local eventRow = newRow(0, 40)
 	eventRow.BackgroundColor3 = Color3.fromRGB(60, 45, 80)
-	newLabel(eventRow, "🎉 This week:  " .. weekly.name .. "  —  " .. weekly.text, UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+	newButton(eventRow, "Claim all", UDim2.new(1, -160, 0, 4), UDim2.new(0, 148, 0, 32), COLORS.good, function()
+		Remotes.ClaimAll:FireServer()
+	end).TextSize = 15
+	newLabel(eventRow, "🎉 This week:  " .. weekly.name .. "  —  " .. weekly.text, UDim2.new(0, 14, 0, 0), UDim2.new(1, -180, 1, 0), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 15,
 		TextColor3 = Color3.fromRGB(255, 215, 90),
@@ -2152,7 +2187,6 @@ end
 
 -- Store: game passes and aura bundles ------------------------------------------------
 local codeText = ""
-local resetConfirmUntil = 0
 
 panels.Store = function()
 	titleLabel.Text = "💎 Store"
@@ -2242,7 +2276,7 @@ panels.Store = function()
 	if state.isOwner then
 		local resetRow = newRow(order + 2, 60)
 		resetRow.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
-		newLabel(resetRow, "🧪 Owner tool: wipe your own save to test the game from the start. Only you can see this.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), { TextSize = 13 })
+		newLabel(resetRow, "🧪 Owner testing tools. Only you can see these. (Full reset is at the bottom of the Rebirth screen.)", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 13 })
 		local toolRow = newRow(order + 3, 46)
 		toolRow.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
 		for index, tool in ipairs({
@@ -2256,16 +2290,6 @@ panels.Store = function()
 				Remotes.OwnerTool:FireServer(tool[1])
 			end).TextSize = 12
 		end
-		local resetButton
-		resetButton = newButton(resetRow, "Reset my save", UDim2.new(1, -160, 0, 8), buttonSize, COLORS.bad, function()
-			if os.clock() < resetConfirmUntil then
-				Remotes.ResetData:FireServer()
-			else
-				resetConfirmUntil = os.clock() + 4
-				resetButton.Text = "Tap again to wipe"
-				resetButton.TextSize = 14
-			end
-		end)
 	end
 
 	local note = newRow(order + 1, 34)
@@ -2289,6 +2313,14 @@ local duelBusy = false -- waiting for the server, or playing back a round
 local duelEnding = nil -- the result line, once the duel is over
 local deckEditing = false
 local stage = nil -- the 3D scene: { folder, spot, figures = { { part, home, gui, ... } } }
+local duelAuto = false -- the Auto battler is playing for you
+local autoToken = 0 -- changes whenever a duel ends, so a queued "next floor" can tell it is stale
+local startDuel -- defined below
+
+-- The Auto battler unlocks once you have finished one battle yourself.
+local function autoUnlocked()
+	return state.tower >= 1 or (state.stats ~= nil and (state.stats.duels or 0) >= 1)
+end
 
 local function typeText(typeId)
 	local info = Cards.Types[typeId]
@@ -2345,7 +2377,7 @@ local duelTop = make("Frame", {
 }, duelGui)
 round(duelTop, 12)
 addFitScale(duelTop, 600, 620)
-local duelTitle = newLabel(duelTop, "", UDim2.new(0, 14, 0, 4), UDim2.new(1, -28, 0, 24), {
+local duelTitle = newLabel(duelTop, "", UDim2.new(0, 14, 0, 4), UDim2.new(1, -150, 0, 24), {
 	Font = Enum.Font.FredokaOne,
 	TextSize = 18,
 	TextColor3 = Color3.fromRGB(255, 215, 90),
@@ -2356,6 +2388,8 @@ local duelLogLabel = newLabel(duelTop, "", UDim2.new(0, 14, 0, 28), UDim2.new(1,
 	TextWrapped = false,
 	TextTruncate = Enum.TextTruncate.AtEnd,
 })
+local autoButton = newButton(duelTop, "", UDim2.new(1, -128, 0, 5), UDim2.new(0, 120, 0, 24), COLORS.locked, nil)
+autoButton.TextSize = 12
 local duelBottom = make("Frame", {
 	AnchorPoint = Vector2.new(0.5, 1),
 	Position = UDim2.new(0.5, 0, 1, -8),
@@ -2556,6 +2590,7 @@ local function lungeEffect(figure, text)
 end
 
 local function leaveDuel()
+	autoToken = autoToken + 1
 	duel = nil
 	duelEnding = nil
 	duelLog = {}
@@ -2567,10 +2602,48 @@ local function leaveDuel()
 	releaseCamera()
 end
 
+-- One move by the Auto battler. After a tower win it waits out the cooldown and starts the
+-- next floor by itself; a defeat switches it off.
+local function autoStep()
+	if not duelAuto or duel == nil or duelBusy then
+		return
+	end
+	if duelEnding then
+		if duel.win and duel.mode == "tower" and duel.floor < Battle.MaxFloor then
+			local token = autoToken
+			task.delay(Config.BattleCooldown + 0.5, function()
+				if duelAuto and token == autoToken and duel and duelEnding then
+					leaveDuel()
+					startDuel("tower")
+				end
+			end)
+		else
+			duelAuto = false
+			renderDuelHud()
+		end
+		return
+	end
+	duelAct(Duel.suggest(duel))
+end
+
+autoButton.Activated:Connect(function()
+	if duel == nil or not autoUnlocked() then
+		return
+	end
+	duelAuto = not duelAuto
+	renderDuelHud()
+	if duelAuto then
+		task.defer(autoStep)
+	end
+end)
+
 function renderDuelHud()
 	if duel == nil then
 		return
 	end
+	autoButton.Visible = autoUnlocked()
+	autoButton.Text = duelAuto and "🤖 Auto: ON" or "🤖 Auto: OFF"
+	autoButton.BackgroundColor3 = duelAuto and COLORS.good or COLORS.locked
 	local daily = duel.mode == "daily"
 	duelTitle.Text = (daily and "📅 Daily challenge" or ("⚔️ Floor " .. duel.floor)) .. "  ·  Round " .. duel.round
 	duelLogLabel.Text = #duelLog > 0 and table.concat(duelLog, "\n") or "Tap an enemy to aim, then play a card. Rarer cards cost more ⚡ — Pass to save up."
@@ -2643,6 +2716,7 @@ function renderDuelHud()
 
 	if duelEnding then
 		newButton(status, "Continue", UDim2.new(1, -168, 0, 5), UDim2.new(0, 160, 0, 36), COLORS.good, function()
+			duelAuto = false
 			leaveDuel()
 			openPanel("Battle")
 		end)
@@ -2681,6 +2755,7 @@ function renderDuelHud()
 		duelAct({ kind = "pass" })
 	end).TextSize = 14
 	newButton(status, "Flee", UDim2.new(0, 544, 0, 5), UDim2.new(0, 88, 0, 36), COLORS.locked, function()
+		duelAuto = false
 		duelAct({ kind = "flee" })
 	end).TextSize = 14
 
@@ -2814,7 +2889,7 @@ function duelAct(action)
 			duel.hp = event.hp
 		end
 		renderDuelHud()
-		task.wait(0.45)
+		task.wait(duelAuto and 0.2 or 0.45)
 	end
 	if duel == nil then
 		return
@@ -2853,9 +2928,10 @@ function duelAct(action)
 	end
 	duelBusy = false
 	renderDuelHud()
+	task.defer(autoStep)
 end
 
-local function startDuel(mode)
+function startDuel(mode)
 	if battling then
 		return
 	end
@@ -2866,6 +2942,11 @@ local function startDuel(mode)
 	if not ok or type(result) ~= "table" or not result.ok then
 		battling = false
 		toast(ok and type(result) == "table" and result.error or "Could not start the battle.", "error")
+		if duelAuto then
+			-- the Auto battler could not start the next floor: stop and show the lobby
+			duelAuto = false
+			openPanel("Battle")
+		end
 		return
 	end
 	duel = result.view
@@ -2881,6 +2962,7 @@ local function startDuel(mode)
 	buildStage(result.spot, duel)
 	aimCamera(result.spot)
 	renderDuelHud()
+	task.defer(autoStep)
 end
 
 panels.Battle = function()
@@ -2928,9 +3010,20 @@ panels.Battle = function()
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
 		})
-		newButton(infoRow, "FIGHT", UDim2.new(1, -160, 0, 24), UDim2.new(0, 148, 0, 44), COLORS.bad, function()
+		newButton(infoRow, "FIGHT", UDim2.new(1, -160, 0, 8), UDim2.new(0, 148, 0, 42), COLORS.bad, function()
+			duelAuto = false
 			startDuel("tower")
 		end)
+		if autoUnlocked() then
+			newButton(infoRow, "🤖 Auto climb", UDim2.new(1, -160, 0, 54), UDim2.new(0, 148, 0, 30), Color3.fromRGB(150, 95, 230), function()
+				duelAuto = true
+				startDuel("tower")
+			end).TextSize = 13
+		else
+			local lockedAuto = newButton(infoRow, "🤖 Auto: finish 1 battle", UDim2.new(1, -160, 0, 54), UDim2.new(0, 148, 0, 30), COLORS.locked, nil)
+			lockedAuto.TextSize = 11
+			lockedAuto.AutoButtonColor = false
+		end
 	end
 
 	-- daily challenge: a preset deck, the same for everyone
@@ -2952,6 +3045,7 @@ panels.Battle = function()
 		TextYAlignment = Enum.TextYAlignment.Top,
 	})
 	newButton(dailyRow, won and "Replay" or "PLAY", UDim2.new(1, -160, 0, 10), UDim2.new(0, 148, 0, 44), won and COLORS.locked or Color3.fromRGB(215, 160, 50), function()
+		duelAuto = false
 		startDuel("daily")
 	end)
 

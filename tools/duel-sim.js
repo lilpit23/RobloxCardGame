@@ -17,23 +17,8 @@ local rng={NextNumber=function() return math.random() end,NextInteger=function(_
 local roles={} for _,d in ipairs(Cards.List) do local r=Duel.card(d.id).role roles[r]=(roles[r] or 0)+1 end
 for r,n in pairs(roles) do io.write(r,"=",n," ") end print()
 local function bot(state)
-  local best,bi,bt=-1,nil,nil
-  local low,li=math.huge,nil
-  for i,e in ipairs(state.enemies) do if e.hp>0 and e.hp<low then low,li=e.hp,i end end
-  for i,key in ipairs(state.hand) do local c=Duel.card(key)
-    if c.cost<=state.energy then
-      local score=0 local t=li
-      if c.role=="attack" then
-        for j,e in ipairs(state.enemies) do if e.hp>0 then local d=c.amount*(Cards.typeBeats(c.type,e.type) and 1.3 or (Cards.typeBeats(e.type,c.type) and .75 or 1)) local s=math.min(d,e.hp)+(d>=e.hp and e.attack*3 or 0) if s>score then score,t=s,j end end end
-      elseif c.role=="blast" then for j,e in ipairs(state.enemies) do if e.hp>0 then score=score+math.min(c.amount,e.hp) end end
-      elseif c.role=="heal" then score=math.min(c.amount,state.maxHp-state.hp)*1.2
-      elseif c.role=="shield" then local a=0 for _,e in ipairs(state.enemies) do if e.hp>0 then a=math.max(a,e.attack*(e.winding and 2.5 or 1)) end end score=(#state.shields==0) and a*c.amount*1.5 or 0
-      elseif c.role=="charge" then score=(#state.charges==0) and 1 or 0
-      else score=0.5 end
-      if score>best then best,bi,bt=score,i,t end
-    end
-  end
-  if bi and best>0 then return Duel.play(state,bi,bt,rng) end
+  local a=Duel.suggest(Duel.view(state))
+  if a.kind=="play" then return Duel.play(state,a.hand,a.target,rng) end
   return Duel.pass(state,rng)
 end
 local function winrate(profile,floor,n)

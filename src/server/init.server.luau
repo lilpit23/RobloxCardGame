@@ -68,6 +68,7 @@ local BattleDeckRemote = newRemote("RemoteEvent", "BattleDeck")
 local SetTitleRemote = newRemote("RemoteEvent", "SetTitle")
 local LoadoutRemote = newRemote("RemoteEvent", "Loadout")
 local OwnerToolRemote = newRemote("RemoteEvent", "OwnerTool")
+local ClaimAllRemote = newRemote("RemoteEvent", "ClaimAll")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
@@ -367,6 +368,8 @@ end
 
 -- Set further down, once trading and the market exist: clears a player's listings and trade.
 local onRebirthReset = function(_player, _data) end
+-- Set further down, with the titles: redraws the title over a player's head.
+local resetOverhead = function(_player) end
 
 local function addCard(data, key, amount)
 	data.inventory[key] = (data.inventory[key] or 0) + (amount or 1)
@@ -1083,17 +1086,41 @@ RedeemCodeRemote.OnServerEvent:Connect(function(player, text)
 	touch(player, true)
 end)
 
--- Owner-only testing tool: wipe your own save and start again.
+-- Full reset: any player can wipe their own save and start again from nothing (rebirths,
+-- collection book, perks, titles and tower progress included). Game passes are kept, because
+-- they belong to the Roblox account, not the save.
 ResetDataRemote.OnServerEvent:Connect(function(player)
-	if not allow(player, "ResetData", 0.2, 1) or not isOwner(player) then
+	if not allow(player, "ResetData", 0.1, 1) then
 		return
 	end
 	local session = sessions[player]
-	if session then
-		session.pending = 0
+	local old = PlayerData.get(player)
+	if session == nil or old == nil then
+		return
 	end
+	onRebirthReset(player, old) -- ends any trade and takes their cards off the market
+	session.duel = nil
+	session.pending = 0
+	session.playSeconds = 0
+
 	PlayerData.reset(player)
-	player:Kick("Your save was reset. Rejoin to start fresh.")
+	local data = PlayerData.get(player)
+	if data == nil then
+		return
+	end
+	dataPasses[data] = Monetization.get(player)
+	data.lastSeen = os.time()
+	ensureQuests(player, data)
+	session.rev = session.rev + 1
+	session.questRev = session.questRev + 1
+
+	Plots.setPending(session.plot, 0)
+	Plots.resetStands(session.plot, slotCount(data))
+	Plots.setTier(session.plot, 1)
+	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
+	resetOverhead(player)
+	notify(player, "Your save was wiped. Welcome to a brand-new store!", "good")
+	touch(player, true)
 end)
 
 -- Owner-only testing tools, so late-game screens can be reached without hours of play.
@@ -1227,6 +1254,8 @@ local function updateOverhead(player)
 	label.Parent = gui
 	gui.Parent = head
 end
+
+resetOverhead = updateOverhead
 
 -- Hands out any titles the player has just qualified for. Returns true if there were any.
 local function checkTitles(player, data)
@@ -1404,6 +1433,7 @@ DuelActRemote.OnServerInvoke = function(player, action)
 	local result = { ok = true, events = events, view = Duel.view(duel) }
 	if duel.over then
 		session.duel = nil
+		data.stats.duels = (data.stats.duels or 0) + 1 -- the Auto battler unlocks after the first
 		-- data.tower is re-checked so a floor can only ever pay out once
 		if duel.win and duel.mode == "daily" then
 			-- pays once a day; replays are just for fun
@@ -1523,6 +1553,78 @@ AchievementClaimRemote.OnServerEvent:Connect(function(player, achievementId)
 	session.questRev = session.questRev + 1
 	notify(player, "🏆 " .. achievement.name .. "!  +" .. math.floor(Achievements.BonusEach * 100 + 0.5) .. "% income forever, +" .. Format.short(aura) .. " aura", "good")
 	touch(player, false)
+end)
+
+-- Claims everything that is ready in one go: the daily reward, finished quests and
+-- achievements. It also puts on the player's best title.
+ClaimAllRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "ClaimAll", 1, 2) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil then
+		return
+	end
+	local claimed, auraTotal, cashTotal = 0, 0, 0
+
+	local day = Quests.today()
+	local daily = data.daily
+	if daily.lastDay < day then
+		daily.streak = daily.lastDay == day - 1 and daily.streak + 1 or 1
+		daily.lastDay = day
+		auraTotal = auraTotal + Quests.dailyAura(daily.streak, data.rebirths)
+		local income = totals(data)
+		cashTotal = cashTotal + addCash(data, 100 + math.floor(income * 120))
+		claimed = claimed + 1
+	end
+
+	for _, quest in ipairs(data.quests.list) do
+		if not quest.claimed and quest.progress >= quest.goal then
+			quest.claimed = true
+			auraTotal = auraTotal + Quests.reward(data.rebirths)
+			claimed = claimed + 1
+		end
+	end
+
+	for _, achievement in ipairs(Achievements.List) do
+		if not data.achievements[achievement.id] then
+			local value
+			if achievement.stat == "deck" then
+				value = slotCount(data)
+			else
+				value = Achievements.value(data, achievement.stat)
+			end
+			if value >= achievement.goal then
+				data.achievements[achievement.id] = true
+				auraTotal = auraTotal + Achievements.auraReward(achievement)
+				claimed = claimed + 1
+			end
+		end
+	end
+
+	data.aura = data.aura + auraTotal
+	checkTitles(player, data)
+	local best = Titles.best(data.titles)
+	local newTitle = best ~= "" and best ~= data.title
+	if newTitle then
+		data.title = best
+		updateOverhead(player)
+	end
+
+	if claimed > 0 then
+		local text = "Claimed " .. claimed .. (claimed == 1 and " reward" or " rewards") .. ":  +" .. Format.short(auraTotal) .. " aura"
+		if cashTotal > 0 then
+			text = text .. ", " .. Format.cash(cashTotal)
+		end
+		notify(player, text, "good")
+	elseif newTitle then
+		notify(player, "Now wearing your best title: " .. Titles.name(best), "good")
+	else
+		notify(player, "Nothing to claim right now.", "info")
+	end
+	session.questRev = session.questRev + 1
+	touch(player, true)
 end)
 
 ---------------------------------------------------------------------

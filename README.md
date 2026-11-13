@@ -56,9 +56,14 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     how far different collections get.
     Keyboard: **1-5** play a card, **Tab** aims, **Space** passes (gamepad: **RB** aims, **X**
     passes).
+    **Auto battler:** unlocks after your first finished battle. It plays your cards for you and
+    climbs floor after floor until it loses (toggle in the duel, or "Auto climb" in the lobby).
+    **Claim all** in the Quests screen collects every ready reward and puts on your best title.
+    **Full reset:** a small red button at the bottom of the Rebirth screen wipes a player's
+    whole save (tap twice).
     **Saved decks:** the Deck screen can remember three decks and swap between them.
     **Owner testing tools** (Store screen, creator or Studio only): fill the wallet, add aura,
-    add random cards, meet the next rebirth's requirements, skip tower floors, reset the save.
+    add random cards, meet the next rebirth's requirements, skip tower floors.
     **Weekly event:** one bonus for everyone that changes each week (Gold Rush +25% cash, Aura
     Bloom +50% aura, Lucky Week +3 luck, Tower Week double tower aura), set in `Season.luau`.
     **Titles** (set completions, Golden sets, tower bosses, rebirths, collection size) pay aura

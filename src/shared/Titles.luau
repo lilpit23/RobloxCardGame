@@ -5,11 +5,12 @@ local Cards = require(script.Parent.Cards)
 
 local Titles = {}
 
-Titles.List = {} -- { id, name, text, aura, check = function(profile) -> boolean }
+Titles.List = {} -- { id, name, text, aura, rank, check = function(profile) -> boolean }
 Titles.ById = {}
 
-local function add(id, name, text, aura, check)
-	local title = { id = id, name = name, text = text, aura = aura, check = check }
+-- rank says how impressive a title is; "wear my best title" picks the highest rank earned.
+local function add(id, name, text, aura, rank, check)
+	local title = { id = id, name = name, text = text, aura = aura, rank = rank, check = check }
 	table.insert(Titles.List, title)
 	Titles.ById[id] = title
 end
@@ -27,11 +28,11 @@ local SET_TITLES = {
 for index, setId in ipairs(Cards.SetOrder) do
 	local set = Cards.Sets[setId]
 	local name = SET_TITLES[setId] or set.name
-	add("set_" .. setId, name, "Collect every " .. set.name .. " card", 500 * index, function(profile)
+	add("set_" .. setId, name, "Collect every " .. set.name .. " card", 500 * index, 10 * index, function(profile)
 		local found, total = Cards.setProgress(profile.collection, setId)
 		return found >= total
 	end)
-	add("gold_" .. setId, "Golden " .. name, "Collect every " .. set.name .. " card in Golden", 5000 * index, function(profile)
+	add("gold_" .. setId, "Golden " .. name, "Collect every " .. set.name .. " card in Golden", 5000 * index, 100 + 10 * index, function(profile)
 		for _, def in ipairs(set.cards) do
 			if not profile.collection[Cards.makeKey(def.id, "gold")] then
 				return false
@@ -49,7 +50,7 @@ for _, entry in ipairs({
 	{ 50, "Master of the Tower" },
 }) do
 	local floor = entry[1]
-	add("tower_" .. floor, entry[2], "Clear floor " .. floor .. " of the Battle Tower", 30 * floor, function(profile)
+	add("tower_" .. floor, entry[2], "Clear floor " .. floor .. " of the Battle Tower", 30 * floor, 3 * floor, function(profile)
 		return (profile.tower or 0) >= floor
 	end)
 end
@@ -61,7 +62,7 @@ for _, entry in ipairs({
 	{ 8, "Eternal" },
 }) do
 	local rebirths = entry[1]
-	add("rebirth_" .. rebirths, entry[2], "Rebirth " .. rebirths .. (rebirths == 1 and " time" or " times"), 0, function(profile)
+	add("rebirth_" .. rebirths, entry[2], "Rebirth " .. rebirths .. (rebirths == 1 and " time" or " times"), 0, 25 * rebirths, function(profile)
 		return (profile.rebirths or 0) >= rebirths
 	end)
 end
@@ -72,7 +73,7 @@ for _, entry in ipairs({
 	{ 1000, "Grand Archivist" },
 }) do
 	local goal = entry[1]
-	add("book_" .. goal, entry[2], "Discover " .. goal .. " different cards and effects", goal * 5, function(profile)
+	add("book_" .. goal, entry[2], "Discover " .. goal .. " different cards and effects", goal * 5, goal / 10, function(profile)
 		local count = 0
 		for _ in pairs(profile.collection) do
 			count = count + 1
@@ -94,6 +95,17 @@ function Titles.newlyEarned(profile, owned)
 		end
 	end
 	return list
+end
+
+-- The highest-ranked title in owned (= data.titles), or "" if there are none.
+function Titles.best(owned)
+	local best = nil
+	for _, title in ipairs(Titles.List) do
+		if owned[title.id] and (best == nil or title.rank > best.rank) then
+			best = title
+		end
+	end
+	return best and best.id or ""
 end
 
 function Titles.name(id)

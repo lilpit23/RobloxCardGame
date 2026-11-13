@@ -571,6 +571,73 @@ local SETS = {
 			},
 		},
 	},
+	{
+		-- American folklore first: tall tales, legends and fearsome critters, all from stories
+		-- told or printed before 1929. The few real people all died about a century ago or
+		-- more (the latest is Annie Oakley, 1926): nobody living, recent, or in office in
+		-- living memory.
+		id = "america",
+		code = "PAX",
+		name = "Pax Americana",
+		icon = "🦅",
+		color = Color3.fromRGB(45, 80, 165),
+		sources = "American folklore and early history: the Paul Bunyan and Pecos Bill tall tales, the ballads of John Henry and Casey Jones, Washington Irving's Rip Van Winkle, frontier legends and fearsome critters",
+		mult = 16384,
+		packCost = 125000000000,
+		cards = {
+			Common = {
+				{ "Minuteman", "🎖️", "w" },
+				{ "Frontier Trapper", "🦫", "b" },
+				{ "Prairie Bison", "🦬", "b" },
+				{ "Bald Eagle", "🦅", "b" },
+				{ "Wild Mustang", "🐎", "b" },
+				{ "Covered Wagon", "🛞", "t" },
+				{ "Railroad Worker", "🛤️", "t" },
+				{ "Gold Prospector", "⛏️", "s" },
+				{ "Riverboat Pilot", "🚢", "t" },
+				{ "Liberty Bell", "🔔", "m" },
+				{ "Jackalope", "🐇", "b" },
+				{ "Yankee Doodle", "🪶", "s" },
+			},
+			Uncommon = {
+				{ "Paul Revere", "🏇", "w" },
+				{ "Betsy Ross", "🧵", "s" },
+				{ "Johnny Appleseed", "🍏", "s" },
+				{ "Davy Crockett", "🦝", "w" },
+				{ "Daniel Boone", "🌲", "w" },
+				{ "Rip Van Winkle", "💤", "m" },
+				{ "Casey Jones", "🚂", "t" },
+				{ "Molly Pitcher", "🪣", "w" },
+			},
+			Rare = {
+				{ "Annie Oakley", "🎯", "w" },
+				{ "Pecos Bill", "🌪️", "w" },
+				{ "Mike Fink", "🛶", "w" },
+				{ "Old Stormalong", "⚓", "t" },
+				{ "Jersey Devil", "🦇", "b" },
+				{ "Sasquatch", "👣", "b" },
+			},
+			Epic = {
+				{ "John Henry", "🔨", "w" },
+				{ "Babe the Blue Ox", "🐂", "b" },
+				{ "Benjamin Franklin", "🪁", "t" },
+				{ "Sitting Bull", "🌄", "w" },
+				{ "Harriet Tubman", "🌟", "s" },
+			},
+			Legendary = {
+				{ "George Washington", "🚣", "w" },
+				{ "Abraham Lincoln", "🎩", "s" },
+				{ "Geronimo", "⛰️", "w" },
+			},
+			Mythic = {
+				{ "Paul Bunyan", "🪓", "w" },
+				{ "Lady Liberty", "🗽", "m" },
+			},
+			Secret = {
+				{ "Uncle Sam", "🎆", "s" },
+			},
+		},
+	},
 }
 
 ---------------------------------------------------------------------

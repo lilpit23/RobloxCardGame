@@ -19,7 +19,7 @@ local ELITE_PRICE = 8 -- an Elite pack costs this many times its set's Booster
 
 -- Store tier needed to buy each set's packs. Price and colour live on the set, in Cards.
 -- A pack can have image = "rbxassetid://..." cover art; upload assets/packs/<pack id>.png.
-local SET_TIER = { storybook = 1, seas = 2, west = 3, midnight = 4, olympus = 5, knights = 6, rome = 7 }
+local SET_TIER = { storybook = 1, seas = 2, west = 3, midnight = 4, olympus = 5, knights = 6, rome = 7, america = 8 }
 
 Packs.List = {}
 
@@ -117,7 +117,7 @@ end
 
 -- Luck counts for less in later sets, so their rare cards stay hard to get however much
 -- luck a player has stacked up. One entry per set, in set order; the last value repeats.
-Packs.SetLuckScale = { 1, 0.8, 0.65, 0.5, 0.4, 0.3, 0.25 }
+Packs.SetLuckScale = { 1, 0.8, 0.65, 0.5, 0.4, 0.3, 0.25, 0.2 }
 
 -- Every card slot of every pack keeps at least this chance of a Common, whatever the luck.
 Packs.MinCommonChance = 0.01

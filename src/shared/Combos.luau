@@ -52,6 +52,13 @@ Combos.Stories = {
 	{ name = "The Punic Wars", cards = { "scipio_africanus", "hannibal", "war_elephant" }, aura = 1 },
 	{ name = "The Emperors", cards = { "augustus", "trajan", "hadrian_the_builder", "marcus_aurelius" }, income = 1 },
 	{ name = "Founding of Rome", cards = { "romulus_and_remus", "capitoline_goose", "the_eternal_city" }, luck = 5 },
+	{ name = "Midnight Ride", cards = { "paul_revere", "minuteman", "liberty_bell" }, income = 0.5 },
+	{ name = "Irving's Tales", cards = { "the_headless_horseman", "ichabod_crane", "rip_van_winkle" }, luck = 3 },
+	{ name = "Wild West Show", cards = { "annie_oakley", "sitting_bull" }, luck = 3 },
+	{ name = "Steel and Steam", cards = { "john_henry", "casey_jones", "railroad_worker" }, income = 0.75 },
+	{ name = "Fearsome Critters", cards = { "jackalope", "jersey_devil", "sasquatch" }, luck = 4 },
+	{ name = "Tall Tales", cards = { "paul_bunyan", "babe_the_blue_ox", "pecos_bill", "john_henry" }, aura = 1 },
+	{ name = "Spirit of '76", cards = { "george_washington", "benjamin_franklin", "betsy_ross", "paul_revere" }, income = 1 },
 }
 
 for _, story in ipairs(Combos.Stories) do

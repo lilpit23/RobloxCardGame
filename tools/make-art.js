@@ -12,6 +12,7 @@ const SETS = [
   ['olympus', 'Olympus', '神', '#3cbeaa'],
   ['knights', 'Knights and Outlaws', '騎', '#32965a'],
   ['rome', 'Glory of Rome', '羅', '#aa232d'],
+  ['america', 'Pax Americana', '鷲', '#2d50a5'],
 ];
 // One Booster and one (darker) Elite cover per set, plus the Champion Pack.
 const PACKS = [];
@@ -76,7 +77,7 @@ const thumb = `<style>${base}
   .chip:nth-child(2) { background: #ff7ac0; } .chip:nth-child(3) { background: #7fd6ff; }
 </style><div class="bg" style="background-position: 30% 0"></div>${fan(38)}
 <div class="title">Aura<br>Packs</div><div class="tag">Open packs. Build your store. Collect them all.</div>
-<div class="chips"><div class="chip">7 sets · 259 cards</div><div class="chip">Rebirths</div><div class="chip">Battle Tower</div></div>`;
+<div class="chips"><div class="chip">8 sets · 296 cards</div><div class="chip">Rebirths</div><div class="chip">Battle Tower</div></div>`;
 
 const pack = (name, kanji, color, count) => `<style>${base}
   body { background: transparent; }

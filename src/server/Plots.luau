@@ -28,6 +28,7 @@ local TIER_STYLE = {
 	{ floor = Color3.fromRGB(240, 195, 80), material = Enum.Material.Foil, accent = Color3.fromRGB(255, 240, 150) },
 	{ floor = Color3.fromRGB(225, 232, 240), material = Enum.Material.Marble, accent = Color3.fromRGB(120, 255, 255) },
 	{ floor = Color3.fromRGB(35, 30, 60), material = Enum.Material.SmoothPlastic, accent = Color3.fromRGB(255, 120, 255) },
+	{ floor = Color3.fromRGB(240, 240, 235), material = Enum.Material.Marble, accent = Color3.fromRGB(80, 120, 255) },
 }
 
 local plots = {}
@@ -150,6 +151,7 @@ local WALLS = {
 	{ color = Color3.fromRGB(90, 85, 120), material = Enum.Material.Concrete, trim = Color3.fromRGB(45, 40, 70) },
 	{ color = Color3.fromRGB(240, 238, 232), material = Enum.Material.Marble, trim = Color3.fromRGB(215, 170, 70) },
 	{ color = Color3.fromRGB(40, 36, 64), material = Enum.Material.SmoothPlastic, trim = Color3.fromRGB(20, 18, 34) },
+	{ color = Color3.fromRGB(245, 243, 238), material = Enum.Material.Marble, trim = Color3.fromRGB(45, 80, 165) },
 }
 
 local GROUND_HEIGHT = 16 -- inside height of the shop floor

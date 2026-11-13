@@ -58,6 +58,10 @@ local ROLE_OVERRIDES = {
 	count_dracula = "attack",
 	king_arthur = "attack",
 	hercules = "attack",
+	paul_bunyan = "blast",
+	john_henry = "attack",
+	lady_liberty = "shield",
+	george_washington = "charge",
 }
 for id in pairs(ROLE_OVERRIDES) do
 	assert(Cards.ById[id], "Duel role override for unknown card " .. id)
@@ -234,8 +238,9 @@ end
 -- The tower is themed by set: the first floors are haunted by Storybook characters, the last
 -- by Romans. Returns the set id for a floor.
 Duel.FloorsPerSet = 7
+Duel.TowerSets = 7 -- the tower's enemies are drawn from the first seven sets
 function Duel.floorSet(floor)
-	return Cards.SetOrder[math.min(#Cards.SetOrder, math.floor((floor - 1) / Duel.FloorsPerSet) + 1)]
+	return Cards.SetOrder[math.min(Duel.TowerSets, math.floor((floor - 1) / Duel.FloorsPerSet) + 1)]
 end
 
 local SET_PREFIX = {
@@ -246,6 +251,7 @@ local SET_PREFIX = {
 	olympus = "Fallen",
 	knights = "Rogue",
 	rome = "Rebel",
+	america = "Rival", -- only met in the daily challenge; the tower stops at the Rome floors
 }
 
 -- Kinds of enemy. Brutes just hit; the others have a trick, shown on the duel screen.

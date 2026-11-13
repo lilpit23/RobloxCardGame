@@ -19,7 +19,7 @@ Rebirth.Levels = {
 	{ cash = 20000000000000, aura = 1000000, cards = { "sun_wukong", "sherlock_holmes" } },
 	{ cash = 60000000000000, aura = 3000000, cards = { "jade_emperor", "count_dracula" } },
 	{ cash = 200000000000000, aura = 8000000, cards = { "hercules", "medusa" } }, -- + Olympus
-	{ cash = 600000000000000, aura = 20000000, cards = { "zeus", "king_arthur", "merlin" } }, -- + Knights and Outlaws
+	{ cash = 600000000000000, aura = 20000000, cards = { "zeus", "king_arthur", "merlin", "julius_caesar" } }, -- + Knights and Outlaws, Glory of Rome
 }
 
 Rebirth.IncomePerRebirth = 0.5 -- +50% income per rebirth

@@ -132,6 +132,16 @@ flatter rarity and effect multipliers, Auto Packer perk, simulator models the ca
 - [x] **G10 More cards.** Done: Neon Arcade set (24 cards) with Neon, Arcade and Glitch packs, plus the
   Omega Pack. Follow-up: a set filter in the collection book, and rebirths that need Neon cards.
 
+## Owner's direction (latest)
+
+- One new set per rebirth is the goal (done: `pack.rebirths`). There are 8 sets and 8 rebirths,
+  so a ninth set would give the last rebirth something new; the owner said more direction on
+  sets is coming.
+- The store is a card shop: shelves per floor, stairs, a checkout, staff with desks
+  (`Staff.luau`). Ideas not built yet: customers walking in, staff animations, more staff,
+  the cash-only upgrades (Lucky Charms, Aura Luck, Auto Collector) moved onto staff too.
+- Trading and the market were removed on purpose. Do not bring them back.
+
 ## Track B — battles (PvE only; the owner has ruled out PvP and stealing for now)
 
 Done: card types with a five-way advantage cycle; turn-based duels (`Duel.luau`, pure and

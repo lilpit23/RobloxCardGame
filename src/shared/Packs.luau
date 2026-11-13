@@ -17,22 +17,22 @@ local BOOSTER_SLOTS = { COMMON, COMMON, COMMON, UNCOMMON, RARE }
 local ELITE_SLOTS = { UNCOMMON, UNCOMMON, RARE, RARE, EPIC }
 local ELITE_PRICE = 8 -- an Elite pack costs this many times its set's Booster
 
--- Store tier needed to buy each set's packs. Price and colour live on the set, in Cards.
+-- A new set every rebirth: the first set is open from the start, and each rebirth opens the
+-- next one (pack.rebirths = rebirths needed). Price and colour live on the set, in Cards.
 -- A pack can have image = "rbxassetid://..." cover art; upload assets/packs/<pack id>.png.
-local SET_TIER = { storybook = 1, seas = 2, west = 3, midnight = 4, olympus = 5, knights = 6, rome = 7, america = 8 }
 
 Packs.List = {}
 
-for _, setId in ipairs(Cards.SetOrder) do
+for setIndex, setId in ipairs(Cards.SetOrder) do
 	local set = Cards.Sets[setId]
 	if not set.promo then
-		local storeTier = SET_TIER[setId] or 1
+		local rebirths = setIndex - 1
 		table.insert(Packs.List, {
 			id = setId .. "_booster",
 			name = set.name .. " Booster",
 			currency = "cash",
 			cost = set.packCost,
-			storeTier = storeTier,
+			rebirths = rebirths,
 			sets = { setId },
 			color = set.color,
 			slots = BOOSTER_SLOTS,
@@ -43,7 +43,7 @@ for _, setId in ipairs(Cards.SetOrder) do
 			name = set.name .. " Elite",
 			currency = "cash",
 			cost = set.packCost * ELITE_PRICE,
-			storeTier = storeTier,
+			rebirths = rebirths,
 			sets = { setId },
 			color = set.color:Lerp(Color3.new(0, 0, 0), 0.35),
 			slots = ELITE_SLOTS,
@@ -58,7 +58,7 @@ table.insert(Packs.List, {
 	name = "Champion Pack",
 	currency = "aura", -- the one pack bought with aura; aura packs never get dearer
 	cost = 500000,
-	storeTier = 7,
+	rebirths = 6,
 	color = Color3.fromRGB(245, 245, 250),
 	slots = { CHAMPION, CHAMPION, CHAMPION, CHAMPION, CHAMPION },
 })
@@ -88,6 +88,17 @@ function Packs.price(pack, opened, count, perks)
 		total = total + math.floor(base * growth)
 	end
 	return total
+end
+
+-- Whether a player with this many rebirths can buy the pack.
+function Packs.unlocked(pack, rebirths)
+	return (rebirths or 0) >= (pack.rebirths or 0)
+end
+
+-- "after 3 rebirths"
+function Packs.unlockText(pack)
+	local needed = pack.rebirths or 0
+	return "after " .. needed .. (needed == 1 and " rebirth" or " rebirths")
 end
 
 -- The pack new players get for free.

@@ -507,8 +507,8 @@ BuyPackRemote.OnServerInvoke = function(player, packId, count)
 		return { ok = false, error = "Slow down!" }
 	end
 
-	if data.upgrades.store + 1 < pack.storeTier then
-		return { ok = false, error = "Upgrade your store to " .. Upgrades.StoreTiers[pack.storeTier].name .. " first." }
+	if not Packs.unlocked(pack, data.rebirths) then
+		return { ok = false, error = "That pack unlocks " .. Packs.unlockText(pack) .. "." }
 	end
 
 	if count == nil then
@@ -568,7 +568,7 @@ local function runAutoPacker(player, session, data)
 	end
 	session.autoTimer = 0
 	local pack = Packs.ById[settings.packId]
-	if pack == nil or pack.currency ~= "cash" or data.upgrades.store + 1 < pack.storeTier then
+	if pack == nil or pack.currency ~= "cash" or not Packs.unlocked(pack, data.rebirths) then
 		return
 	end
 	if not spend(data, "cash", Packs.price(pack, data.packCounts[pack.id], 1, data.perks)) then

@@ -855,7 +855,6 @@ end
 panels.Packs = function()
 	titleLabel.Text = "🎴 Pack Shop"
 	useList()
-	local tier = state.upgrades.store + 1
 
 	-- Auto Packer: opens the chosen pack on a timer (one of Harshdeep's upgrades)
 	local packerInterval = Perks.packerInterval(state.perks)
@@ -911,7 +910,8 @@ panels.Packs = function()
 
 		local buttonPosition = UDim2.new(1, -160, 0, 14)
 		local buttonSize = UDim2.new(0, 148, 0, 40)
-		if tier >= pack.storeTier then
+		local unlocked = Packs.unlocked(pack, state.rebirths)
+		if unlocked then
 			-- choose this pack for the Auto Packer
 			if packerInterval and pack.currency == "cash" then
 				local selected = state.autoPack.packId == pack.id
@@ -943,8 +943,8 @@ panels.Packs = function()
 				end).TextSize = 11
 			end
 		end
-		if tier < pack.storeTier then
-			local locked = newButton(row, "🔒 " .. Upgrades.StoreTiers[pack.storeTier].name, buttonPosition, buttonSize, COLORS.locked, nil)
+		if not unlocked then
+			local locked = newButton(row, "🔒 " .. Packs.unlockText(pack), buttonPosition, buttonSize, COLORS.locked, nil)
 			locked.TextSize = 13
 			locked.AutoButtonColor = false
 		elseif (pack.id == Packs.StarterId and state.freePacks > 0) or (pack.kind == "booster" and state.gifts > 0) then
@@ -1609,7 +1609,7 @@ panels.Rebirth = function()
 	local level, ready, requirements = Rebirth.check(state)
 	renderedRebirthSignature = rebirthSignature()
 
-	local bonusRow = newRow(1, level and 64 or 40)
+	local bonusRow = newRow(1, level and 104 or 40)
 	newLabel(bonusRow, "Now:   " .. Rebirth.describeBonuses(state.rebirths), UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 22), {
 		TextSize = 15,
 	})
@@ -1617,6 +1617,28 @@ panels.Rebirth = function()
 		newLabel(bonusRow, "Next:  " .. Rebirth.describeBonuses(state.rebirths + 1), UDim2.new(0, 14, 0, 34), UDim2.new(1, -28, 0, 22), {
 			TextSize = 15,
 			TextColor3 = Color3.fromRGB(255, 215, 90),
+		})
+		-- what the next rebirth opens up: a new set, more shelves, maybe a new employee
+		local nextRebirths = state.rebirths + 1
+		local unlocks = {}
+		for _, pack in ipairs(Packs.List) do
+			if pack.kind == "booster" and pack.rebirths == nextRebirths then
+				table.insert(unlocks, "🎴 " .. Packs.setsText(pack) .. " packs")
+			end
+		end
+		local shelvesNow, shelvesNext = Upgrades.rebirthSlotCap(state.rebirths), Upgrades.rebirthSlotCap(nextRebirths)
+		if shelvesNext > shelvesNow then
+			table.insert(unlocks, "🗄️ up to " .. shelvesNext .. " deck slots (now " .. shelvesNow .. ")")
+		end
+		for _, staffId in ipairs(Staff.Order) do
+			if Staff.Defs[staffId].rebirths == nextRebirths then
+				table.insert(unlocks, "🧑‍💼 " .. Staff.Defs[staffId].name .. " joins your staff")
+			end
+		end
+		newLabel(bonusRow, "Unlocks:  " .. (#unlocks > 0 and table.concat(unlocks, "   ·   ") or "one more level of every staff upgrade"), UDim2.new(0, 14, 0, 60), UDim2.new(1, -28, 0, 38), {
+			TextSize = 13,
+			TextColor3 = Color3.fromRGB(150, 255, 170),
+			TextYAlignment = Enum.TextYAlignment.Top,
 		})
 	end
 

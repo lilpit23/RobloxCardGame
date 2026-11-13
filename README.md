@@ -27,11 +27,11 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     **Midnight Classics** (Dracula, Frankenstein, Sherlock Holmes), **Olympus** (Greek myth),
     **Knights and Outlaws** (King Arthur, Robin Hood), **Glory of Rome** (Caesar, Cleopatra,
     Spartacus) and **Pax Americana** (Paul Bunyan, John Henry, Pecos Bill, Johnny Appleseed,
-    Washington, Lincoln, Geronimo). Each unlocks at a higher store tier (there
-    are eight). Every set has its own colour and emblem, a 5-card **Booster** (3 commons, 1
+    Washington, Lincoln, Geronimo). The first set is open from the start and every rebirth unlocks the
+    next one. Every set has its own colour and emblem, a 5-card **Booster** (3 commons, 1
     uncommon, 1 guaranteed rare-or-better) and a pricier **Elite** pack. Later sets cost more and
     earn more. The **Champion Pack**, which pulls Epic-or-better cards from every set, costs
-    500,000 aura and needs the top store tier. The collection book is a binder page per set with card numbers (secret cards are
+    500,000 aura and unlocks after 6 rebirths. The collection book is a binder page per set with card numbers (secret cards are
     numbered past the set size), plus a **combo book** of every story combo. Completing a set
     gives +25% income.
 11. **Daily quests and a daily reward:** three quests a day (open packs, pull rares, sell, fuse,
@@ -199,7 +199,7 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 | --- | --- |
 | `src/shared/Config.luau` | Slots, pack size, sell price, events, sounds |
 | `src/shared/Cards.luau` | Sets and their card lists, rarities, variants, sell prices, aura rates |
-| `src/shared/Packs.luau` | Pack slots and odds, which store tier unlocks each set |
+| `src/shared/Packs.luau` | Pack slots and odds, how many rebirths unlock each set |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |
 | `src/shared/Perks.luau` | Permanent aura upgrades: prices, levels, effects |
 | `src/shared/Staff.luau` | The employees who run those upgrades: names, roles, rebirths needed, lines |
@@ -269,20 +269,17 @@ and keeps its best cards in the vault. It does not model aura, luck upgrades or 
 hand, and it plays faster than a person, so treat the times as a lower bound. Re-run it after
 changing prices.
 
-Two runs with the first four rebirth costs as they are now (the times swing a lot with luck):
+Latest run, with one new set per rebirth, deck slots tied to the store and the costs retuned
+to match (rebirth 1 has since been made a little cheaper, so expect about an hour):
 
-| Rebirth | Run A | Run B (24 hours) |
-| --- | --- | --- |
-| 1 | 1h 14m | 0h 54m |
-| 2 | 1h 29m | 0h 56m |
-| 3 | 2h 05m | 0h 57m |
-| 4 | not reached | 2h 17m |
+| Rebirth | Time in that run |
+| --- | --- |
+| 1 | 1h 28m |
+| 2 | 1h 14m |
+| 3 | 1h 07m |
 
-Run B then needed 8 hours for rebirth 5 and would have needed about 130 for rebirth 6: once
-every set is unlocked the simulated player's income stops growing (about $1.7B/s), while the
-costs kept climbing 20x. Rebirths 5 to 8 were therefore cut to climb about 3x ($20T, $60T,
-$200T, $600T) and their aura requirements to 1M, 3M, 8M and 20M. Those new numbers have not
-been through a full simulation yet.
+Rebirths 4 to 8 follow the same rule of thumb (each run earns about ten times the last until
+the store is maxed, then about five times) but have not been simulated yet.
 
 ## Art
 

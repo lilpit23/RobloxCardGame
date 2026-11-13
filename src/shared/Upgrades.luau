@@ -7,12 +7,12 @@ local Upgrades = {}
 Upgrades.StoreTiers = {
 	{ name = "Card Stall", cost = 0, mult = 1 },
 	{ name = "Card Shop", cost = 10000, mult = 1.5 },
-	{ name = "Card Emporium", cost = 750000, mult = 2.5 },
-	{ name = "Mega Card Store", cost = 15000000, mult = 4 },
-	{ name = "Aura Tower", cost = 500000000, mult = 7 },
-	{ name = "Card Palace", cost = 15000000000, mult = 12 },
-	{ name = "Hall of Legends", cost = 500000000000, mult = 20 },
-	{ name = "Grand Capitol", cost = 10000000000000, mult = 32 },
+	{ name = "Card Emporium", cost = 5000000, mult = 2.5 },
+	{ name = "Mega Card Store", cost = 75000000, mult = 4 },
+	{ name = "Aura Tower", cost = 900000000, mult = 7 },
+	{ name = "Card Palace", cost = 10000000000, mult = 12 },
+	{ name = "Hall of Legends", cost = 40000000000, mult = 20 },
+	{ name = "Grand Capitol", cost = 1200000000000, mult = 32 },
 }
 
 Upgrades.Order = { "store", "charm", "luck", "auto" }

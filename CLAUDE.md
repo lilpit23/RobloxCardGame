@@ -45,6 +45,10 @@ way so the repo stays the whole game.
   `PlayerData.luau`. Titles are data in `Titles.luau`; earned ones are saved in `data.titles`.
 - No stealing, no PvP, and no trading or market either (owner's decisions; trading and the
   market were removed). Cards never move between players.
+- A new set every rebirth: a set's packs unlock by rebirth count (`pack.rebirths`,
+  `Packs.unlocked`), not by store tier. The store tier only gives the income multiplier and
+  shelves. Rebirth costs in `Rebirth.luau` assume this, and each level's required cards must
+  come from sets already open in that run.
 - Deck slots are the store's shelves: `Upgrades.slotCount(storeLevel, rebirths, bonus)` is the
   only place the count is decided (store tier, capped per rebirth until the fifth). There is no
   deck-slot upgrade. `Plots.luau` puts 16 shelves on the ground floor and 8 on each storey.

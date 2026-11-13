@@ -35,6 +35,12 @@ local rng = { NextNumber = function() return math.random() end, NextInteger = fu
 
 local cash, time, tier, packsOpened = 0, 0, 1, 0
 local rebirths, runStart = 0, 0
+-- fengari has 32-bit integers, so do the cap in floating point (Roblox numbers are doubles)
+Rebirth.cashCap = function(count)
+  local level = Rebirth.Levels[(count or 0) + 1]
+  if level == nil then return math.huge end
+  return (level.cash + 0.0) * Rebirth.CapFactor
+end
 local function slots() return Upgrades.slotCount(tier - 1, rebirths, 0) end
 local packCounts = {} -- packs opened this run per pack id (prices rise with it)
 local owned, deck = {}, {}
@@ -73,7 +79,7 @@ local function wantedBooster()
   for _, id in ipairs(level.cards) do
     if not ownsId(id) then
       local pack = Packs.ById[Cards.ById[id].set .. "_booster"]
-      if pack.storeTier <= tier then return pack end
+      if Packs.unlocked(pack, rebirths) then return pack end
     end
   end
   return nil
@@ -81,7 +87,7 @@ end
 local function bestBooster(budget)
   local best = nil
   for _, pack in ipairs(Packs.List) do
-    if pack.kind == "booster" and pack.storeTier <= tier and priceOf(pack) <= budget and (best == nil or pack.cost > best.cost) then
+    if pack.kind == "booster" and Packs.unlocked(pack, rebirths) and priceOf(pack) <= budget and (best == nil or pack.cost > best.cost) then
       best = pack
     end
   end

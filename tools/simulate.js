@@ -33,8 +33,9 @@ local Cards, Packs, Deck = require({ __mod = "Cards" }), require({ __mod = "Pack
 local Upgrades, Rebirth, Format, Config = require({ __mod = "Upgrades" }), require({ __mod = "Rebirth" }), require({ __mod = "Format" }), require({ __mod = "Config" })
 local rng = { NextNumber = function() return math.random() end, NextInteger = function(_, a, b) return math.random(a, b) end }
 
-local cash, time, tier, slotLevel, packsOpened = 0, 0, 1, 0, 0
+local cash, time, tier, packsOpened = 0, 0, 1, 0
 local rebirths, runStart = 0, 0
+local function slots() return Upgrades.slotCount(tier - 1, rebirths, 0) end
 local packCounts = {} -- packs opened this run per pack id (prices rise with it)
 local owned, deck = {}, {}
 local STEP = 10
@@ -50,7 +51,7 @@ local function income()
   return deckScore * Upgrades.StoreTiers[tier].mult * Rebirth.incomeMult(rebirths)
 end
 local function rebuildDeck()
-  deck = Deck.autoFill(owned, Config.BaseSlots + slotLevel)
+  deck = Deck.autoFill(owned, slots())
   deckScore = Deck.score(deck)
 end
 local function openPack(pack)
@@ -86,7 +87,6 @@ local function bestBooster(budget)
   end
   return best
 end
-local function ownedCount() local n = 0 for _, c in pairs(owned) do n = n + c end return n end
 
 openPack(Packs.ById[Packs.StarterId]) -- the free starter pack
 rebuildDeck()
@@ -103,7 +103,8 @@ while time < HOURS * 3600 do
   if nextTier and cash >= nextTier.cost then
     cash = cash - nextTier.cost
     tier = tier + 1
-    log("  store tier " .. tier .. " (" .. nextTier.name .. "), earning " .. Format.cash(income()) .. "/s")
+    rebuildDeck()
+    log("  store tier " .. tier .. " (" .. nextTier.name .. "), " .. slots() .. " slots, earning " .. Format.cash(income()) .. "/s")
   end
 
   -- spend half of what was just earned on packs and save the rest for the next store tier
@@ -125,13 +126,6 @@ while time < HOURS * 3600 do
     changed = true
   end
 
-  local slotDef = Upgrades.Defs.slots
-  while slotLevel < slotDef.max and cash >= slotDef.cost(slotLevel) and ownedCount() > Config.BaseSlots + slotLevel do
-    cash = cash - slotDef.cost(slotLevel)
-    slotLevel = slotLevel + 1
-    changed = true
-  end
-
   dirty = dirty or changed
   sinceRebuild = sinceRebuild + STEP
   if dirty and sinceRebuild >= 60 then
@@ -146,20 +140,20 @@ while time < HOURS * 3600 do
     for _, id in ipairs(level.cards) do ready = ready and ownsId(id) end
     if ready then
       rebirths = rebirths + 1
-      log("REBIRTH " .. rebirths .. " after " .. clock(time - runStart) .. " in this run (tier " .. tier .. ", " .. (Config.BaseSlots + slotLevel) .. " slots, " .. Format.cash(income()) .. "/s)")
+      log("REBIRTH " .. rebirths .. " after " .. clock(time - runStart) .. " in this run (tier " .. tier .. ", " .. slots() .. " slots, " .. Format.cash(income()) .. "/s)")
       -- keep the best cards the vault can hold; everything else resets
       local kept = {}
       for index = 1, math.min(#deck, Rebirth.vaultSlots(rebirths - 1)) do
         kept[deck[index]] = (kept[deck[index]] or 0) + 1
       end
       owned, packCounts = kept, {}
-      cash, tier, slotLevel, runStart = 0, 1, 0, time
+      cash, tier, runStart = 0, 1, time
       openPack(Packs.ById[Packs.StarterId])
       rebuildDeck()
     end
   end
 end
-log("end: " .. rebirths .. " rebirths, tier " .. tier .. ", " .. (Config.BaseSlots + slotLevel) .. " slots, " .. packsOpened .. " packs, earning " .. Format.cash(income()) .. "/s")
+log("end: " .. rebirths .. " rebirths, tier " .. tier .. ", " .. slots() .. " slots, " .. packsOpened .. " packs, earning " .. Format.cash(income()) .. "/s")
 `;
 
 const L = lauxlib.luaL_newstate();

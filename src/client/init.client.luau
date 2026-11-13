@@ -25,6 +25,7 @@ local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
 local Duel = require(Shared:WaitForChild("Duel"))
 local Titles = require(Shared:WaitForChild("Titles"))
+local Staff = require(Shared:WaitForChild("Staff"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local player = Players.LocalPlayer
@@ -760,7 +761,7 @@ local renderDuelHud, duelAct -- the duel screen, defined with the Battle panel
 local renderedRev = -1
 local panels = {}
 
--- Long lists (the deck screen, the trade lists) can hold thousands of cards. Building a
+-- Long lists (the deck screen, the battle deck editor) can hold thousands of cards. Building a
 -- card's picture and buttons is the slow part, so those screens only lay out empty boxes and
 -- the loop below fills in the ones on screen (plus a little either side) as you scroll, and
 -- empties them again once they are far away.
@@ -856,12 +857,12 @@ panels.Packs = function()
 	useList()
 	local tier = state.upgrades.store + 1
 
-	-- Auto Packer: opens the chosen pack on a timer (an Aura Shrine perk)
+	-- Auto Packer: opens the chosen pack on a timer (one of Harshdeep's upgrades)
 	local packerInterval = Perks.packerInterval(state.perks)
 	local autoRow = newRow(0, 60)
 	autoRow.BackgroundColor3 = Color3.fromRGB(38, 58, 82)
 	if packerInterval == nil then
-		newLabel(autoRow, "🤖 Auto Packer — opens packs for you while you play. Unlock it in Upgrades → Aura Shrine.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 14 })
+		newLabel(autoRow, "🤖 Auto Packer — opens packs for you while you play. Hire Harshdeep in Upgrades → Staff to unlock it.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 14 })
 	else
 		local autoPack = Packs.ById[state.autoPack.packId]
 		local chosen = autoPack and autoPack.name or "tap 🤖 on a pack below to choose"
@@ -1900,7 +1901,7 @@ panels.Quests = function()
 	end
 end
 
--- Aura Shrine: permanent perks, shown under the store upgrades ---------------------
+-- Staff: permanent aura upgrades, shown under the store upgrades ---------------------
 local renderStoreUpgrades = panels.Upgrades
 panels.Upgrades = function()
 	renderStoreUpgrades()
@@ -1926,48 +1927,68 @@ panels.Upgrades = function()
 	})
 	local header = newRow(20, 44)
 	header.BackgroundColor3 = Color3.fromRGB(70, 35, 80)
-	newLabel(header, "✨ Aura Shrine — permanent perks. Each rebirth unlocks one more level.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+	newLabel(header, "🧑‍💼 Staff — permanent upgrades, paid in aura. Each rebirth unlocks one more level.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
 		Font = Enum.Font.FredokaOne,
-		TextSize = 17,
+		TextSize = 16,
 		TextColor3 = COLORS.aura,
 	})
-	for order, perkId in ipairs(Perks.Order) do
-		local def = Perks.Defs[perkId]
-		local level = Perks.level(state.perks, perkId)
-		local row = newRow(20 + order, 72)
-		newLabel(row, def.name .. "   Lv " .. level .. "/" .. def.max, UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
+	for staffIndex, staffId in ipairs(Staff.Order) do
+		local staff = Staff.Defs[staffId]
+		local base = 20 + staffIndex * 10
+		local unlocked = Staff.unlocked(staffId, state.rebirths)
+		local staffLevel = Staff.level(state.perks, staffId)
+		local staffRow = newRow(base, 52)
+		staffRow.BackgroundColor3 = staff.color:Lerp(COLORS.panel, 0.65)
+		newLabel(staffRow, staff.face .. " " .. staff.name .. "  ·  " .. staff.role, UDim2.new(0, 14, 0, 4), UDim2.new(1, -28, 0, 22), {
 			Font = Enum.Font.FredokaOne,
-			TextSize = 19,
+			TextSize = 18,
 		})
-		newLabel(row, def.describe(level), UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 30), {
-			TextSize = 13,
-			TextColor3 = COLORS.dim,
-			TextYAlignment = Enum.TextYAlignment.Top,
-		})
-		local buttonPosition = UDim2.new(1, -160, 0, 14)
-		local buttonSize = UDim2.new(0, 148, 0, 44)
-		if level >= def.max then
-			newButton(row, "MAX", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
-		elseif level >= Perks.maxLevel(perkId, state.rebirths) then
-			-- each rebirth opens one more level of every perk
-			local locked = newButton(row, "🔒 Needs " .. level .. (level == 1 and " rebirth" or " rebirths"), buttonPosition, buttonSize, COLORS.locked, nil)
-			locked.TextSize = 13
-			locked.AutoButtonColor = false
+		local status
+		if not unlocked then
+			status = "🔒 Joins your store after " .. staff.rebirths .. (staff.rebirths == 1 and " rebirth." or " rebirths.")
+		elseif staffLevel < 1 then
+			status = "For hire: \"" .. staff.hire .. "\""
 		else
-			newButton(row, currencyText("aura", def.cost(level)), buttonPosition, buttonSize, Color3.fromRGB(200, 70, 180), function()
-				Remotes.BuyPerk:FireServer(perkId)
-			end)
+			status = "Level " .. staffLevel .. "/" .. Staff.maxLevel(staffId) .. "  ·  the " .. staff.desk .. " at the back of your store gets grander as you upgrade."
+		end
+		newLabel(staffRow, status, UDim2.new(0, 14, 0, 27), UDim2.new(1, -28, 0, 20), {
+			TextSize = 12,
+			TextColor3 = COLORS.dim,
+			TextWrapped = false,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		if unlocked then
+			for perkIndex, perkId in ipairs(staff.perks) do
+				local def = Perks.Defs[perkId]
+				local level = Perks.level(state.perks, perkId)
+				local row = newRow(base + perkIndex, 72)
+				newLabel(row, def.name .. "   Lv " .. level .. "/" .. def.max, UDim2.new(0, 14, 0, 8), UDim2.new(1, -190, 0, 24), {
+					Font = Enum.Font.FredokaOne,
+					TextSize = 19,
+				})
+				newLabel(row, def.describe(level), UDim2.new(0, 14, 0, 36), UDim2.new(1, -190, 0, 30), {
+					TextSize = 13,
+					TextColor3 = COLORS.dim,
+					TextYAlignment = Enum.TextYAlignment.Top,
+				})
+				local buttonPosition = UDim2.new(1, -160, 0, 14)
+				local buttonSize = UDim2.new(0, 148, 0, 44)
+				if level >= def.max then
+					newButton(row, "MAX", buttonPosition, buttonSize, COLORS.locked, nil).AutoButtonColor = false
+				elseif level >= Perks.maxLevel(perkId, state.rebirths) then
+					-- each rebirth opens one more level of every upgrade
+					local locked = newButton(row, "🔒 Needs " .. level .. (level == 1 and " rebirth" or " rebirths"), buttonPosition, buttonSize, COLORS.locked, nil)
+					locked.TextSize = 13
+					locked.AutoButtonColor = false
+				else
+					newButton(row, currencyText("aura", def.cost(level)), buttonPosition, buttonSize, Color3.fromRGB(200, 70, 180), function()
+						Remotes.BuyPerk:FireServer(perkId)
+					end)
+				end
+			end
 		end
 	end
 end
-
--- Trade + marketplace ---------------------------------------------------------------
-local market = {} -- every card for sale in this server: { id, key, price, sellerId, sellerName }
-local activeTrade = nil -- { partnerName, mine, theirs, myConfirm, theirConfirm } while trading
-local tradeRequestsIn = {} -- { { userId, name }, ... }
-local tradeView = "market" -- "market" | "sell" | "players"
-local sellKey = nil
-local sellPriceText = ""
 
 -- "Crimson Samurai Akane  ·  $40/s", coloured by rarity.
 local function newCardLine(parent, key, position, size)
@@ -1983,209 +2004,6 @@ local function newCardLine(parent, key, position, size)
 		label.TextColor3 = Color3.fromRGB(255, 90, 90)
 	end
 	return label
-end
-
-local function sortedInventoryKeys()
-	local keys = {}
-	for key in pairs(state.inventory) do
-		if Cards.parse(key) then
-			table.insert(keys, key)
-		end
-	end
-	table.sort(keys, function(a, b)
-		local incomeA, incomeB = Cards.getIncome(a), Cards.getIncome(b)
-		if incomeA ~= incomeB then
-			return incomeA > incomeB
-		end
-		return a < b
-	end)
-	return keys
-end
-
-local function newNote(order, text)
-	local row = newRow(order, 34)
-	row.BackgroundTransparency = 1
-	newLabel(row, text, UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), { TextSize = 14, TextColor3 = COLORS.dim })
-	return row
-end
-
-local function renderActiveTrade()
-	local trade = activeTrade
-	titleLabel.Text = "🤝 Trading with " .. trade.partnerName
-	local header = newRow(1, 76)
-	local status = "Add cards, then both press Confirm."
-	if trade.myConfirm and not trade.theirConfirm then
-		status = "You confirmed. Waiting for " .. trade.partnerName .. "…"
-	elseif trade.theirConfirm and not trade.myConfirm then
-		status = trade.partnerName .. " confirmed. Check the offer, then confirm."
-	end
-	newLabel(header, status, UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), { TextSize = 14 })
-	newButton(header, trade.myConfirm and "Confirmed ✓" or "Confirm", UDim2.new(0, 14, 0, 34), UDim2.new(0, 160, 0, 34), trade.myConfirm and COLORS.locked or COLORS.good, function()
-		if not trade.myConfirm then
-			Remotes.TradeConfirm:FireServer()
-		end
-	end)
-	newButton(header, "Cancel trade", UDim2.new(0, 184, 0, 34), UDim2.new(0, 140, 0, 34), COLORS.bad, function()
-		Remotes.TradeCancel:FireServer()
-	end)
-
-	local order = 1
-	local function section(title, keys, removable)
-		order = order + 1
-		newNote(order, title)
-		if #keys == 0 then
-			order = order + 1
-			newNote(order, "    (nothing yet)")
-		end
-		for _, key in ipairs(keys) do
-			order = order + 1
-			local row = newRow(order, 36)
-			newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -120, 1, 0))
-			if removable then
-				newButton(row, "Remove", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), COLORS.locked, function()
-					Remotes.TradeOffer:FireServer(key, false)
-				end).TextSize = 13
-			end
-		end
-	end
-	section("You give (" .. #trade.mine .. "/" .. Config.Trade.MaxCards .. "):", trade.mine, true)
-	section(trade.partnerName .. " gives:", trade.theirs, false)
-
-	order = order + 1
-	newNote(order, "Your cards — tap Add to offer one:")
-	for _, key in ipairs(sortedInventoryKeys()) do
-		order = order + 1
-		local copies = state.inventory[key]
-		fillLazily(newRow(order, 36), function(row)
-			newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
-			newLabel(row, "x" .. copies, UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
-			newButton(row, "Add", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), COLORS.button, function()
-				Remotes.TradeOffer:FireServer(key, true)
-			end).TextSize = 13
-		end)
-	end
-end
-
-panels.Trade = function()
-	useList()
-	if activeTrade then
-		renderActiveTrade()
-		return
-	end
-	titleLabel.Text = "🤝 Trade & Market"
-
-	-- tabs
-	local tabs = newRow(1, 40)
-	tabs.BackgroundTransparency = 1
-	local TABS = { { "market", "🛒 Market" }, { "sell", "💰 Sell a card" }, { "players", "🤝 Trade" } }
-	for index, tab in ipairs(TABS) do
-		local label = tab[2]
-		if tab[1] == "players" and #tradeRequestsIn > 0 then
-			label = label .. "  ❗"
-		end
-		newButton(tabs, label, UDim2.new(0, (index - 1) * 206, 0, 2), UDim2.new(0, 200, 0, 36), tradeView == tab[1] and COLORS.button or COLORS.row, function()
-			tradeView = tab[1]
-			renderPanel()
-		end).TextSize = 15
-	end
-
-	if tradeView == "market" then
-		if #market == 0 then
-			newNote(2, "Nothing is for sale right now. List one of your cards in \"Sell a card\".")
-		end
-		for index, listing in ipairs(market) do
-			local row = newRow(1 + index, 48)
-			newCardLine(row, listing.key, UDim2.new(0, 12, 0, 4), UDim2.new(1, -190, 0, 22))
-			local mine = listing.sellerId == player.UserId
-			newLabel(row, mine and "Your listing" or ("Seller: " .. tostring(listing.sellerName)), UDim2.new(0, 12, 0, 26), UDim2.new(1, -190, 0, 18), {
-				TextSize = 12,
-				TextColor3 = COLORS.dim,
-			})
-			if mine then
-				newButton(row, "Cancel  (" .. Format.cash(listing.price) .. ")", UDim2.new(1, -168, 0, 7), UDim2.new(0, 160, 0, 34), COLORS.locked, function()
-					Remotes.MarketCancel:FireServer(listing.id)
-				end).TextSize = 13
-			else
-				newButton(row, "Buy  " .. Format.cash(listing.price), UDim2.new(1, -168, 0, 7), UDim2.new(0, 160, 0, 34), COLORS.good, function()
-					Remotes.MarketBuy:FireServer(listing.id)
-				end).TextSize = 15
-			end
-		end
-	elseif tradeView == "sell" then
-		if sellKey and (state.inventory[sellKey] or 0) < 1 then
-			sellKey = nil
-		end
-		local form = newRow(2, 84)
-		if sellKey then
-			newCardLine(form, sellKey, UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 22))
-		else
-			newLabel(form, "Pick a card below, set a price, then list it.", UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 22), { TextSize = 14 })
-		end
-		local priceBox = make("TextBox", {
-			Position = UDim2.new(0, 14, 0, 40),
-			Size = UDim2.new(0, 220, 0, 34),
-			BackgroundColor3 = Color3.fromRGB(20, 20, 30),
-			BorderSizePixel = 0,
-			Font = Enum.Font.GothamBold,
-			PlaceholderText = "Price in cash, e.g. 5000",
-			Text = sellPriceText,
-			TextColor3 = COLORS.text,
-			TextSize = 15,
-			ClearTextOnFocus = false,
-		}, form)
-		round(priceBox, 8)
-		priceBox:GetPropertyChangedSignal("Text"):Connect(function()
-			sellPriceText = priceBox.Text
-		end)
-		newButton(form, "List for sale", UDim2.new(0, 244, 0, 40), UDim2.new(0, 160, 0, 34), COLORS.good, function()
-			local price = tonumber((string.gsub(sellPriceText, "[,%$%s]", "")))
-			if sellKey == nil then
-				toast("Pick a card to sell first.", "error")
-			elseif price == nil or price < 1 then
-				toast("Type a price first.", "error")
-			else
-				Remotes.MarketList:FireServer(sellKey, math.floor(price))
-				sellKey = nil
-				sellPriceText = ""
-			end
-		end)
-		for index, key in ipairs(sortedInventoryKeys()) do
-			local copies = state.inventory[key]
-			fillLazily(newRow(2 + index, 36), function(row)
-				newCardLine(row, key, UDim2.new(0, 12, 0, 0), UDim2.new(1, -170, 1, 0))
-				newLabel(row, "x" .. copies, UDim2.new(1, -150, 0, 0), UDim2.new(0, 44, 1, 0), { TextSize = 13, TextColor3 = COLORS.dim })
-				newButton(row, sellKey == key and "Selected" or "Select", UDim2.new(1, -98, 0, 4), UDim2.new(0, 90, 0, 28), sellKey == key and COLORS.good or COLORS.button, function()
-					sellKey = key
-					renderPanel()
-				end).TextSize = 13
-			end)
-		end
-	else
-		local order = 1
-		for _, request in ipairs(tradeRequestsIn) do
-			order = order + 1
-			local row = newRow(order, 44)
-			newLabel(row, request.name .. " wants to trade with you", UDim2.new(0, 14, 0, 0), UDim2.new(1, -180, 1, 0), { TextSize = 15 })
-			newButton(row, "Accept", UDim2.new(1, -158, 0, 6), UDim2.new(0, 150, 0, 32), COLORS.good, function()
-				Remotes.TradeAccept:FireServer(request.userId)
-			end)
-		end
-		local others = 0
-		for _, other in ipairs(Players:GetPlayers()) do
-			if other ~= player then
-				others = others + 1
-				order = order + 1
-				local row = newRow(order, 44)
-				newLabel(row, other.DisplayName, UDim2.new(0, 14, 0, 0), UDim2.new(1, -180, 1, 0), { TextSize = 15 })
-				newButton(row, "Ask to trade", UDim2.new(1, -158, 0, 6), UDim2.new(0, 150, 0, 32), COLORS.button, function()
-					Remotes.TradeRequest:FireServer(other.UserId)
-				end).TextSize = 15
-			end
-		end
-		if others == 0 then
-			newNote(order + 1, "Nobody else is in this server right now.")
-		end
-	end
 end
 
 -- Store: game passes and aura bundles ------------------------------------------------
@@ -3270,7 +3088,7 @@ panels.Admin = function()
 
 	local autoRow = newRow(3, 60)
 	newLabel(autoRow, "Auto upgrader", UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 22), { Font = Enum.Font.FredokaOne, TextSize = 17 })
-	newLabel(autoRow, "Buys store, deck slot and luck upgrades for you the moment you can afford them.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -190, 0, 24), {
+	newLabel(autoRow, "Buys store and luck upgrades for you the moment you can afford them.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -190, 0, 24), {
 		TextSize = 12,
 		TextColor3 = COLORS.dim,
 	})
@@ -3386,7 +3204,6 @@ local MENU = {
 	{ "Cards", "🃏 Deck", COLORS.button, "C" },
 	{ "Book", "📖 Book", Color3.fromRGB(150, 95, 230), "B" },
 	{ "Upgrades", "🏪 Upgrade", COLORS.good, "U" },
-	{ "Trade", "🤝 Trade", Color3.fromRGB(40, 170, 160), "T" },
 	{ "Battle", "⚔️ Battle", Color3.fromRGB(200, 60, 60), "G" },
 	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50), "Q" },
 	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50), "R" },
@@ -3459,8 +3276,8 @@ local function tutorialHint()
 	if displayed and state.packsOpened < 3 and state.cash >= 150 then
 		return "🎴 Buy another Booster in Packs — more cards means more cash", "Packs"
 	end
-	if displayed and owned and state.upgrades.slots == 0 and state.cash >= Upgrades.Defs.slots.cost(0) then
-		return "🏪 Buy a Deck Slot in Upgrade so one more card can earn", "Upgrades"
+	if displayed and state.upgrades.store == 0 and state.cash >= Upgrades.StoreTiers[2].cost then
+		return "🏪 Upgrade your store: a real shop with 16 shelves instead of 4", "Upgrades"
 	end
 	if state.tower == 0 and discovered >= 6 and state.packsOpened >= 3 then
 		return "⚔️ Try the Battle Tower — open Battle and press FIGHT", "Battle"
@@ -3610,45 +3427,14 @@ Remotes.OpenBattle.OnClientEvent:Connect(function()
 	end
 end)
 
-Remotes.OpenTrade.OnClientEvent:Connect(function()
-	if currentPanel ~= "Trade" or not window.Visible then
-		openPanel("Trade")
+-- You said hi to one of your employees: show what they said and open the staff list.
+Remotes.OpenStaff.OnClientEvent:Connect(function(staffId, line)
+	local staff = Staff.Defs[staffId]
+	if staff then
+		toast(staff.face .. " " .. staff.name .. ": " .. tostring(line), "info")
 	end
-end)
-
-Remotes.MarketState.OnClientEvent:Connect(function(listings)
-	market = type(listings) == "table" and listings or {}
-	if currentPanel == "Trade" then
-		renderPanel()
-	end
-end)
-
-Remotes.TradeState.OnClientEvent:Connect(function(newTrade)
-	local started = activeTrade == nil and newTrade ~= nil
-	activeTrade = newTrade
-	if started then
-		-- a trade just began: bring the trade window up
-		tradeRequestsIn = {}
-		if currentPanel ~= "Trade" or not window.Visible then
-			openPanel("Trade")
-			return
-		end
-	end
-	if currentPanel == "Trade" then
-		renderPanel()
-	end
-end)
-
-Remotes.TradeRequest.OnClientEvent:Connect(function(fromUserId, fromName)
-	for _, request in ipairs(tradeRequestsIn) do
-		if request.userId == fromUserId then
-			return
-		end
-	end
-	table.insert(tradeRequestsIn, { userId = fromUserId, name = tostring(fromName) })
-	toast("🤝 " .. tostring(fromName) .. " wants to trade! Open Trade to accept.", "info")
-	if currentPanel == "Trade" then
-		renderPanel()
+	if currentPanel ~= "Upgrades" or not window.Visible then
+		openPanel("Upgrades")
 	end
 end)
 
@@ -3665,6 +3451,7 @@ local keyToPanel = {}
 for _, entry in ipairs(MENU) do
 	keyToPanel[Enum.KeyCode[entry[4]]] = entry[1]
 end
+keyToPanel[Enum.KeyCode.V] = "Rebirth" -- V for vault: the vault is at the top of that screen
 
 local DUEL_HAND_KEYS = {
 	[Enum.KeyCode.One] = 1,

@@ -8,6 +8,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Cards = require(Shared:WaitForChild("Cards"))
 local CardView = require(Shared:WaitForChild("CardView"))
 local Format = require(Shared:WaitForChild("Format"))
+local Staff = require(Shared:WaitForChild("Staff"))
 local Upgrades = require(Shared:WaitForChild("Upgrades"))
 
 local Plots = {}
@@ -98,24 +99,72 @@ local function playerFromHit(hit)
 	return Players:GetPlayerFromCharacter(character)
 end
 
-local function slotPosition(index)
-	local row = math.floor((index - 1) / STAND_COLUMNS)
-	local column = (index - 1) % STAND_COLUMNS
-	local x = (column - (STAND_COLUMNS - 1) / 2) * STAND_SPACING_X
-	return x, STAND_FIRST_Z + row * STAND_SPACING_Z
+local GROUND_HEIGHT = 16 -- inside height of the shop floor
+local STOREY_HEIGHT = 14 -- each storey above it (13 of wall + a 1 stud floor slab)
+local STOREY_INSET = 2 -- every storey is this much narrower per side than the one below
+
+-- The stairwell: two ramps and a landing per floor, in the same place on every floor so one
+-- hole in each floor slab serves them all. In plot space: x 8..17, z 0..18.
+local STAIR_X0, STAIR_X1 = 8, 17
+local STAIR_RUN = 14 -- length of each ramp along z
+local STAIR_Z1 = 18 -- back edge of the landing
+
+-- Shelves (deck slots). The ground floor holds two rows of eight; every storey above it
+-- holds two rows of four beside the stairwell. Slots with no floor to stand on (the game
+-- pass adds eight) go in an extra row at the front of the ground floor.
+local GROUND_ROWS = { -14, -8 }
+local EXTRA_ROW = -20
+local GROUND_SLOTS = STAND_COLUMNS * #GROUND_ROWS
+local STOREY_XS = { -15.5, -10, -4.5, 1 }
+local STOREY_ZS = { -10, -4 }
+local STOREY_SLOTS = #STOREY_XS * #STOREY_ZS
+
+-- Height of the walking surface of a floor: 0 = ground, 1 = first storey, ...
+local function floorTop(level)
+	if level <= 0 then
+		return 1
+	end
+	return 2 + GROUND_HEIGHT + (level - 1) * STOREY_HEIGHT
 end
 
-local PEDESTAL_COLOR = Color3.fromRGB(60, 60, 70)
+-- Where shelf `index` stands: x, the floor it stands on, z (plot space).
+local function slotPosition(plot, index)
+	local storeys = math.max(0, plot.tier - 2)
+	local function groundColumn(position)
+		return ((position - 1) % STAND_COLUMNS - (STAND_COLUMNS - 1) / 2) * STAND_SPACING_X
+	end
+	if index <= GROUND_SLOTS then
+		return groundColumn(index), floorTop(0), GROUND_ROWS[math.floor((index - 1) / STAND_COLUMNS) + 1]
+	end
+	local upper = index - GROUND_SLOTS
+	local storey = math.ceil(upper / STOREY_SLOTS)
+	if storey <= storeys then
+		local place = (upper - 1) % STOREY_SLOTS
+		return STOREY_XS[place % #STOREY_XS + 1], floorTop(storey), STOREY_ZS[math.floor(place / #STOREY_XS) + 1]
+	end
+	local extra = upper - storeys * STOREY_SLOTS
+	return groundColumn(extra), floorTop(0), EXTRA_ROW - math.floor((extra - 1) / STAND_COLUMNS) * STAND_SPACING_Z
+end
+
+local PEDESTAL_COLOR = Color3.fromRGB(120, 85, 55)
+
+-- Puts a shelf's parts where slotPosition says (again after the store changes tier).
+local function placeStand(plot, index)
+	local stand = plot.stands[index]
+	local x, y, z = slotPosition(plot, index)
+	stand.pedestal.CFrame = plot.cframe * CFrame.new(x, y + 0.8, z)
+	stand.card.CFrame = plot.cframe * CFrame.new(x, y + 4.5, z)
+end
 
 local function buildStand(plot, index)
-	local x, z = slotPosition(index)
 	local folder = Instance.new("Folder")
 	folder.Name = "Stand" .. index
 	folder.Parent = plot.standsFolder
 
-	local pedestal = newPart(folder, "Pedestal", Vector3.new(4.4, 0.6, 1.2), plot.cframe * CFrame.new(x, 1.3, z), PEDESTAL_COLOR)
+	-- a little wooden shelf unit with the card standing on top
+	local pedestal = newPart(folder, "Shelf", Vector3.new(4.4, 1.6, 1.4), plot.cframe, PEDESTAL_COLOR, Enum.Material.Wood)
 
-	local card = newPart(folder, "Card", Vector3.new(4, 5.6, 0.3), plot.cframe * CFrame.new(x, 4.4, z), Color3.fromRGB(20, 20, 25))
+	local card = newPart(folder, "Card", Vector3.new(4, 5.6, 0.3), plot.cframe, Color3.fromRGB(20, 20, 25))
 	card.Transparency = 0.8
 
 	-- one face only (toward the street): 64 slots per store adds up
@@ -140,6 +189,134 @@ local function buildStand(plot, index)
 	end)
 
 	plot.stands[index] = { folder = folder, card = card, pedestal = pedestal, guis = { gui }, prompt = prompt }
+	placeStand(plot, index)
+end
+
+---------------------------------------------------------------------
+-- Staff desks: one per employee along the back of the shop floor
+---------------------------------------------------------------------
+local STAFF_Z = 25
+local STAFF_XS = { -24, -12, 0, 12, 24 }
+
+-- Rebuilds one employee's corner. level = how far they are upgraded, unlocked = whether the
+-- owner has rebirthed enough for them to join at all.
+local function buildStaffDesk(plot, id, level, unlocked)
+	local def = Staff.Defs[id]
+	local spot = plot.staff[id]
+	spot.folder:ClearAllChildren()
+	spot.bubble = nil
+	local x = STAFF_XS[table.find(Staff.Order, id) or 1]
+	local wood = Color3.fromRGB(120, 85, 55)
+	local gold = Color3.fromRGB(245, 200, 80)
+	local function add(name, size, dx, y, dz, color, material)
+		return newPart(spot.folder, name, size, plot.cframe * CFrame.new(x + dx, y, STAFF_Z + dz), color, material)
+	end
+
+	if not unlocked then
+		-- nobody here yet: a "help wanted" board
+		add("SignPost", Vector3.new(0.5, 4, 0.5), 0, 3, 0, wood, Enum.Material.Wood)
+		local board = add("HelpWanted", Vector3.new(5, 2.4, 0.3), 0, 5.6, 0, Color3.fromRGB(235, 225, 200), Enum.Material.SmoothPlastic)
+		newSurfaceLabel(board, Enum.NormalId.Front, "🔒 " .. def.role .. "\nafter " .. def.rebirths .. (def.rebirths == 1 and " rebirth" or " rebirths"))
+		return
+	end
+
+	-- how grand the desk is: 0 = not hired yet, then 1 to 4
+	local stage = 0
+	if level > 0 then
+		stage = math.clamp(math.ceil(level / Staff.maxLevel(id) * 4), 1, 4)
+	end
+	local topColor = stage >= 4 and Color3.fromRGB(240, 238, 232) or wood
+	local topMaterial = stage >= 4 and Enum.Material.Marble or Enum.Material.Wood
+	local width = stage >= 3 and 8 or (stage >= 1 and 6.5 or 5)
+
+	if stage >= 3 then
+		local rug = add("Rug", Vector3.new(width + 3, 0.1, 7), 0, 1.05, 1, def.color, Enum.Material.Fabric)
+		rug.CanCollide = false
+	end
+	add("DeskTop", Vector3.new(width, 0.4, 2.4), 0, 3.8, 0, topColor, topMaterial)
+	add("DeskFront", Vector3.new(width, 2.6, 0.3), 0, 2.3, -1, stage >= 2 and def.color or wood, Enum.Material.Wood)
+	for _, side in ipairs({ -1, 1 }) do
+		add("DeskSide", Vector3.new(0.3, 2.6, 2.4), side * (width / 2 - 0.15), 2.3, 0, wood, Enum.Material.Wood)
+	end
+	if stage >= 4 then
+		add("DeskTrim", Vector3.new(width + 0.2, 0.2, 0.4), 0, 3.7, -1.1, gold, Enum.Material.Metal)
+	end
+	if stage >= 1 then
+		local plate = add("NamePlate", Vector3.new(2.6, 0.7, 0.2), -width / 2 + 1.7, 4.35, -0.9, Color3.fromRGB(30, 30, 40))
+		newSurfaceLabel(plate, Enum.NormalId.Front, def.name)
+	end
+	if stage >= 2 then
+		add("LampStem", Vector3.new(0.2, 1.2, 0.2), width / 2 - 0.8, 4.6, 0.6, Color3.fromRGB(40, 40, 48), Enum.Material.Metal)
+		local shade = add("LampShade", Vector3.new(0.9, 0.5, 0.9), width / 2 - 0.8, 5.4, 0.6, Color3.fromRGB(255, 240, 190), Enum.Material.Neon)
+		local light = Instance.new("PointLight")
+		light.Color = shade.Color
+		light.Range = 12
+		light.Parent = shade
+	end
+	if stage >= 3 then
+		-- each employee's own thing on the desk
+		if id == "megan" then
+			local ball = add("CrystalBall", Vector3.new(1.5, 1.5, 1.5), 0.6, 4.9, 0, Color3.fromRGB(200, 140, 255), Enum.Material.Neon)
+			ball.Shape = Enum.PartType.Ball
+			ball.Transparency = 0.25
+			add("CrystalBase", Vector3.new(1, 0.3, 1), 0.6, 4.15, 0, gold, Enum.Material.Metal)
+		elseif id == "harshdeep" then
+			for stack = 0, 2 do
+				add("PackBox", Vector3.new(1.4, 0.6, 1), 0.6, 4.3 + stack * 0.6, 0.2, stack % 2 == 0 and Color3.fromRGB(225, 80, 120) or Color3.fromRGB(80, 140, 255))
+			end
+		elseif id == "alabaster" then
+			for pile = 0, 2 do
+				add("Coins", Vector3.new(0.7, 0.4 + pile * 0.4, 0.7), 0.2 + pile * 0.9, 4.2 + pile * 0.2, 0.2, gold, Enum.Material.Metal)
+			end
+		elseif id == "fimby" then
+			local orb = add("AuraOrb", Vector3.new(1.4, 1.4, 1.4), 0.6, 5.6, 0, Color3.fromRGB(255, 130, 220), Enum.Material.Neon)
+			orb.Shape = Enum.PartType.Ball
+			orb.CanCollide = false
+			local glow = Instance.new("PointLight")
+			glow.Color = orb.Color
+			glow.Range = 14
+			glow.Parent = orb
+		else
+			add("MiniSafe", Vector3.new(1.6, 1.6, 1.4), 0.6, 4.8, 0.2, Color3.fromRGB(70, 75, 85), Enum.Material.DiamondPlate)
+			add("MiniSafeDial", Vector3.new(0.5, 0.5, 0.2), 0.6, 4.8, -0.6, gold, Enum.Material.Neon)
+		end
+	end
+
+	-- the employee, standing behind the desk and facing the shop
+	local skin = Color3.fromRGB(240, 200, 165)
+	local shirt = stage >= 1 and def.color or Color3.fromRGB(150, 150, 160)
+	for _, side in ipairs({ -1, 1 }) do
+		add("Leg", Vector3.new(0.9, 2, 0.9), side * 0.5, 2, 3, Color3.fromRGB(50, 55, 80))
+		add("Arm", Vector3.new(0.7, 1.9, 0.8), side * 1.4, 4, 3, shirt)
+	end
+	local torso = add("Torso", Vector3.new(2, 2, 1), 0, 4, 3, shirt)
+	local head = add("Head", Vector3.new(1.3, 1.3, 1.3), 0, 5.7, 3, skin)
+	local face = newSurfaceLabel(head, Enum.NormalId.Front, stage >= 1 and def.face or "🙂")
+	face.TextStrokeTransparency = 1
+
+	local title = def.name .. "\n" .. def.role
+	if stage >= 1 then
+		title = title .. "  ·  Lv " .. level
+	else
+		title = title .. "  ·  for hire"
+	end
+	newBillboard(head, title, 2.1, 9, 1.9)
+	local bubble = newBillboard(head, "", 4.1, 16, 2.2)
+	bubble.TextColor3 = Color3.fromRGB(255, 240, 170)
+	bubble.TextWrapped = true
+	spot.bubble = bubble
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Say hi"
+	prompt.ObjectText = def.name
+	prompt.MaxActivationDistance = 11
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = torso
+	prompt.Triggered:Connect(function(player)
+		if callbacks.onStaff then
+			callbacks.onStaff(plot, player, id)
+		end
+	end)
 end
 
 -- Wall style of the store building at each tier (tier 1 is an open-air stall).
@@ -154,10 +331,6 @@ local WALLS = {
 	{ color = Color3.fromRGB(245, 243, 238), material = Enum.Material.Marble, trim = Color3.fromRGB(45, 80, 165) },
 }
 
-local GROUND_HEIGHT = 16 -- inside height of the shop floor
-local STOREY_HEIGHT = 14 -- each storey above it (13 of wall + a 1 stud floor slab)
-local STOREY_INSET = 2 -- every storey is this much narrower per side than the one below
-
 -- Rebuilds the store building for the plot's tier. Upgrading the store adds a storey:
 --   1 Card Stall       a market stall: posts and a striped canopy
 --   2 Card Shop        a one-storey shop with a shopfront, awning and a stepped roof
@@ -166,8 +339,8 @@ local STOREY_INSET = 2 -- every storey is this much narrower per side than the o
 --   5 Aura Tower       four storeys and the aura beam
 --   6 Card Palace      five storeys, marble and gold, a dome on the roof
 --   7 Hall of Legends  six storeys with floating crystals and a halo
--- The shop floor (where the deck stands) is always the ground floor; upper storeys are
--- for show.
+--   8 Grand Capitol    seven storeys
+-- Every floor is a real room with shelves; a stairwell at the back right joins them.
 local function buildDecor(plot)
 	plot.decor:ClearAllChildren()
 	local tier = plot.tier
@@ -225,7 +398,45 @@ local function buildDecor(plot)
 		window.Transparency = 0.6
 		add("ShopfrontColumn", Vector3.new(2, GROUND_HEIGHT, 2), sx * (HALF - 1), 1 + GROUND_HEIGHT / 2, -HALF + 1, wall.trim, wall.material)
 	end
-	add("Ceiling", Vector3.new(SIZE, 1, SIZE), 0, ceilingY + 0.5, 0, wall.trim, wall.material)
+	local storeys = tier - 2
+	-- A floor slab `half` wide (centre to edge) at height y, with or without the stairwell hole.
+	local function addSlab(name, half, y, withHole)
+		if not withHole then
+			add(name, Vector3.new(half * 2, 1, half * 2), 0, y, 0, wall.trim, wall.material)
+			return
+		end
+		add(name, Vector3.new(STAIR_X0 + half, 1, half * 2), (STAIR_X0 - half) / 2, y, 0, wall.trim, wall.material)
+		add(name, Vector3.new(half - STAIR_X1, 1, half * 2), (STAIR_X1 + half) / 2, y, 0, wall.trim, wall.material)
+		add(name, Vector3.new(STAIR_X1 - STAIR_X0, 1, half), (STAIR_X0 + STAIR_X1) / 2, y, -half / 2, wall.trim, wall.material)
+		add(name, Vector3.new(STAIR_X1 - STAIR_X0, 1, half - STAIR_Z1), (STAIR_X0 + STAIR_X1) / 2, y, (STAIR_Z1 + half) / 2, wall.trim, wall.material)
+	end
+	addSlab("Ceiling", HALF, ceilingY + 0.5, storeys >= 1)
+
+	-- The stairs: from each floor a ramp runs to a landing at the back, and a second ramp
+	-- comes back to the floor above.
+	local stairColor = Color3.fromRGB(150, 110, 75)
+	local flightWidth = (STAIR_X1 - STAIR_X0 - 1) / 2
+	for level = 0, storeys - 1 do
+		local bottom, top = floorTop(level), floorTop(level + 1)
+		local half = (top - bottom) / 2
+		local length = math.sqrt(STAIR_RUN ^ 2 + half ^ 2)
+		local angle = math.atan2(half, STAIR_RUN)
+		local firstX = STAIR_X0 + flightWidth / 2
+		local secondX = STAIR_X1 - flightWidth / 2
+		local first = add("Stairs", Vector3.new(flightWidth, 0.6, length), firstX, bottom + half / 2 - 0.3, STAIR_RUN / 2, stairColor, Enum.Material.WoodPlanks)
+		first.CFrame = first.CFrame * CFrame.Angles(-angle, 0, 0)
+		local second = add("Stairs", Vector3.new(flightWidth, 0.6, length), secondX, bottom + half * 1.5 - 0.3, STAIR_RUN / 2, stairColor, Enum.Material.WoodPlanks)
+		second.CFrame = second.CFrame * CFrame.Angles(angle, 0, 0)
+		add("Landing", Vector3.new(STAIR_X1 - STAIR_X0, 0.6, STAIR_Z1 - STAIR_RUN), (STAIR_X0 + STAIR_X1) / 2, bottom + half - 0.3, (STAIR_RUN + STAIR_Z1) / 2, stairColor, Enum.Material.WoodPlanks)
+		-- a rail between the two ramps and one along the open side
+		add("StairRail", Vector3.new(0.3, top - bottom + 3, 0.3), (STAIR_X0 + STAIR_X1) / 2, bottom + (top - bottom + 3) / 2, STAIR_RUN, wall.trim, Enum.Material.Metal)
+		add("StairSign", Vector3.new(0.3, 3, 0.3), STAIR_X0 - 0.5, bottom + 1.5, 0.5, wall.trim, Enum.Material.Metal)
+	end
+	if storeys >= 1 then
+		local arrow = add("StairsSign", Vector3.new(5, 1.6, 0.3), STAIR_X0 + 2, 9, -0.5, Color3.fromRGB(30, 30, 40))
+		arrow.CanCollide = false
+		newSurfaceLabel(arrow, Enum.NormalId.Front, "⬆ MORE SHELVES")
+	end
 	-- ceiling lights, so the shop is bright inside
 	for _, x in ipairs({ -20, 0, 20 }) do
 		for _, z in ipairs({ -18, 2, 22 }) do
@@ -242,7 +453,7 @@ local function buildDecor(plot)
 	-- Upper storeys: one more for every tier above the Card Shop, each a little narrower.
 	local roofY = ceilingY + 1 -- top of the building so far
 	local roofHalf = HALF
-	for storey = 1, tier - 2 do
+	for storey = 1, storeys do
 		local half = HALF - STOREY_INSET * storey
 		local baseY = roofY
 		local wallY = baseY + 6.5
@@ -259,7 +470,9 @@ local function buildDecor(plot)
 				add("StoreyWindow", Vector3.new(0.3, 6, 6), side * (half + 0.05), windowY, share * half, color, material)
 			end
 		end
-		add("StoreyFloor", Vector3.new(half * 2, 1, half * 2), 0, baseY + 13.5, 0, wall.trim, wall.material)
+		addSlab("StoreyFloor", half, baseY + 13.5, storey < storeys)
+		local lamp = glow(add("CeilingLight", Vector3.new(5, 0.3, 5), -6, baseY + 12.85, -6, Color3.fromRGB(255, 244, 214), Enum.Material.Neon), 40)
+		lamp.CanCollide = false
 		add("StoreyTrim", Vector3.new(half * 2 + 1.5, 0.8, half * 2 + 1.5), 0, baseY + 0.4, 0, wall.trim, wall.material)
 		roofY = baseY + STOREY_HEIGHT
 		roofHalf = half
@@ -407,20 +620,21 @@ local function buildPlot(index, cframe, parent)
 		end
 	end)
 
-	-- Trade & market board
-	local board = newPart(folder, "TradeBoard", Vector3.new(10, 3, 3), cframe * CFrame.new(19, 2.5, -26), Color3.fromRGB(40, 170, 160))
-	newBillboard(board, "🤝 TRADE & MARKET", 3.2, 10, 1.6)
-	local tradePrompt = Instance.new("ProximityPrompt")
-	tradePrompt.ActionText = "Open"
-	tradePrompt.ObjectText = "Trade & Market"
-	tradePrompt.MaxActivationDistance = 10
-	tradePrompt.RequiresLineOfSight = false
-	tradePrompt.Parent = board
-	tradePrompt.Triggered:Connect(function(player)
-		if callbacks.onTrade then
-			callbacks.onTrade(plot, player)
-		end
-	end)
+	-- Checkout counter with a till (the cash register pad is the green strip by the door)
+	local checkout = newPart(folder, "Checkout", Vector3.new(10, 3, 3), cframe * CFrame.new(19, 2.5, -26), Color3.fromRGB(120, 85, 55), Enum.Material.Wood)
+	newPart(folder, "CheckoutTop", Vector3.new(10.4, 0.3, 3.4), cframe * CFrame.new(19, 4.15, -26), Color3.fromRGB(235, 225, 200), Enum.Material.Marble)
+	newPart(folder, "Till", Vector3.new(2, 1.4, 1.6), cframe * CFrame.new(21, 5, -26), Color3.fromRGB(45, 45, 55), Enum.Material.Metal)
+	newPart(folder, "TillScreen", Vector3.new(1.4, 0.8, 0.2), cframe * CFrame.new(21, 6, -25.6), Color3.fromRGB(90, 220, 120), Enum.Material.Neon)
+	newBillboard(checkout, "🧾 CHECKOUT", 4.2, 9, 1.6)
+
+	-- Staff: a desk and an employee each, along the back of the shop floor
+	plot.staff = {}
+	for _, id in ipairs(Staff.Order) do
+		local staffFolder = Instance.new("Folder")
+		staffFolder.Name = "Staff_" .. id
+		staffFolder.Parent = folder
+		plot.staff[id] = { folder = staffFolder, bubble = nil, said = 0 }
+	end
 
 	return plot
 end
@@ -775,6 +989,7 @@ function Plots.release(player)
 			Plots.setSign(plot, "Unclaimed")
 			Plots.setPending(plot, 0)
 			Plots.setShowcase(plot, nil, nil)
+			Plots.clearStaff(plot)
 		end
 	end
 end
@@ -806,6 +1021,42 @@ function Plots.setSlotCount(plot, count)
 			buildStand(plot, index)
 		end
 	end
+end
+
+function Plots.getSlotCount(plot)
+	return #plot.stands
+end
+
+-- An employee's desk. level = their upgrade level, unlocked = whether they have joined.
+function Plots.setStaff(plot, id, level, unlocked)
+	if plot.staff[id] then
+		buildStaffDesk(plot, id, level, unlocked)
+	end
+end
+
+-- Clears every staff corner (the plot has no owner).
+function Plots.clearStaff(plot)
+	for _, spot in pairs(plot.staff) do
+		spot.folder:ClearAllChildren()
+		spot.bubble = nil
+	end
+end
+
+-- A speech bubble over an employee's head for a few seconds; everyone nearby can see it.
+function Plots.staffSay(plot, id, text)
+	local spot = plot.staff[id]
+	if spot == nil or spot.bubble == nil then
+		return
+	end
+	spot.said = spot.said + 1
+	local token = spot.said
+	local bubble = spot.bubble
+	bubble.Text = "💬 " .. text
+	task.delay(5, function()
+		if spot.said == token and spot.bubble == bubble then
+			bubble.Text = ""
+		end
+	end)
 end
 
 -- key = nil clears the stand.
@@ -864,6 +1115,10 @@ end
 function Plots.setTier(plot, tier)
 	plot.tier = math.clamp(tier, 1, #TIER_STYLE)
 	buildDecor(plot)
+	-- the shelves move with the floors
+	for index in pairs(plot.stands) do
+		placeStand(plot, index)
+	end
 end
 
 function Plots.setSign(plot, text)

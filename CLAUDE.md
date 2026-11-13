@@ -6,7 +6,7 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
 ## Layout
 
 - `src/shared/` → `ReplicatedStorage.Shared`. Data tables and pure logic used by both sides:
-  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Titles`, `Format`, `CardView` (builds a card's GUI).
+  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Titles`, `Staff`, `Format`, `CardView` (builds a card's GUI).
 - `src/server/` → `ServerScriptService.Server`. `init.server.luau` holds the remotes and game
   rules; `PlayerData.luau` is the only code that touches DataStores; `Monetization.luau` handles game
   passes and product receipts; `Plots.luau` builds the map
@@ -43,9 +43,14 @@ way so the repo stays the whole game.
   must check `isAdmin` on the server; hiding the tab on the client is not protection.
 - Global leaderboards use OrderedDataStores, and like every DataStore call they live in
   `PlayerData.luau`. Titles are data in `Titles.luau`; earned ones are saved in `data.titles`.
-- No stealing and no PvP (owner's decision). Cards only change hands through trading and the
-  market, both in `init.server.luau`; any new way to move cards between players needs the same
-  care (re-check ownership at the moment of the swap, never yield in the middle).
+- No stealing, no PvP, and no trading or market either (owner's decisions; trading and the
+  market were removed). Cards never move between players.
+- Deck slots are the store's shelves: `Upgrades.slotCount(storeLevel, rebirths, bonus)` is the
+  only place the count is decided (store tier, capped per rebirth until the fifth). There is no
+  deck-slot upgrade. `Plots.luau` puts 16 shelves on the ground floor and 8 on each storey.
+- Staff (`Staff.luau`): Megan, Harshdeep, Alabaster, Fimby and Darius each run one or two of
+  the permanent aura perks in `Perks.luau` and join after a set number of rebirths. A new
+  permanent perk must be given to one of them. Their desks are drawn by `Plots.setStaff`.
 - Sets are built from public-domain stories (owner's decision), so real character names are
   fine. Each set lists its `sources` in `Cards.luau`. Base cards and art on the original books,
   not on later films, shows or games: things an adaptation added (Disney's red-shirted Pooh, the
@@ -67,11 +72,11 @@ way so the repo stays the whole game.
   the tower rewards. New weekly bonuses go in `Season.Events` and are applied in those places.
 - Card effects are `Cards.Variants` (Shiny, Slimy, Lucky, Shadow, Golden, Prismatic).
 - Pacing levers, in order of strength: the wallet cap (`Rebirth.cashCap`; all cash must go
-  through `addCash`), pack price inflation (`Packs.price`, counts in `data.packCounts`, capped at `Packs.MaxInflation` times the base price), deck
-  slot and store tier prices, and the rarity / effect income multipliers in `Cards.luau`. The
+  through `addCash`), pack price inflation (`Packs.price`, counts in `data.packCounts`, capped at `Packs.MaxInflation` times the base price), the deck slots each store tier and rebirth allow (`Upgrades.TierSlots`,
+  `Upgrades.RebirthSlots`), store tier prices, and the rarity / effect income multipliers in `Cards.luau`. The
   multipliers stack, so small changes there move the whole game.
-- Aura Shrine perk levels are gated by rebirths (`Perks.maxLevel`); keep new permanent perks
-  behind the same gate so aura stays useful all game.
+- Staff perk levels are gated by rebirths (`Perks.maxLevel`); keep new permanent perks behind
+  the same gate so aura stays useful all game.
 - Money: passes and products live in `Config.Monetization` (id 0 = not on sale). Product grants
   must stay receipt-safe (`data.receipts`, save before returning PurchaseGranted). Anything
   bought with Robux that can turn into random cards must respect `session.restricted`.

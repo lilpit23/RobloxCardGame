@@ -89,7 +89,4 @@ return {
 
 	PlotCount = 8, -- set the experience's max players to this
 	PlotSize = 64,
-
-	Market = { MaxListings = 8, MaxPrice = 1e15 },
-	Trade = { MaxCards = 6, RequestTimeout = 60 },
 }

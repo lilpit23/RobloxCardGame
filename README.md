@@ -10,7 +10,7 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 2. Open it (🎴 Packs button, or the Pack Shop counter in your store) — 5 cards per booster.
 3. Put cards in your active deck (🃏 Deck & Cards → To deck, or "Auto-fill Deck").
 4. The deck earns cash into the register at the front of your store; walk over it to collect.
-5. Spend cash on better packs, more deck slots, and store upgrades (income multiplier + new packs).
+5. Spend cash on better packs and store upgrades (income multiplier, more shelves for your deck, new packs).
 6. Epic and better cards earn aura every second and a burst of aura when pulled.
 7. Three copies of the same card fuse into its next variant (Holo → Gold → Prismatic), and your
    store keeps earning a share of its income for up to 4 hours while you are offline.
@@ -75,12 +75,17 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     once and can be worn over your head; pick one in the Quests screen. Three **all-server
     leaderboards** in the plaza show the most rebirths, highest tower floor and biggest
     collection.
-14. **Aura Shrine:** permanent perks bought with aura that survive rebirth (starting cash, cheaper
-    packs, more aura, better offline earnings, extra vault slots).
+14. **Staff:** five employees with desks at the back of your store run the permanent aura
+    upgrades that survive rebirth. Megan (Fortune Teller: luck) and Harshdeep (Stockroom: Auto
+    Packer, cheaper packs) are there from the start; Alabaster (Accountant: starting cash,
+    offline earnings) joins after 1 rebirth, Fimby (Aura Keeper: more aura) after 2 and Darius
+    (Security: bigger vault) after 3. Their desks get grander as you upgrade them, and they say
+    hello when you walk up.
+    **Deck slots are shelves:** they come with the store level (4 at the stall, 16 in the shop,
+    then 8 more per storey up to 64) and are capped by rebirths (16, 24, 32, 40, 52, then all
+    64 from the fifth rebirth). There is no deck-slot upgrade.
 15. **Lucky events:** every 20 minutes the whole server gets better pack odds for 5 minutes.
-16. **Trading and the market:** trade cards with another player (both sides offer cards and both
-    confirm), or list a card for a cash price so anyone in the server can buy it. There is no
-    stealing and no PvP.
+16. There is no trading, no market, no stealing and no PvP: every card you own, you pulled.
 
 ## Pacing: what makes a run last
 
@@ -92,10 +97,10 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
   every pack also keeps at least a 1% chance of a Common, however lucky you are.
 - **Rising pack prices.** Each cash pack costs 1.8% more than the last one of its kind opened in
   the same run. Rebirth resets the prices.
-- **Auto Packer.** A permanent Aura Shrine perk that buys and opens the pack you choose every 10
+- **Auto Packer.** A permanent staff upgrade (Harshdeep) that buys and opens the pack you choose every 10
   seconds (down to 2 with upgrades), with an option to auto-sell spare low-rarity cards. It plays a sound and shows a banner when it
   pulls a new personal best.
-- **Aura Shrine levels unlock with rebirths.** Level 1 of every permanent perk is open from the
+- **Staff upgrade levels unlock with rebirths.** Level 1 of every permanent perk is open from the
   start; each rebirth opens one more level. Aura also arrives more slowly than before.
 - **Deck screen tools.** Sort by income, rarity, set, name, effect or copies, and filter to one set.
   Cards in the deck can be fused where they stand (copies in the deck and inventory both count).
@@ -120,7 +125,7 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 
 | | Keyboard | Gamepad / console |
 | --- | --- | --- |
-| Open a screen | The letter shown on its button: **P** Packs, **C** Deck, **B** Book, **U** Upgrades, **T** Trade, **G** Battle, **Q** Quests, **R** Rebirth, **M** Store | **Y** jumps to the menu, **LB / RB** switch screens |
+| Open a screen | The letter shown on its button: **P** Packs, **C** Deck, **B** Book, **U** Upgrades, **G** Battle, **Q** Quests, **R** Rebirth, **M** Store | **Y** jumps to the menu, **LB / RB** switch screens |
 | Close | The same letter again | **B** (or **Y**) |
 | Next card when opening a pack | **Space** or **Enter** | **A** |
 | Use a counter, safe or gate in the world | **E** | **X** |
@@ -152,8 +157,9 @@ Battle Tower stands. A fountain sits on the plaza island and four small shops li
 Each store is a real building that grows as you upgrade it: a market stall with a striped
 canopy, then a one-storey card shop with a shopfront, awning and pitched roof, and after that one
 more storey per upgrade, up to six, with a neon rooftop sign, the aura beam, a golden dome and
-finally floating crystals and a halo. The deck always stands on the ground floor; the upper
-storeys are for show. The whole map is built by `src/server/Plots.luau`; the diagram is drawn from
+finally floating crystals and a halo. Inside it is a card shop: a pack counter, a checkout, the
+vault, staff desks along the back, 16 shelves on the ground floor and 8 more on every storey,
+joined by a stairwell at the back right. The whole map is built by `src/server/Plots.luau`; the diagram is drawn from
 the same numbers by `node tools/make-map.js`.
 
 ## Setup
@@ -191,11 +197,12 @@ Open `AuraPacks.rbxlx` in Roblox Studio, or run `rojo serve` and connect with th
 
 | File | What it controls |
 | --- | --- |
-| `src/shared/Config.luau` | Slots, pack size, sell price, market and trade limits, events, sounds |
+| `src/shared/Config.luau` | Slots, pack size, sell price, events, sounds |
 | `src/shared/Cards.luau` | Sets and their card lists, rarities, variants, sell prices, aura rates |
 | `src/shared/Packs.luau` | Pack slots and odds, which store tier unlocks each set |
 | `src/shared/Upgrades.luau` | Store tiers, stand prices, luck prices |
-| `src/shared/Perks.luau` | Aura Shrine perks: prices, levels, effects |
+| `src/shared/Perks.luau` | Permanent aura upgrades: prices, levels, effects |
+| `src/shared/Staff.luau` | The employees who run those upgrades: names, roles, rebirths needed, lines |
 | `src/shared/Combos.luau` | Deck combos: type, set, effect and story combos and their bonuses |
 | `src/shared/Luck.luau` | Every source of the Luck stat |
 | `src/shared/Deck.luau` | How "Auto-fill Deck" chooses cards |

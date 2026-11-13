@@ -163,7 +163,7 @@ function Duel.ownedCounts(profile)
 end
 
 -- The part of a saved battle deck the profile can still field: cards that were sold, fused
--- or traded away drop out. Returns a new array of keys.
+-- away drop out. Returns a new array of keys.
 function Duel.usableDeck(profile, saved)
 	local counts = Duel.ownedCounts(profile)
 	local used = {}

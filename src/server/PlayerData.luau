@@ -42,7 +42,7 @@ local function newData()
 		packsOpened = 0,
 		rebirths = 0,
 		vault = {}, -- array of cardKeys that survive a rebirth
-		listings = {}, -- cards for sale on the market: array of { id, key, price }
+		listings = {}, -- left over from the removed market; emptied back into the inventory on join
 		perks = {}, -- Aura Shrine levels, kept through rebirths: [perkId] = level
 		tower = 0, -- highest battle tower floor cleared
 		battleDeck = {}, -- array of cardKeys to bring to tower duels (empty = pick automatically)

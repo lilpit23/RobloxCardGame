@@ -15,7 +15,26 @@ Upgrades.StoreTiers = {
 	{ name = "Grand Capitol", cost = 10000000000000, mult = 32 },
 }
 
-Upgrades.Order = { "store", "slots", "charm", "luck", "auto" }
+Upgrades.Order = { "store", "charm", "luck", "auto" }
+
+-- Deck slots are the shelves of the store, so they come with the building: every store tier
+-- adds shelves (the ground floor holds 16, each storey above it 8 more).
+Upgrades.TierSlots = { 4, 16, 24, 32, 40, 48, 56, 64 }
+-- ...but a store can only stock so many shelves until its owner has rebirthed enough:
+-- index = rebirths + 1, and from the fifth rebirth every shelf is open.
+Upgrades.RebirthSlots = { 16, 24, 32, 40, 52, 64 }
+
+function Upgrades.rebirthSlotCap(rebirths)
+	return Upgrades.RebirthSlots[math.min((rebirths or 0) + 1, #Upgrades.RebirthSlots)]
+end
+
+-- Deck slots for a store level (0 = Card Stall) and rebirth count. bonus = extra slots from
+-- the game pass, which are not held back by the rebirth cap.
+function Upgrades.slotCount(storeLevel, rebirths, bonus)
+	local tier = math.min((storeLevel or 0) + 1, #Upgrades.TierSlots)
+	local slots = math.min(Upgrades.TierSlots[tier], Upgrades.rebirthSlotCap(rebirths))
+	return math.min(slots + (bonus or 0), Config.MaxSlots)
+end
 
 Upgrades.Defs = {
 	store = {
@@ -31,18 +50,7 @@ Upgrades.Defs = {
 			if nextTier == nil then
 				return current.name .. " — x" .. current.mult .. " income (MAX)"
 			end
-			return current.name .. " (x" .. current.mult .. ") → " .. nextTier.name .. " (x" .. nextTier.mult .. " income, new packs)"
-		end,
-	},
-	slots = {
-		name = "Deck Slot",
-		currency = "cash",
-		max = Config.MaxSlots - Config.BaseSlots,
-		cost = function(level)
-			return math.floor(300 * 1.42 ^ level)
-		end,
-		describe = function(level)
-			return (Config.BaseSlots + level) .. " / " .. Config.MaxSlots .. " deck slots — each slot holds one active card that earns cash"
+			return current.name .. " (x" .. current.mult .. ") → " .. nextTier.name .. " (x" .. nextTier.mult .. " income, a new floor of shelves, new packs)"
 		end,
 	},
 	charm = {

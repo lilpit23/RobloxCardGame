@@ -20,6 +20,7 @@ local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
 local Duel = require(Shared:WaitForChild("Duel"))
 local Titles = require(Shared:WaitForChild("Titles"))
+local Staff = require(Shared:WaitForChild("Staff"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
 local Plots = require(script:WaitForChild("Plots"))
@@ -70,8 +71,8 @@ local LoadoutRemote = newRemote("RemoteEvent", "Loadout")
 local OwnerToolRemote = newRemote("RemoteEvent", "OwnerTool")
 local ClaimAllRemote = newRemote("RemoteEvent", "ClaimAll")
 local AdminSetRemote = newRemote("RemoteEvent", "AdminSet")
-local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
+local OpenStaffRemote = newRemote("RemoteEvent", "OpenStaff") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
 local OpenRebirthRemote = newRemote("RemoteEvent", "OpenRebirth") -- server -> client
 local AutoPackSetRemote = newRemote("RemoteEvent", "AutoPackSet")
@@ -79,16 +80,6 @@ local AutoPullRemote = newRemote("RemoteEvent", "AutoPull") -- server -> client
 local SetShowcaseRemote = newRemote("RemoteEvent", "SetShowcase")
 local RedeemCodeRemote = newRemote("RemoteEvent", "RedeemCode")
 local ResetDataRemote = newRemote("RemoteEvent", "ResetData")
-local MarketStateRemote = newRemote("RemoteEvent", "MarketState") -- server -> client
-local MarketListRemote = newRemote("RemoteEvent", "MarketList")
-local MarketCancelRemote = newRemote("RemoteEvent", "MarketCancel")
-local MarketBuyRemote = newRemote("RemoteEvent", "MarketBuy")
-local TradeStateRemote = newRemote("RemoteEvent", "TradeState") -- server -> client
-local TradeRequestRemote = newRemote("RemoteEvent", "TradeRequest") -- both directions
-local TradeAcceptRemote = newRemote("RemoteEvent", "TradeAccept")
-local TradeOfferRemote = newRemote("RemoteEvent", "TradeOffer")
-local TradeConfirmRemote = newRemote("RemoteEvent", "TradeConfirm")
-local TradeCancelRemote = newRemote("RemoteEvent", "TradeCancel")
 
 remotes.Parent = ReplicatedStorage
 
@@ -165,7 +156,7 @@ end
 
 local function slotCount(data)
 	local bonus = hasPass(data, "extraSlots") and Config.Monetization.ExtraSlots or 0
-	return math.min(Config.BaseSlots + data.upgrades.slots + bonus, Config.MaxSlots)
+	return Upgrades.slotCount(data.upgrades.store, data.rebirths, bonus)
 end
 
 local function collectionCount(data)
@@ -378,8 +369,6 @@ local function questProgress(player, questType, amount)
 	end
 end
 
--- Set further down, once trading and the market exist: clears a player's listings and trade.
-local onRebirthReset = function(_player, _data) end
 -- Set further down, with the titles: redraws the title over a player's head.
 local resetOverhead = function(_player) end
 
@@ -413,7 +402,7 @@ local function firstEmptySlot(data)
 end
 
 -- Adds cash, respecting the wallet cap (see Rebirth.cashCap). Returns what was really added.
--- bypassCap is for money a player is owed by someone else (market sales).
+-- bypassCap skips the cap (nothing uses it today).
 local function addCash(data, amount, bypassCap)
 	if amount <= 0 then
 		return 0
@@ -1045,13 +1034,18 @@ local function buyUpgrade(player, session, data, upgradeId, quiet)
 	data.upgrades[upgradeId] = level + 1
 
 	local text = def.name .. " upgraded!"
-	if upgradeId == "slots" then
-		Plots.setSlotCount(session.plot, slotCount(data))
-		text = "New deck slot unlocked!"
-	elseif upgradeId == "store" then
+	if upgradeId == "store" then
+		local before = Plots.getSlotCount(session.plot)
 		Plots.setTier(session.plot, data.upgrades.store + 1)
+		Plots.setSlotCount(session.plot, slotCount(data))
 		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 		text = "Store upgraded to " .. Upgrades.getStoreTier(data.upgrades.store).name .. "!"
+		local gained = slotCount(data) - before
+		if gained > 0 then
+			text = text .. "  +" .. gained .. " deck slots"
+		elseif slotCount(data) < Config.MaxSlots and Upgrades.TierSlots[data.upgrades.store + 1] > Upgrades.rebirthSlotCap(data.rebirths) then
+			text = text .. "  (rebirth to stock the new shelves)"
+		end
 	end
 	if not quiet then
 		notify(player, text, "good")
@@ -1127,6 +1121,18 @@ RedeemCodeRemote.OnServerEvent:Connect(function(player, text)
 	touch(player, true)
 end)
 
+-- Redraws every employee's desk in the player's store to match their upgrades.
+local function updateStaff(player)
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	if session == nil or data == nil then
+		return
+	end
+	for _, id in ipairs(Staff.Order) do
+		Plots.setStaff(session.plot, id, Staff.level(data.perks, id), Staff.unlocked(id, data.rebirths))
+	end
+end
+
 -- Full reset: any player can wipe their own save and start again from nothing (rebirths,
 -- collection book, perks, titles and tower progress included). Game passes are kept, because
 -- they belong to the Roblox account, not the save.
@@ -1139,7 +1145,6 @@ ResetDataRemote.OnServerEvent:Connect(function(player)
 	if session == nil or old == nil then
 		return
 	end
-	onRebirthReset(player, old) -- ends any trade and takes their cards off the market
 	session.duel = nil
 	session.pending = 0
 	session.playSeconds = 0
@@ -1159,6 +1164,7 @@ ResetDataRemote.OnServerEvent:Connect(function(player)
 	Plots.resetStands(session.plot, slotCount(data))
 	Plots.setTier(session.plot, 1)
 	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
+	updateStaff(player)
 	resetOverhead(player)
 	notify(player, "Your save was wiped. Welcome to a brand-new store!", "good")
 	touch(player, true)
@@ -1310,6 +1316,12 @@ BuyPerkRemote.OnServerEvent:Connect(function(player, perkId)
 	if data == nil or def == nil then
 		return
 	end
+	local staffId = Staff.ForPerk[perkId]
+	if not Staff.unlocked(staffId, data.rebirths) then
+		local staff = Staff.Defs[staffId]
+		notify(player, staff.name .. " joins your store after " .. staff.rebirths .. (staff.rebirths == 1 and " rebirth." or " rebirths."), "error")
+		return
+	end
 	local level = Perks.level(data.perks, perkId)
 	if level >= def.max then
 		notify(player, def.name .. " is maxed out.", "error")
@@ -1324,7 +1336,8 @@ BuyPerkRemote.OnServerEvent:Connect(function(player, perkId)
 		return
 	end
 	data.perks[perkId] = level + 1
-	notify(player, def.name .. " is now level " .. (level + 1) .. " — permanently!", "good")
+	notify(player, Staff.Defs[staffId].name .. ": " .. def.name .. " is now level " .. (level + 1) .. " — permanently!", "good")
+	updateStaff(player)
 	touch(player, true)
 end)
 
@@ -1809,8 +1822,6 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 		return
 	end
 
-	onRebirthReset(player, data)
-
 	-- Reset the run. Kept: rebirths, vault, collection book, perks, tower, packsOpened.
 	data.rebirths = data.rebirths + 1
 	data.cash = Perks.startCash(data.perks)
@@ -1827,318 +1838,11 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	Plots.resetStands(session.plot, slotCount(data))
 	Plots.setTier(session.plot, 1)
 	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
+	updateStaff(player)
 
 	notify(player, "🌟 REBIRTH " .. data.rebirths .. "!  " .. Rebirth.describeBonuses(data.rebirths), "good")
 	touch(player, true)
 end)
-
----------------------------------------------------------------------
--- Marketplace: list a card for cash; other players in the server can buy it
----------------------------------------------------------------------
--- A listed card leaves the inventory and sits in data.listings (saved) until sold or cancelled.
-local listingCounter = 0
-
-local function marketSnapshot()
-	local list = {}
-	for seller in pairs(sessions) do
-		local data = PlayerData.get(seller)
-		if data then
-			for _, listing in ipairs(data.listings) do
-				table.insert(list, {
-					id = listing.id,
-					key = listing.key,
-					price = listing.price,
-					sellerId = seller.UserId,
-					sellerName = seller.DisplayName,
-				})
-			end
-		end
-	end
-	table.sort(list, function(a, b)
-		if a.price ~= b.price then
-			return a.price < b.price
-		end
-		return a.id < b.id
-	end)
-	return list
-end
-
-local function broadcastMarket()
-	MarketStateRemote:FireAllClients(marketSnapshot())
-end
-
-MarketListRemote.OnServerEvent:Connect(function(player, key, price)
-	if not allow(player, "MarketList", 2, 4) then
-		return
-	end
-	local data = PlayerData.get(player)
-	if data == nil or Cards.parse(key) == nil then
-		return
-	end
-	if type(price) ~= "number" or price ~= price then
-		return
-	end
-	price = math.floor(price)
-	if price < 1 or price > Config.Market.MaxPrice then
-		notify(player, "Enter a price between $1 and " .. Format.cash(Config.Market.MaxPrice) .. ".", "error")
-		return
-	end
-	if #data.listings >= Config.Market.MaxListings then
-		notify(player, "You can only have " .. Config.Market.MaxListings .. " cards for sale at once.", "error")
-		return
-	end
-	if not takeCard(data, key, 1) then
-		return
-	end
-	listingCounter = listingCounter + 1
-	table.insert(data.listings, {
-		id = player.UserId .. "-" .. os.time() .. "-" .. listingCounter,
-		key = key,
-		price = price,
-	})
-	notify(player, Cards.getDisplayName(key) .. " listed for " .. Format.cash(price) .. ".", "good")
-	touch(player, true)
-	broadcastMarket()
-end)
-
-MarketCancelRemote.OnServerEvent:Connect(function(player, listingId)
-	if not allow(player, "MarketCancel", 4, 8) then
-		return
-	end
-	local data = PlayerData.get(player)
-	if data == nil or type(listingId) ~= "string" then
-		return
-	end
-	for index, listing in ipairs(data.listings) do
-		if listing.id == listingId then
-			table.remove(data.listings, index)
-			addCard(data, listing.key, 1)
-			touch(player, true)
-			broadcastMarket()
-			return
-		end
-	end
-end)
-
-MarketBuyRemote.OnServerEvent:Connect(function(player, listingId)
-	if not allow(player, "MarketBuy", 4, 8) then
-		return
-	end
-	local data = PlayerData.get(player)
-	if data == nil or type(listingId) ~= "string" then
-		return
-	end
-	for seller in pairs(sessions) do
-		local sellerData = PlayerData.get(seller)
-		if sellerData and seller ~= player then
-			for index, listing in ipairs(sellerData.listings) do
-				if listing.id == listingId then
-					if Cards.parse(listing.key) == nil then
-						return
-					end
-					if not spend(data, "cash", listing.price) then
-						notify(player, "Not enough cash.", "error")
-						return
-					end
-					table.remove(sellerData.listings, index)
-					addCard(data, listing.key, 1)
-					addCash(sellerData, listing.price, true)
-					local name = Cards.getDisplayName(listing.key)
-					notify(player, "You bought " .. name .. " for " .. Format.cash(listing.price) .. "!", "good")
-					notify(seller, player.DisplayName .. " bought your " .. name .. " for " .. Format.cash(listing.price) .. "!", "cash")
-					touch(player, true)
-					touch(seller, false)
-					broadcastMarket()
-					return
-				end
-			end
-		end
-	end
-	notify(player, "That card is no longer for sale.", "error")
-end)
-
----------------------------------------------------------------------
--- Trading: two players each offer cards, both confirm, the server swaps them
----------------------------------------------------------------------
--- Offered cards stay in each inventory until both players confirm; the swap then re-checks
--- ownership and happens in one step, so a card can never be duplicated or lost.
-local trades = {} -- [player] = trade (the same table for both players)
-local tradeRequests = {} -- [target] = { [from] = os.clock() }
-
-local function sendTradeState(trade)
-	for _, player in ipairs({ trade.a, trade.b }) do
-		local other = player == trade.a and trade.b or trade.a
-		TradeStateRemote:FireClient(player, {
-			partnerName = other.DisplayName,
-			mine = trade.offers[player],
-			theirs = trade.offers[other],
-			myConfirm = trade.confirmed[player] == true,
-			theirConfirm = trade.confirmed[other] == true,
-		})
-	end
-end
-
-local function endTrade(trade, message, kind)
-	for _, player in ipairs({ trade.a, trade.b }) do
-		if trades[player] == trade then
-			trades[player] = nil
-			TradeStateRemote:FireClient(player, nil)
-			if message then
-				notify(player, message, kind or "info")
-			end
-		end
-	end
-end
-
--- True if the player's inventory holds every card in the offer (duplicates counted).
-local function canCover(data, offer)
-	local needed = {}
-	for _, key in ipairs(offer) do
-		needed[key] = (needed[key] or 0) + 1
-	end
-	for key, count in pairs(needed) do
-		if (data.inventory[key] or 0) < count then
-			return false
-		end
-	end
-	return true
-end
-
-TradeRequestRemote.OnServerEvent:Connect(function(player, targetUserId)
-	if not allow(player, "TradeRequest", 0.5, 3) then
-		return
-	end
-	if type(targetUserId) ~= "number" or sessions[player] == nil then
-		return
-	end
-	local target = Players:GetPlayerByUserId(targetUserId)
-	if target == nil or target == player or sessions[target] == nil then
-		return
-	end
-	if trades[player] or trades[target] then
-		notify(player, "One of you is already in a trade.", "error")
-		return
-	end
-	tradeRequests[target] = tradeRequests[target] or {}
-	tradeRequests[target][player] = os.clock()
-	TradeRequestRemote:FireClient(target, player.UserId, player.DisplayName)
-	notify(player, "Trade request sent to " .. target.DisplayName .. ".", "info")
-end)
-
-TradeAcceptRemote.OnServerEvent:Connect(function(player, fromUserId)
-	if not allow(player, "TradeAccept", 1, 3) then
-		return
-	end
-	if type(fromUserId) ~= "number" or sessions[player] == nil then
-		return
-	end
-	local from = Players:GetPlayerByUserId(fromUserId)
-	local requests = tradeRequests[player]
-	local sentAt = from and requests and requests[from]
-	if from == nil or sessions[from] == nil or sentAt == nil or os.clock() - sentAt > Config.Trade.RequestTimeout then
-		notify(player, "That trade request has expired.", "error")
-		return
-	end
-	if trades[player] or trades[from] then
-		notify(player, "One of you is already in a trade.", "error")
-		return
-	end
-	requests[from] = nil
-	local trade = { a = from, b = player, offers = { [from] = {}, [player] = {} }, confirmed = {} }
-	trades[from] = trade
-	trades[player] = trade
-	sendTradeState(trade)
-end)
-
-TradeOfferRemote.OnServerEvent:Connect(function(player, key, add)
-	if not allow(player, "TradeOffer", 8, 16) then
-		return
-	end
-	local trade = trades[player]
-	local data = PlayerData.get(player)
-	if trade == nil or data == nil or Cards.parse(key) == nil then
-		return
-	end
-	local offer = trade.offers[player]
-	if add == true then
-		local offered = 0
-		for _, offeredKey in ipairs(offer) do
-			if offeredKey == key then
-				offered = offered + 1
-			end
-		end
-		if #offer >= Config.Trade.MaxCards or offered >= (data.inventory[key] or 0) then
-			return
-		end
-		table.insert(offer, key)
-	else
-		local index = table.find(offer, key)
-		if index == nil then
-			return
-		end
-		table.remove(offer, index)
-	end
-	trade.confirmed = {} -- any change means both players must confirm again
-	sendTradeState(trade)
-end)
-
-TradeConfirmRemote.OnServerEvent:Connect(function(player)
-	if not allow(player, "TradeConfirm", 2, 4) then
-		return
-	end
-	local trade = trades[player]
-	if trade == nil then
-		return
-	end
-	trade.confirmed[player] = true
-	if not (trade.confirmed[trade.a] and trade.confirmed[trade.b]) then
-		sendTradeState(trade)
-		return
-	end
-
-	local dataA, dataB = PlayerData.get(trade.a), PlayerData.get(trade.b)
-	local offerA, offerB = trade.offers[trade.a], trade.offers[trade.b]
-	if dataA == nil or dataB == nil or not canCover(dataA, offerA) or not canCover(dataB, offerB) then
-		endTrade(trade, "Trade failed: a card was no longer available.", "error")
-		return
-	end
-	for _, key in ipairs(offerA) do
-		takeCard(dataA, key, 1)
-	end
-	for _, key in ipairs(offerB) do
-		takeCard(dataB, key, 1)
-	end
-	for _, key in ipairs(offerA) do
-		addCard(dataB, key, 1)
-	end
-	for _, key in ipairs(offerB) do
-		addCard(dataA, key, 1)
-	end
-	touch(trade.a, true)
-	touch(trade.b, true)
-	endTrade(trade, "🤝 Trade complete!", "good")
-end)
-
-TradeCancelRemote.OnServerEvent:Connect(function(player)
-	if not allow(player, "TradeCancel", 2, 4) then
-		return
-	end
-	local trade = trades[player]
-	if trade then
-		endTrade(trade, "Trade cancelled.", "info")
-	end
-end)
-
-onRebirthReset = function(player, data)
-	local trade = trades[player]
-	if trade then
-		endTrade(trade, "Trade cancelled.", "info")
-	end
-	if #data.listings > 0 then
-		data.listings = {} -- cards for sale are part of the run and are reset with it
-		broadcastMarket()
-	end
-end
 
 ---------------------------------------------------------------------
 -- Game passes and developer products
@@ -2212,8 +1916,22 @@ Plots.init({
 		OpenShopRemote:FireClient(player)
 	end,
 
-	onTrade = function(_, player)
-		OpenTradeRemote:FireClient(player)
+	-- Someone walked up to an employee: they say hello out loud, and for the owner the staff
+	-- list opens too.
+	onStaff = function(plot, player, staffId)
+		local owner = plot.owner
+		local data = owner and PlayerData.get(owner)
+		if data == nil or Staff.Defs[staffId] == nil or not allow(player, "StaffTalk", 1, 3) then
+			return
+		end
+		local level = Staff.level(data.perks, staffId)
+		local line = Staff.greeting(staffId, level, Staff.unlocked(staffId, data.rebirths), rng)
+		Plots.staffSay(plot, staffId, line)
+		if player == owner then
+			OpenStaffRemote:FireClient(player, staffId, line)
+		else
+			notify(player, Staff.Defs[staffId].name .. ": " .. line, "info")
+		end
 	end,
 
 	onVault = function(_, player)
@@ -2453,6 +2171,28 @@ local function onPlayerAdded(player)
 	end
 	-- game passes and regional purchase rules (both ask Roblox, so they can take a moment)
 	dataPasses[data] = Monetization.load(player)
+
+	-- Deck slots now come from the store level: cards left in slots that no longer exist go
+	-- back to the inventory.
+	for slotKey, key in pairs(data.slots) do
+		local index = tonumber(slotKey)
+		if index == nil or index > slotCount(data) then
+			if Cards.parse(key) then
+				addCard(data, key, 1)
+			end
+			data.slots[slotKey] = nil
+		end
+	end
+
+	-- The market was removed: cards a returning player still had up for sale go back to them.
+	if #data.listings > 0 then
+		for _, listing in ipairs(data.listings) do
+			if type(listing) == "table" and Cards.parse(listing.key) then
+				addCard(data, listing.key, 1)
+			end
+		end
+		data.listings = {}
+	end
 	local restricted = Monetization.isRestricted(player)
 
 	if player.Parent == nil then
@@ -2486,6 +2226,7 @@ local function onPlayerAdded(player)
 	Plots.setSlotCount(plot, slotCount(data))
 	Plots.setTier(plot, data.upgrades.store + 1)
 	Plots.setOwnerSign(plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
+	updateStaff(player)
 	for index = 1, slotCount(data) do
 		Plots.setCard(plot, index, data.slots[tostring(index)])
 	end
@@ -2510,7 +2251,6 @@ local function onPlayerAdded(player)
 	data.lastSeen = os.time()
 	ensureQuests(player, data)
 	updateShowcase(player)
-	broadcastMarket()
 
 	pushState(player)
 end
@@ -2523,18 +2263,9 @@ local function onPlayerRemoving(player)
 		addCash(data, session.pending)
 		session.pending = 0
 	end
-	local trade = trades[player]
-	if trade then
-		endTrade(trade, "The other player left, so the trade was cancelled.", "info")
-	end
-	tradeRequests[player] = nil
-	for _, requests in pairs(tradeRequests) do
-		requests[player] = nil
-	end
 	sessions[player] = nil
 	buckets[player] = nil
 	Monetization.forget(player)
-	broadcastMarket()
 	Plots.release(player)
 	PlayerData.release(player)
 end

@@ -218,6 +218,49 @@ function PlayerData.save(player, release)
 	end)
 end
 
+-- Admins -------------------------------------------------------------------------------
+-- One shared record, { [tostring(userId)] = name }, read by every server. Without a
+-- DataStore (Studio with API access off) the list only lives in memory.
+local ADMINS_KEY = "admins"
+local memoryAdmins = {}
+
+-- Returns the admin table, or nil if it could not be read.
+function PlayerData.loadAdmins()
+	if store == nil then
+		return memoryAdmins
+	end
+	local result = nil
+	local ok = withRetry(2, function()
+		result = store:GetAsync(ADMINS_KEY)
+	end)
+	if not ok then
+		return nil
+	end
+	return type(result) == "table" and result or {}
+end
+
+-- name = a string to make that user an admin, nil to remove them.
+-- Returns the new admin table, or nil if it could not be saved.
+function PlayerData.setAdmin(userId, name)
+	local id = tostring(userId)
+	if store == nil then
+		memoryAdmins[id] = name
+		return memoryAdmins
+	end
+	local result = nil
+	local ok = withRetry(3, function()
+		result = store:UpdateAsync(ADMINS_KEY, function(stored)
+			local list = type(stored) == "table" and stored or {}
+			list[id] = name
+			return list
+		end)
+	end)
+	if not ok or type(result) ~= "table" then
+		return nil
+	end
+	return result
+end
+
 -- Global leaderboards --------------------------------------------------------------------
 -- One OrderedDataStore per board, keyed by user id. Both calls are safe to fail: boards just
 -- keep their old contents (Studio without API access has no stores at all).

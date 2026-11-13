@@ -62,8 +62,12 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     **Full reset:** a small red button at the bottom of the Rebirth screen wipes a player's
     whole save (tap twice).
     **Saved decks:** the Deck screen can remember three decks and swap between them.
-    **Owner testing tools** (Store screen, creator or Studio only): fill the wallet, add aura,
-    add random cards, meet the next rebirth's requirements, skip tower floors.
+    **Admin tab** (the owner, plus anyone the owner makes an admin there; everyone in Studio):
+    fill the wallet, add aura, add random cards, meet the next rebirth's requirements, skip
+    tower floors, and an auto upgrader that buys upgrades as soon as they are affordable. The
+    owner is the account that owns the experience; a group-owned experience has no owner here.
+    **Battle coach:** a player's first three duels show a line of advice each round and a glow
+    on a good move; "How battles work" in the Battle screen explains the rules.
     **Weekly event:** one bonus for everyone that changes each week (Gold Rush +25% cash, Aura
     Bloom +50% aura, Lucky Week +3 luck, Tower Week double tower aura), set in `Season.luau`.
     **Titles** (set completions, Golden sets, tower bosses, rebirths, collection size) pay aura

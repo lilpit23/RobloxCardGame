@@ -69,6 +69,7 @@ local SetTitleRemote = newRemote("RemoteEvent", "SetTitle")
 local LoadoutRemote = newRemote("RemoteEvent", "Loadout")
 local OwnerToolRemote = newRemote("RemoteEvent", "OwnerTool")
 local ClaimAllRemote = newRemote("RemoteEvent", "ClaimAll")
+local AdminSetRemote = newRemote("RemoteEvent", "AdminSet")
 local OpenTradeRemote = newRemote("RemoteEvent", "OpenTrade") -- server -> client
 local OpenBattleRemote = newRemote("RemoteEvent", "OpenBattle") -- server -> client
 local AnnounceRemote = newRemote("RemoteEvent", "Announce") -- server -> everyone
@@ -131,6 +132,14 @@ local function isOwner(player)
 		return true
 	end
 	return game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId
+end
+
+-- Admins: players the owner has given the Admin tab (testing tools, auto upgrader). The owner
+-- is always an admin, and only the owner can add or remove admins.
+local admins = {} -- [tostring(userId)] = name, shared by every server (see PlayerData)
+
+local function isAdmin(player)
+	return isOwner(player) or admins[tostring(player.UserId)] ~= nil
 end
 
 -- Game passes owned, looked up by profile: [data] = { [passKey] = true }.
@@ -265,6 +274,9 @@ local function pushState(player)
 		showcase = data.showcase,
 		restricted = session.restricted,
 		isOwner = isOwner(player),
+		isAdmin = isAdmin(player),
+		admins = isOwner(player) and admins or nil,
+		autoUpgrade = session.autoUpgrade == true,
 		incomePerSec = income,
 		auraPerSec = aura,
 	})
@@ -1013,39 +1025,68 @@ end)
 ---------------------------------------------------------------------
 -- Upgrades
 ---------------------------------------------------------------------
+-- Buys one level of an upgrade. quiet = no messages (the admin auto upgrader).
+-- Returns true if it was bought.
+local function buyUpgrade(player, session, data, upgradeId, quiet)
+	local def = Upgrades.Defs[upgradeId]
+	local level = data.upgrades[upgradeId]
+	if level >= def.max then
+		if not quiet then
+			notify(player, def.name .. " is maxed out.", "error")
+		end
+		return false
+	end
+	if not spend(data, def.currency, def.cost(level)) then
+		if not quiet then
+			notify(player, "Not enough " .. def.currency .. ".", "error")
+		end
+		return false
+	end
+	data.upgrades[upgradeId] = level + 1
+
+	local text = def.name .. " upgraded!"
+	if upgradeId == "slots" then
+		Plots.setSlotCount(session.plot, slotCount(data))
+		text = "New deck slot unlocked!"
+	elseif upgradeId == "store" then
+		Plots.setTier(session.plot, data.upgrades.store + 1)
+		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
+		text = "Store upgraded to " .. Upgrades.getStoreTier(data.upgrades.store).name .. "!"
+	end
+	if not quiet then
+		notify(player, text, "good")
+	end
+	touch(player, true)
+	return true
+end
+
 BuyUpgradeRemote.OnServerEvent:Connect(function(player, upgradeId)
 	if not allow(player, "BuyUpgrade", 5, 10) then
 		return
 	end
 	local session = sessions[player]
 	local data = PlayerData.get(player)
-	local def = type(upgradeId) == "string" and Upgrades.Defs[upgradeId] or nil
-	if session == nil or data == nil or def == nil then
+	if session == nil or data == nil or type(upgradeId) ~= "string" or Upgrades.Defs[upgradeId] == nil then
 		return
 	end
-	local level = data.upgrades[upgradeId]
-	if level >= def.max then
-		notify(player, def.name .. " is maxed out.", "error")
-		return
-	end
-	if not spend(data, def.currency, def.cost(level)) then
-		notify(player, "Not enough " .. def.currency .. ".", "error")
-		return
-	end
-	data.upgrades[upgradeId] = level + 1
-
-	if upgradeId == "slots" then
-		Plots.setSlotCount(session.plot, slotCount(data))
-		notify(player, "New deck slot unlocked!", "good")
-	elseif upgradeId == "store" then
-		Plots.setTier(session.plot, data.upgrades.store + 1)
-		Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
-		notify(player, "Store upgraded to " .. Upgrades.getStoreTier(data.upgrades.store).name .. "!", "good")
-	else
-		notify(player, def.name .. " upgraded!", "good")
-	end
-	touch(player, true)
+	buyUpgrade(player, session, data, upgradeId, false)
 end)
+
+-- Admin auto upgrader: once a second, buys the first upgrade the player can afford.
+local function runAutoUpgrader(player, session, data)
+	if not session.autoUpgrade then
+		return
+	end
+	if not isAdmin(player) then
+		session.autoUpgrade = false
+		return
+	end
+	for _, upgradeId in ipairs(Upgrades.Order) do
+		if buyUpgrade(player, session, data, upgradeId, true) then
+			return
+		end
+	end
+end
 
 ---------------------------------------------------------------------
 -- Aura Shrine (permanent perks)
@@ -1123,17 +1164,21 @@ ResetDataRemote.OnServerEvent:Connect(function(player)
 	touch(player, true)
 end)
 
--- Owner-only testing tools, so late-game screens can be reached without hours of play.
--- Only the game's creator (or anyone in Studio) can use them; see isOwner.
+-- Admin testing tools, so late-game screens can be reached without hours of play.
+-- Only admins (the owner, anyone the owner made an admin, anyone in Studio) can use them.
 OwnerToolRemote.OnServerEvent:Connect(function(player, action)
-	if not allow(player, "OwnerTool", 2, 4) or not isOwner(player) then
+	if not allow(player, "OwnerTool", 2, 4) or not isAdmin(player) then
 		return
 	end
+	local session = sessions[player]
 	local data = PlayerData.get(player)
-	if data == nil then
+	if session == nil or data == nil then
 		return
 	end
-	if action == "cash" then
+	if action == "autoUpgrade" then
+		session.autoUpgrade = not session.autoUpgrade
+		notify(player, session.autoUpgrade and "🧪 Auto upgrader ON: upgrades are bought as soon as you can afford them." or "🧪 Auto upgrader off.", "info")
+	elseif action == "cash" then
 		local cap = Rebirth.cashCap(data.rebirths)
 		addCash(data, cap < math.huge and cap or 1e15)
 		notify(player, "🧪 Wallet filled.", "info")
@@ -1167,6 +1212,72 @@ OwnerToolRemote.OnServerEvent:Connect(function(player, action)
 		return
 	end
 	touch(player, true)
+end)
+
+-- Tells everyone whose Admin tab is affected to redraw: the owner sees the list, and the
+-- player who was added or removed gains or loses the tab.
+local function adminsChanged()
+	for player, session in pairs(sessions) do
+		session.rev = session.rev + 1
+		pushState(player)
+	end
+end
+
+-- Owner only: give or take away a player's Admin tab. The player must be in this server to
+-- be added; anyone on the list can be removed.
+AdminSetRemote.OnServerEvent:Connect(function(player, userId, makeAdmin)
+	if not allow(player, "AdminSet", 1, 3) or not isOwner(player) then
+		return
+	end
+	if type(userId) ~= "number" or userId % 1 ~= 0 or userId <= 0 or type(makeAdmin) ~= "boolean" then
+		return
+	end
+	local name = nil
+	if makeAdmin then
+		local target = Players:GetPlayerByUserId(userId)
+		if target == nil then
+			notify(player, "That player has to be in this server to be made an admin.", "error")
+			return
+		end
+		name = target.DisplayName .. " (@" .. target.Name .. ")"
+	end
+	local updated = PlayerData.setAdmin(userId, name) -- yields
+	if updated == nil then
+		notify(player, "Could not save the admin list. Try again in a moment.", "error")
+		return
+	end
+	admins = updated
+	notify(player, makeAdmin and (tostring(name) .. " is now an admin.") or "Admin removed.", "good")
+	local target = Players:GetPlayerByUserId(userId)
+	if target and target ~= player then
+		notify(target, makeAdmin and "🛠️ You are now an admin: look for the Admin button in the menu." or "Your admin access was removed.", "info")
+	end
+	adminsChanged()
+end)
+
+-- Other servers pick up changes to the admin list within a couple of minutes.
+task.spawn(function()
+	while true do
+		local loaded = PlayerData.loadAdmins()
+		if loaded then
+			local changed = false
+			for id in pairs(loaded) do
+				if admins[id] == nil then
+					changed = true
+				end
+			end
+			for id in pairs(admins) do
+				if loaded[id] == nil then
+					changed = true
+				end
+			end
+			admins = loaded
+			if changed then
+				adminsChanged()
+			end
+		end
+		task.wait(120)
+	end
 end)
 
 -- Choose a card for one of the two storefront frames. side = "left", "right", or "auto" to go
@@ -2196,6 +2307,7 @@ task.spawn(function()
 				end
 
 				runAutoPacker(player, session, data)
+				runAutoUpgrader(player, session, data)
 
 				-- a free booster gift for every stretch of play time
 				session.playSeconds = session.playSeconds + 1

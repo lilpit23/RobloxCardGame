@@ -38,6 +38,9 @@ way so the repo stays the whole game.
   the client only gets `Duel.view` and the event list. Battling never uses up cards. After
   changing duel numbers run `node tools/duel-sim.js`. The enemy figures and camera of a duel
   are built on the client (`buildStage`); the server only moves the player to their duel pad.
+- Admins: `isAdmin(player)` on the server (the owner, or a user id in the shared admin list
+  kept by `PlayerData.setAdmin`). Only `isOwner` may change that list. Every admin-only remote
+  must check `isAdmin` on the server; hiding the tab on the client is not protection.
 - Global leaderboards use OrderedDataStores, and like every DataStore call they live in
   `PlayerData.luau`. Titles are data in `Titles.luau`; earned ones are saved in `data.titles`.
 - No stealing and no PvP (owner's decision). Cards only change hands through trading and the

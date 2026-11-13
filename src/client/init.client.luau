@@ -57,6 +57,9 @@ local state = {
 	passes = {},
 	restricted = true,
 	isOwner = false,
+	isAdmin = false,
+	admins = {},
+	autoUpgrade = false,
 	perks = {},
 	tower = 0,
 	luckEventEndsAt = 0,
@@ -2272,26 +2275,6 @@ panels.Store = function()
 		end
 	end
 
-	-- testing tool, only shown to the game's creator (and in Studio)
-	if state.isOwner then
-		local resetRow = newRow(order + 2, 60)
-		resetRow.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
-		newLabel(resetRow, "🧪 Owner testing tools. Only you can see these. (Full reset is at the bottom of the Rebirth screen.)", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 13 })
-		local toolRow = newRow(order + 3, 46)
-		toolRow.BackgroundColor3 = Color3.fromRGB(70, 30, 30)
-		for index, tool in ipairs({
-			{ "cash", "Fill wallet" },
-			{ "aura", "+1M aura" },
-			{ "cards", "+30 cards" },
-			{ "rebirth", "Rebirth ready" },
-			{ "tower", "+4 floors" },
-		}) do
-			newButton(toolRow, "🧪 " .. tool[2], UDim2.new((index - 1) / 5, 4, 0, 6), UDim2.new(1 / 5, -8, 0, 34), COLORS.locked, function()
-				Remotes.OwnerTool:FireServer(tool[1])
-			end).TextSize = 12
-		end
-	end
-
 	local note = newRow(order + 1, 34)
 	note.BackgroundTransparency = 1
 	newLabel(note, "Purchases are optional. Everything in the game can be earned by playing.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
@@ -2316,6 +2299,48 @@ local stage = nil -- the 3D scene: { folder, spot, figures = { { part, home, gui
 local duelAuto = false -- the Auto battler is playing for you
 local autoToken = 0 -- changes whenever a duel ends, so a queued "next floor" can tell it is stale
 local startDuel -- defined below
+local battleHelp = false -- the "How battles work" box in the lobby is open
+
+-- New duellists get a coach: a line of advice each round and a glow on a good move.
+local function learningDuels()
+	return state.stats == nil or (state.stats.duels or 0) < 3
+end
+
+-- What the coach says right now, given the move it would make.
+local function coachText(suggestion)
+	if duel.round == 1 and #duelLog == 0 then
+		return "👋 These are your cards. Each one costs the ⚡ shown on it, and you have ⚡" .. duel.energy .. ". Tap Play on the glowing card."
+	end
+	if suggestion.kind == "pass" then
+		return "Your cards cost more ⚡ than you have. Tap ⏭ Pass: you gain +1 ⚡ every round, so the big cards come later."
+	end
+	local card = Duel.card(duel.hand[suggestion.hand])
+	local alive, winding = 0, false
+	for _, enemy in ipairs(duel.enemies) do
+		if enemy.hp > 0 then
+			alive = alive + 1
+			winding = winding or enemy.winding
+		end
+	end
+	if card.role == "heal" then
+		return "💚 You are hurt. A Heal card restores your health instead of attacking: the glowing one is a good play now."
+	elseif card.role == "shield" then
+		return winding and "⚠️ The boss is winding up a huge hit. Play the glowing 🛡️ Shield now to block most of it!" or "🛡️ A Shield cuts the next hit on you. Play it before the enemies strike."
+	elseif card.role == "charge" then
+		return "🔥 A Power-up makes your NEXT attack much stronger. Play it now, then attack next round."
+	elseif card.role == "weaken" then
+		return "🌀 Weaken makes one enemy's next attack much smaller. Use it on whoever hits hardest."
+	elseif card.role == "blast" then
+		return "💥 A Blast hits every enemy at once: best when several are still standing."
+	end
+	local target = suggestion.target and duel.enemies[suggestion.target]
+	if alive > 1 and target and suggestion.target ~= duelTarget then
+		return "🎯 Tap an enemy to aim at it (yellow outline). Try " .. target.name .. ": knocking one out means fewer hits on you."
+	elseif target and Cards.typeBeats(card.type, target.type) then
+		return "✨ \"Strong!\" means your card's type beats the enemy's: +30% damage. Check the type icons before you attack."
+	end
+	return "After your move the enemies hit back. Then you gain +1 ⚡ and draw back up to " .. Duel.HandSize .. " cards. ✖ throws away a card you don't want."
+end
 
 -- The Auto battler unlocks once you have finished one battle yourself.
 local function autoUnlocked()
@@ -2751,13 +2776,38 @@ function renderDuelHud()
 		end
 		renderDuelHud()
 	end).TextSize = 14
-	newButton(status, "⏭ Pass", UDim2.new(0, 448, 0, 5), UDim2.new(0, 90, 0, 36), COLORS.button, function()
+	local passButton = newButton(status, "⏭ Pass", UDim2.new(0, 448, 0, 5), UDim2.new(0, 90, 0, 36), COLORS.button, function()
 		duelAct({ kind = "pass" })
-	end).TextSize = 14
+	end)
+	passButton.TextSize = 14
 	newButton(status, "Flee", UDim2.new(0, 544, 0, 5), UDim2.new(0, 88, 0, 36), COLORS.locked, function()
 		duelAuto = false
 		duelAct({ kind = "flee" })
 	end).TextSize = 14
+
+	-- the coach, for a player's first few duels
+	local suggestion = nil
+	if learningDuels() and not duelAuto and not duelBusy then
+		suggestion = Duel.suggest(duel)
+		local coach = make("TextLabel", {
+			Position = UDim2.new(0, 0, 0, -50),
+			Size = UDim2.new(1, 0, 0, 44),
+			BackgroundColor3 = Color3.fromRGB(18, 18, 28),
+			BackgroundTransparency = 0.1,
+			BorderSizePixel = 0,
+			Font = Enum.Font.GothamBold,
+			Text = coachText(suggestion),
+			TextColor3 = Color3.fromRGB(255, 235, 150),
+			TextSize = 14,
+			TextWrapped = true,
+		}, duelControls)
+		round(coach, 10)
+		make("UIStroke", { Color = Color3.fromRGB(255, 215, 90), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, coach)
+		make("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, coach)
+		if suggestion.kind == "pass" then
+			make("UIStroke", { Color = Color3.fromRGB(255, 225, 90), Thickness = 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, passButton)
+		end
+	end
 
 	local aim = duel.enemies[duelTarget]
 	local handCount = #duel.hand
@@ -2772,6 +2822,9 @@ function renderDuelHud()
 				BorderSizePixel = 0,
 			}, duelControls)
 			round(cell, 10)
+			if suggestion and suggestion.kind == "play" and suggestion.hand == index then
+				make("UIStroke", { Color = Color3.fromRGB(255, 225, 90), Thickness = 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, cell)
+			end
 			local holder = make("Frame", {
 				BackgroundTransparency = 1,
 				Position = UDim2.new(0, 14, 0, 6),
@@ -3049,7 +3102,33 @@ panels.Battle = function()
 		startDuel("daily")
 	end)
 
-	newNoteRow(3, "Each round you gain 1 ⚡ and play one card. Rarer cards cost more ⚡ and hit harder. Type advantage: +30% damage  (⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️).")
+	-- how battles work: open for anyone who has never fought, a tap away for everyone else
+	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
+	local helpRow = newRow(3, showHelp and 318 or 40)
+	helpRow.BackgroundTransparency = showHelp and 0 or 1
+	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
+		battleHelp = not showHelp
+		renderPanel()
+	end).TextSize = 14
+	if showHelp then
+		newLabel(helpRow, table.concat({
+			"1.  You bring a battle deck of up to " .. Duel.DeckSize .. " cards you own. Battling never uses them up.",
+			"2.  Each round you gain 1 ⚡ energy and hold " .. Duel.HandSize .. " cards. Play ONE card, or Pass to save your ⚡.",
+			"3.  A card costs the ⚡ shown on it: Commons cost 1, Secrets cost 6 and hit far harder.",
+			"4.  Then every enemy attacks you. First side to run out of health loses.",
+			"",
+			"⚔️ Strike: damage to one enemy          💥 Blast: damage to every enemy",
+			"💚 Heal: restores your health               🛡️ Shield: blocks most of the next hit on you",
+			"🔥 Power-up: your next attack is stronger   🌀 Weaken: an enemy's next attack is smaller",
+			"",
+			"Types:  ⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️.  Beating a type deals +30%, the reverse −25%.",
+			"Bosses (every 10th floor) warn you one round before a huge hit: shield up or finish them.",
+			"✖ throws a card away for free. Your first battles come with a coach that points out a good move.",
+		}, "\n"), UDim2.new(0, 14, 0, 42), UDim2.new(1, -28, 1, -48), {
+			TextSize = 13,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		})
+	end
 
 	-- the battle deck
 	local saved = Duel.usableDeck(state, state.battleDeck)
@@ -3160,6 +3239,103 @@ panels.Battle = function()
 	end
 end
 
+-- Admin tab: only for the owner and the players the owner made admins ---------------------
+panels.Admin = function()
+	titleLabel.Text = "🛠️ Admin"
+	useList()
+	if not state.isAdmin then
+		newLabel(newRow(1, 60), "This tab is only for admins.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), { TextSize = 16 })
+		return
+	end
+
+	local intro = newRow(1, 40)
+	intro.BackgroundTransparency = 1
+	newLabel(intro, "Testing tools. They only change your own save, and other players cannot see this tab.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
+		TextSize = 13,
+		TextColor3 = COLORS.dim,
+	})
+
+	local toolRow = newRow(2, 46)
+	for index, tool in ipairs({
+		{ "cash", "Fill wallet" },
+		{ "aura", "+1M aura" },
+		{ "cards", "+30 cards" },
+		{ "rebirth", "Rebirth ready" },
+		{ "tower", "+4 floors" },
+	}) do
+		newButton(toolRow, "🧪 " .. tool[2], UDim2.new((index - 1) / 5, 4, 0, 6), UDim2.new(1 / 5, -8, 0, 34), COLORS.button, function()
+			Remotes.OwnerTool:FireServer(tool[1])
+		end).TextSize = 12
+	end
+
+	local autoRow = newRow(3, 60)
+	newLabel(autoRow, "Auto upgrader", UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 22), { Font = Enum.Font.FredokaOne, TextSize = 17 })
+	newLabel(autoRow, "Buys store, deck slot and luck upgrades for you the moment you can afford them.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -190, 0, 24), {
+		TextSize = 12,
+		TextColor3 = COLORS.dim,
+	})
+	newButton(autoRow, state.autoUpgrade and "ON" or "OFF", UDim2.new(1, -160, 0, 8), UDim2.new(0, 148, 0, 44), state.autoUpgrade and COLORS.good or COLORS.locked, function()
+		Remotes.OwnerTool:FireServer("autoUpgrade")
+	end)
+
+	if not state.isOwner then
+		return
+	end
+
+	-- the owner chooses who else is an admin
+	local header = newRow(10, 44)
+	header.BackgroundColor3 = Color3.fromRGB(60, 45, 80)
+	newLabel(header, "👑 Admins  ·  only you can change this list", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 17,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+	})
+	local order = 10
+	local listed = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other ~= player then
+			order = order + 1
+			local id = tostring(other.UserId)
+			listed[id] = true
+			local isListed = state.admins[id] ~= nil
+			local row = newRow(order, 44)
+			newLabel(row, other.DisplayName .. "  (@" .. other.Name .. ")" .. (isListed and "   ·   admin" or ""), UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), {
+				TextSize = 15,
+				TextWrapped = false,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			})
+			newButton(row, isListed and "Remove admin" or "Make admin", UDim2.new(1, -160, 0, 6), UDim2.new(0, 148, 0, 32), isListed and COLORS.bad or COLORS.good, function()
+				Remotes.AdminSet:FireServer(other.UserId, not isListed)
+			end).TextSize = 14
+		end
+	end
+	-- admins who are not in this server right now
+	for id, name in pairs(state.admins) do
+		local userId = tonumber(id)
+		if not listed[id] and userId then
+			order = order + 1
+			local row = newRow(order, 44)
+			newLabel(row, tostring(name) .. "   ·   admin (not in this server)", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), {
+				TextSize = 15,
+				TextColor3 = COLORS.dim,
+				TextWrapped = false,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			})
+			newButton(row, "Remove admin", UDim2.new(1, -160, 0, 6), UDim2.new(0, 148, 0, 32), COLORS.bad, function()
+				Remotes.AdminSet:FireServer(userId, false)
+			end).TextSize = 14
+		end
+	end
+	if order == 10 then
+		local empty = newRow(11, 40)
+		empty.BackgroundTransparency = 1
+		newLabel(empty, "Nobody else is here. A player has to be in your server for you to make them an admin.", UDim2.new(0, 4, 0, 0), UDim2.new(1, -8, 1, 0), {
+			TextSize = 13,
+			TextColor3 = COLORS.dim,
+		})
+	end
+end
+
 local lastRenderAt = 0
 local renderQueued = false -- a rebuild is waiting for the throttle below
 
@@ -3177,6 +3353,9 @@ function renderPanel()
 end
 
 function openPanel(name)
+	if name == "Admin" and not state.isAdmin then
+		return -- the tab does not exist for ordinary players
+	end
 	if currentPanel == name and window.Visible then
 		window.Visible = false
 		currentPanel = nil
@@ -3212,6 +3391,7 @@ local MENU = {
 	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50), "Q" },
 	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50), "R" },
 	{ "Store", "💎 Store", Color3.fromRGB(120, 80, 200), "M" },
+	{ "Admin", "🛠️ Admin", Color3.fromRGB(170, 50, 50), "K" }, -- hidden unless you are an admin
 }
 local keyBadges = {} -- the little key letters on the buttons (keyboard players only)
 local menuButtons = {} -- [panel name] = its menu button
@@ -3305,6 +3485,10 @@ local function refreshHud()
 	end
 	local weekly = Season.event()
 	eventLabel.Text = "🎉 " .. weekly.name .. ": " .. weekly.text
+	local adminButton = menuButtons["Admin"]
+	if adminButton then
+		adminButton.Visible = state.isAdmin
+	end
 	if state.cashCap < math.huge then
 		-- wallet cap: shown as "have / cap", red when full
 		cashLabel.Text = "💵 " .. Format.cash(state.cash) .. " / " .. Format.cash(state.cashCap)
@@ -3512,6 +3696,9 @@ local function cyclePanel(step)
 		index = 1
 	else
 		index = (index - 1 + step) % #MENU + 1
+		if MENU[index][1] == "Admin" and not state.isAdmin then
+			index = (index - 1 + step) % #MENU + 1
+		end
 	end
 	if MENU[index][1] ~= currentPanel or not window.Visible then
 		openPanel(MENU[index][1])

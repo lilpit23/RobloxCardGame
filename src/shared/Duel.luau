@@ -59,6 +59,12 @@ local ROLE_OVERRIDES = {
 	king_arthur = "attack",
 	hercules = "attack",
 	paul_bunyan = "blast",
+	thor = "attack",
+	jormungandr = "blast",
+	heimdall = "shield",
+	freya = "heal",
+	loki = "weaken",
+	odin = "charge",
 	john_henry = "attack",
 	lady_liberty = "shield",
 	george_washington = "charge",
@@ -252,6 +258,7 @@ local SET_PREFIX = {
 	knights = "Rogue",
 	rome = "Rebel",
 	america = "Rival", -- only met in the daily challenge; the tower stops at the Rome floors
+	norse = "Frostbound",
 }
 
 -- Kinds of enemy. Brutes just hit; the others have a trick, shown on the duel screen.

@@ -20,14 +20,15 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
    beforehand survive the reset, so you start the next run with them.
 9. Quality of life: open 3 or 10 packs at once, buy the Auto Collector (aura) so you never walk
    over pads again, and earn +1% income for every card you discover in the collection book.
-10. **Sets and booster packs, like a real card game.** Eight numbered sets built from
-    public-domain stories, folklore and history, 37 cards each (296 cards):
+10. **Sets and booster packs, like a real card game.** Nine numbered sets built from
+    public-domain stories, folklore and history, 37 cards each (333 cards):
     **Storybook Friends** (Winnie-the-Pooh, Alice, Oz, Peter Pan), **High Seas** (Treasure Island,
     Moby-Dick, Captain Nemo, Sinbad), **Journey to the West** (Sun Wukong and company),
     **Midnight Classics** (Dracula, Frankenstein, Sherlock Holmes), **Olympus** (Greek myth),
     **Knights and Outlaws** (King Arthur, Robin Hood), **Glory of Rome** (Caesar, Cleopatra,
-    Spartacus) and **Pax Americana** (Paul Bunyan, John Henry, Pecos Bill, Johnny Appleseed,
-    Washington, Lincoln, Geronimo). The first set is open from the start and every rebirth unlocks the
+    Spartacus), **Pax Americana** (Paul Bunyan, John Henry, Pecos Bill, Johnny Appleseed,
+    Washington, Lincoln, Geronimo) and **Norse Sagas** (Odin, Thor, Loki, Fenrir, Ragnarok),
+    the endgame set that opens with the last rebirth. The first set is open from the start and every rebirth unlocks the
     next one. Every set has its own colour and emblem, a 5-card **Booster** (3 commons, 1
     uncommon, 1 guaranteed rare-or-better) and a pricier **Elite** pack. Later sets cost more and
     earn more. The **Champion Pack**, which pulls Epic-or-better cards from every set, costs

@@ -638,6 +638,71 @@ local SETS = {
 			},
 		},
 	},
+	{
+		-- The endgame set: it unlocks with the last rebirth. Based on the medieval Eddas and
+		-- sagas, not on any modern comic, film or game version of these gods.
+		id = "norse",
+		code = "NRS",
+		name = "Norse Sagas",
+		icon = "🪓",
+		color = Color3.fromRGB(70, 130, 150),
+		sources = "The Poetic Edda and Snorri Sturluson's Prose Edda (13th century), and the Icelandic sagas",
+		mult = 65536,
+		packCost = 1500000000000,
+		cards = {
+			Common = {
+				{ "Viking Raider", "🪓", "w" },
+				{ "Shield Maiden", "🛡️", "w" },
+				{ "Longship", "⛵", "t" },
+				{ "Rune Carver", "🪨", "m" },
+				{ "Skald", "🎵", "s" },
+				{ "Mead Brewer", "🍯", "s" },
+				{ "Fjord Fisher", "🎣", "s" },
+				{ "Reindeer", "🦌", "b" },
+				{ "Northern Wolf", "🐺", "b" },
+				{ "Sword Forger", "⚒️", "t" },
+				{ "Frost Sprite", "❄️", "m" },
+				{ "Jarl's Hound", "🐕", "b" },
+			},
+			Uncommon = {
+				{ "Valkyrie", "🪽", "w" },
+				{ "Berserker", "🐻", "w" },
+				{ "Dwarf Smith", "💍", "t" },
+				{ "Light Elf", "✨", "m" },
+				{ "Frost Giant", "🧊", "w" },
+				{ "Fire Giant", "🔥", "w" },
+				{ "The Norns", "🕸️", "m" },
+				{ "Huginn and Muninn", "🐦", "b" },
+			},
+			Rare = {
+				{ "Heimdall", "📯", "w" },
+				{ "Tyr", "✋", "w" },
+				{ "Baldur", "☀️", "s" },
+				{ "Sif", "🌾", "s" },
+				{ "Sleipnir", "🐴", "b" },
+				{ "Ratatoskr", "🐿️", "b" },
+			},
+			Epic = {
+				{ "Freya", "🐈", "m" },
+				{ "Loki", "🦊", "s" },
+				{ "Fenrir", "🌕", "b" },
+				{ "Jormungandr", "🐍", "b" },
+				{ "Hel", "💀", "m" },
+			},
+			Legendary = {
+				{ "Thor", "⚡", "w" },
+				{ "Odin", "🧙", "m" },
+				{ "Surtr", "🌋", "w" },
+			},
+			Mythic = {
+				{ "Yggdrasil", "🌳", "m" },
+				{ "Bifrost", "🌈", "t" },
+			},
+			Secret = {
+				{ "Ragnarok", "🌑", "s" },
+			},
+		},
+	},
 }
 
 ---------------------------------------------------------------------

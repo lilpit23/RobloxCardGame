@@ -24,6 +24,7 @@ local SET_TITLES = {
 	knights = "Knight Errant",
 	rome = "Centurion",
 	america = "Trailblazer",
+	norse = "Skald of the North",
 }
 
 for index, setId in ipairs(Cards.SetOrder) do

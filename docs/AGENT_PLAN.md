@@ -134,9 +134,8 @@ flatter rarity and effect multipliers, Auto Packer perk, simulator models the ca
 
 ## Owner's direction (latest)
 
-- One new set per rebirth is the goal (done: `pack.rebirths`). There are 8 sets and 8 rebirths,
-  so a ninth set would give the last rebirth something new; the owner said more direction on
-  sets is coming.
+- One new set per rebirth is the goal (done: `pack.rebirths`). Nine sets, eight rebirths: Norse
+  Sagas is the endgame set and opens with the last rebirth.
 - The store is a card shop: shelves per floor, stairs, a checkout, staff with desks
   (`Staff.luau`). Ideas not built yet: customers walking in, staff animations, more staff,
   the cash-only upgrades (Lucky Charms, Aura Luck, Auto Collector) moved onto staff too.

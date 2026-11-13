@@ -128,7 +128,7 @@ end
 
 -- Luck counts for less in later sets, so their rare cards stay hard to get however much
 -- luck a player has stacked up. One entry per set, in set order; the last value repeats.
-Packs.SetLuckScale = { 1, 0.8, 0.65, 0.5, 0.4, 0.3, 0.25, 0.2 }
+Packs.SetLuckScale = { 1, 0.8, 0.65, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15 }
 
 -- Every card slot of every pack keeps at least this chance of a Common, whatever the luck.
 Packs.MinCommonChance = 0.01

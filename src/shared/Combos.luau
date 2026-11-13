@@ -58,6 +58,12 @@ Combos.Stories = {
 	{ name = "Steel and Steam", cards = { "john_henry", "casey_jones", "railroad_worker" }, income = 0.75 },
 	{ name = "Fearsome Critters", cards = { "jackalope", "jersey_devil", "sasquatch" }, luck = 4 },
 	{ name = "Tall Tales", cards = { "paul_bunyan", "babe_the_blue_ox", "pecos_bill", "john_henry" }, aura = 1 },
+	{ name = "House of Odin", cards = { "odin", "thor", "baldur" }, income = 1 },
+	{ name = "Loki's Brood", cards = { "loki", "fenrir", "jormungandr", "hel" }, aura = 1 },
+	{ name = "Watch on the Bridge", cards = { "heimdall", "bifrost" }, luck = 4 },
+	{ name = "Odin's Eyes", cards = { "odin", "huginn_and_muninn", "sleipnir" }, income = 0.75 },
+	{ name = "The World Tree", cards = { "yggdrasil", "ratatoskr", "the_norns" }, aura = 0.75 },
+	{ name = "Twilight of the Gods", cards = { "ragnarok", "surtr", "fenrir" }, luck = 5 },
 	{ name = "Spirit of '76", cards = { "george_washington", "benjamin_franklin", "betsy_ross", "paul_revere" }, income = 1 },
 }
 

@@ -92,7 +92,10 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 16. There is no trading, no market and no stealing: every card you own, you pulled.
 17. **Player duels:** challenge anyone in your server from the Battle screen. Both players pick
     a card in secret each round, cards hit by rarity rather than income, and nothing is at
-    stake. The first win each day pays aura, and wins earn Duelist titles.
+    stake. The first win each day pays aura, and wins earn Duelist titles. **Battle Training**
+    (Battle screen) spends aura on Vitality, Might, Guard and Restoration for player duels only.
+18. **Card roles:** not every card attacks. Each type has its own mix of Strikes, Blasts, Heals,
+    Mends, Shields, Power-ups, Weakens, Drains, Curses, Hexes and Stuns.
 
 ## Pacing: what makes a run last
 

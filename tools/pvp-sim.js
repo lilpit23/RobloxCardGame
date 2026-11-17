@@ -24,17 +24,19 @@ local function bot(view)
   -- PvP cards: rate by the PvP numbers, using the shared suggester for the shape of the move
   local a=Duel.suggest(view) return a
 end
-local function match(da,db)
-  local s=Duel.pvpNew(da,"A",db,"B",rng)
+local Training=require({__mod="Training"})
+local function trained(level) local t={} for _,id in ipairs(Training.Order) do t[id]=math.min(level,Training.Defs[id].max) end local st=Training.stats(t) st.levels=Training.total(t) return st end
+local function match(da,db,ta,tb)
+  local s=Duel.pvpNew(da,"A",db,"B",rng,ta,tb)
   while not s.over do
     for side=1,2 do assert(Duel.pvpChoose(s,side,bot(Duel.pvpView(s,side)))) end
     Duel.pvpResolve(s,rng)
   end
   return s.winner,s.round
 end
-local function series(label,ma,ta,mb,tb,n)
+local function series(label,ma,ta,mb,tb,n,traina,trainb)
   local w={[0]=0,0,0} local rounds=0
-  for i=1,n do local x,r=match(deck(ma,ta),deck(mb,tb)) w[x]=w[x]+1 rounds=rounds+r end
+  for i=1,n do local x,r=match(deck(ma,ta),deck(mb,tb),traina,trainb) w[x]=w[x]+1 rounds=rounds+r end
   print(string.format("%-36s A wins %3d%%  B wins %3d%%  draws %2d%%  avg %.1f rounds",label,w[1]*100//n,w[2]*100//n,w[0]*100//n,rounds/n))
 end
 series("Commons vs Commons",2,nil,2,nil,300)
@@ -42,8 +44,11 @@ series("Rares vs Rares",3,nil,3,nil,300)
 series("Commons vs Legendaries",2,nil,5,nil,300)
 series("Rares vs Epics",3,nil,4,nil,300)
 series("Legendaries vs Secrets",5,nil,7,nil,300)
+series("Epics: training 2 vs none",4,nil,4,nil,300,trained(2),nil)
+series("Epics: full training vs none",4,nil,4,nil,300,trained(5),nil)
+series("Commons+full training vs Secrets",2,nil,7,nil,300,trained(5),nil)
 for _,t in ipairs(Cards.TypeOrder) do series("mono "..t.." vs mixed (Epic)",4,t,4,nil,300) end
 `;
 lauxlib.luaL_loadstring(L,to_luastring(pre));
-lua.lua_newtable(L);for(const n of ['Cards','Format','Duel','Config']){lua.lua_pushstring(L,to_luastring(fs.readFileSync(dir+n+'.luau','utf8')));lua.lua_setfield(L,-2,to_luastring(n));}
+lua.lua_newtable(L);for(const n of ['Cards','Format','Duel','Config','Training']){lua.lua_pushstring(L,to_luastring(fs.readFileSync(dir+n+'.luau','utf8')));lua.lua_setfield(L,-2,to_luastring(n));}
 if(lua.lua_pcall(L,1,0,0)!==0)console.log('ERR',lua.lua_tojsstring(L,-1));

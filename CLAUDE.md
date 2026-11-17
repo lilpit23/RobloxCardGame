@@ -6,7 +6,7 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
 ## Layout
 
 - `src/shared/` → `ReplicatedStorage.Shared`. Data tables and pure logic used by both sides:
-  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Titles`, `Staff`, `Format`, `CardView` (builds a card's GUI).
+  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Titles`, `Staff`, `Training` (aura upgrades for player duels), `Format`, `CardView` (builds a card's GUI).
 - `src/server/` → `ServerScriptService.Server`. `init.server.luau` holds the remotes and game
   rules; `PlayerData.luau` is the only code that touches DataStores; `Monetization.luau` handles game
   passes and product receipts; `Plots.luau` builds the map
@@ -38,6 +38,10 @@ way so the repo stays the whole game.
   the client only gets `Duel.view` and the event list. Battling never uses up cards. After
   changing duel numbers run `node tools/duel-sim.js`. The enemy figures and camera of a duel
   are built on the client (`buildStage`); the server only moves the player to their duel pad.
+  Cards are not all attacks: each type has a cycle of six roles (`ROLE_CYCLES` in `Duel.luau`:
+  strike, blast, heal, mend, shield, power-up, weaken, drain, curse, hex, stun), assigned by a
+  card's place among its type in its set; `ROLE_OVERRIDES` picks a role by hand. Auto-built and
+  challenge decks keep a mix (`Duel.MaxSupport`, `Duel.Damaging`).
   Each card type's hits leave a mark (`Duel.Effects`: bleed, burn, chill/freeze, shock,
   stagger), shields parry wind-up hits, and enemy kinds (`Duel.Kinds`) add healers, armour,
   berserkers, venom (poisons you), wards (immune to marks) and summoners. New statuses go in
@@ -54,7 +58,9 @@ way so the repo stays the whole game.
   cards or currency change hands, only a daily first-win aura reward), and cards fight by
   rarity (`Duel.pvpCard`), not income. The rules are `Duel.pvp*`; the server runs one loop per
   match (`runPvp`) and sends each round through `PvpRound`. Run `node tools/pvp-sim.js` after
-  changing PvP numbers.
+  changing PvP numbers. Battle Training (`Training.luau`, saved in `data.training`, kept through
+  rebirths) is bought with aura and only applies in player duels; the opponent sees the total
+  levels.
 - A new set every rebirth: a set's packs unlock by rebirth count (`pack.rebirths`,
   `Packs.unlocked`), not by store tier. The store tier only gives the income multiplier and
   shelves. Rebirth costs in `Rebirth.luau` assume this, and each level's required cards must

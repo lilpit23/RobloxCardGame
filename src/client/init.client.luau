@@ -25,6 +25,7 @@ local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
 local Duel = require(Shared:WaitForChild("Duel"))
 local Titles = require(Shared:WaitForChild("Titles"))
+local Training = require(Shared:WaitForChild("Training"))
 local Staff = require(Shared:WaitForChild("Staff"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -62,6 +63,7 @@ local state = {
 	admins = {},
 	autoUpgrade = false,
 	perks = {},
+	training = {},
 	tower = 0,
 	luckEventEndsAt = 0,
 	slotCount = Config.BaseSlots,
@@ -2172,6 +2174,16 @@ local function coachText(suggestion)
 		return "🌀 Weaken makes one enemy's next attack much smaller. Use it on whoever hits hardest."
 	elseif card.role == "blast" then
 		return "💥 A Blast hits every enemy at once: best when several are still standing."
+	elseif card.role == "stun" then
+		return "💫 A Stun makes an enemy lose its next turn. Bosses can't be stunned, but it breaks their wind-up."
+	elseif card.role == "drain" then
+		return "🧛 A Drain hits an enemy and heals you for half the damage."
+	elseif card.role == "curse" then
+		return "☠️ A Curse deals damage every round for " .. Duel.CurseRounds .. " rounds: great on tough enemies."
+	elseif card.role == "hex" then
+		return "🎯 A Hex makes the NEXT hit on that enemy stronger. Set it up, then strike it next round."
+	elseif card.role == "mend" then
+		return "🌿 Mend heals you a little every round for " .. Duel.MendRounds .. " rounds."
 	end
 	local target = suggestion.target and duel.enemies[suggestion.target]
 	if target and target.winding and card.type == "warrior" then
@@ -2577,12 +2589,24 @@ function renderDuelHud()
 				if (enemy.burn or 0) > 0 then
 					table.insert(marks, "♨️ " .. Duel.short(enemy.burn))
 				end
+				if (enemy.curse or 0) > 0 then
+					table.insert(marks, "☠️ " .. Duel.short(enemy.curse))
+				end
+				if (enemy.hex or 0) > 0 then
+					table.insert(marks, "🎯 x" .. enemy.hex)
+				end
+				if enemy.stunned then
+					table.insert(marks, "💫 STUNNED")
+				end
 				if pvp then
 					if (enemy.shields or 0) > 0 then
 						table.insert(marks, "🛡️ x" .. enemy.shields)
 					end
 					if (enemy.charges or 0) > 0 then
 						table.insert(marks, "💪 x" .. enemy.charges)
+					end
+					if (enemy.trained or 0) > 0 then
+						table.insert(marks, "🏋️ " .. enemy.trained)
 					end
 					table.insert(marks, enemy.ready and "✅ ready" or "🤔 choosing")
 				else
@@ -2633,6 +2657,15 @@ function renderDuelHud()
 	end
 	if (duel.burn or 0) > 0 then
 		extras = extras .. "   ♨️ " .. duel.burn
+	end
+	if (duel.mend or 0) > 0 then
+		extras = extras .. "   🌿 " .. Duel.short(duel.mend)
+	end
+	if (duel.curse or 0) > 0 then
+		extras = extras .. "   ☠️ " .. duel.curse
+	end
+	if duel.stunned then
+		extras = extras .. "   💫 stunned"
 	end
 	if duel.frozen then
 		extras = extras .. "   🧊 frozen"
@@ -3163,9 +3196,41 @@ panels.Battle = function()
 		end).TextSize = 13
 	end
 
+	-- Battle Training: aura upgrades for player duels
+	local trainingRow = newRow(4, 40 + #Training.Order * 44)
+	trainingRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
+	newLabel(trainingRow, "🏋️ Battle Training  ·  player duels only, kept through rebirths", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 26), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 16,
+		TextColor3 = Color3.fromRGB(200, 170, 255),
+	})
+	for index, trainingId in ipairs(Training.Order) do
+		local def = Training.Defs[trainingId]
+		local level = Training.level(state.training, trainingId)
+		local y = 36 + (index - 1) * 44
+		newLabel(trainingRow, def.icon .. " " .. def.name .. "  (" .. level .. "/" .. def.max .. ")", UDim2.new(0, 14, 0, y), UDim2.new(0.4, -14, 0, 20), {
+			TextSize = 14,
+			TextWrapped = false,
+		})
+		newLabel(trainingRow, def.describe(math.max(level, 1)), UDim2.new(0, 14, 0, y + 20), UDim2.new(1, -190, 0, 18), {
+			TextSize = 11,
+			TextColor3 = COLORS.dim,
+			TextWrapped = false,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		if level >= def.max then
+			newButton(trainingRow, "MAX", UDim2.new(1, -160, 0, y + 4), UDim2.new(0, 148, 0, 34), COLORS.locked, nil)
+		else
+			local cost = def.cost(level)
+			newButton(trainingRow, "✨ " .. Format.short(cost) .. " aura", UDim2.new(1, -160, 0, y + 4), UDim2.new(0, 148, 0, 34), state.aura >= cost and COLORS.good or COLORS.locked, function()
+				Remotes.BuyTraining:FireServer(trainingId)
+			end).TextSize = 13
+		end
+	end
+
 	-- how battles work: open for anyone who has never fought, a tap away for everyone else
 	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
-	local helpRow = newRow(4, showHelp and 440 or 40)
+	local helpRow = newRow(5, showHelp and 500 or 40)
 	helpRow.BackgroundTransparency = showHelp and 0 or 1
 	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
 		battleHelp = not showHelp
@@ -3181,6 +3246,9 @@ panels.Battle = function()
 			"⚔️ Strike: damage to one enemy          💥 Blast: damage to every enemy",
 			"💚 Heal: restores your health               🛡️ Shield: blocks most of the next hit on you",
 			"💪 Power-up: your next attack is stronger   🌀 Weaken: an enemy's next attack is smaller",
+			"🧛 Drain: damage that heals you             🌿 Mend: heals you every round for 3 rounds",
+			"💫 Stun: an enemy loses its next turn       ☠️ Curse: damage every round for 3 rounds",
+			"🎯 Hex: the next hit on an enemy is stronger.  Every type has its own mix of these roles.",
 			"",
 			"Types:  ⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️.  Beating a type deals +30%, the reverse −25%.",
 			"Each type's Strikes and Blasts also leave a mark:",
@@ -3201,7 +3269,7 @@ panels.Battle = function()
 	local saved = Duel.usableDeck(state, state.battleDeck)
 	local automatic = #saved == 0
 	local deck = automatic and Duel.autoDeck(state) or saved
-	local deckRow = newRow(5, 46)
+	local deckRow = newRow(6, 46)
 	newLabel(deckRow, "Battle deck: " .. #deck .. "/" .. Duel.DeckSize .. (automatic and " (automatic)" or "") .. "   ·   " .. Duel.short(Duel.deckHealth(deck)) .. " health", UDim2.new(0, 14, 0, 0), UDim2.new(1, -300, 1, 0), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 15,
@@ -3248,7 +3316,7 @@ panels.Battle = function()
 		for index, card in ipairs(options) do
 			local have = inDeck[card.key] or 0
 			local most = math.min(owned[card.key], Duel.MaxCopies)
-			fillLazily(newRow(6 + index, 40), function(row)
+			fillLazily(newRow(7 + index, 40), function(row)
 				newCardLine(row, card.key, UDim2.new(0, 12, 0, 2), UDim2.new(1, -190, 0, 18))
 				newLabel(row, roleLine(card) .. "  ·  " .. card.text, UDim2.new(0, 12, 0, 20), UDim2.new(1, -190, 0, 16), {
 					TextSize = 11,

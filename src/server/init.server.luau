@@ -20,6 +20,7 @@ local Achievements = require(Shared:WaitForChild("Achievements"))
 local Battle = require(Shared:WaitForChild("Battle"))
 local Duel = require(Shared:WaitForChild("Duel"))
 local Titles = require(Shared:WaitForChild("Titles"))
+local Training = require(Shared:WaitForChild("Training"))
 local Staff = require(Shared:WaitForChild("Staff"))
 
 local PlayerData = require(script:WaitForChild("PlayerData"))
@@ -65,6 +66,7 @@ local DailyClaimRemote = newRemote("RemoteEvent", "DailyClaim")
 local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
 local DuelStartRemote = newRemote("RemoteFunction", "DuelStart")
 local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
+local BuyTrainingRemote = newRemote("RemoteEvent", "BuyTraining")
 local PvpChallengeRemote = newRemote("RemoteEvent", "PvpChallenge")
 local PvpRespondRemote = newRemote("RemoteEvent", "PvpRespond")
 local PvpInviteRemote = newRemote("RemoteEvent", "PvpInvite") -- server -> client
@@ -249,6 +251,7 @@ local function pushState(player)
 		loadouts = data.loadouts,
 		vaultSlots = vaultSlots(data),
 		perks = data.perks,
+		training = data.training,
 		tower = data.tower,
 		luckEventEndsAt = luckEventEndsAt,
 		luck = luckLevel(data),
@@ -1350,6 +1353,30 @@ BuyPerkRemote.OnServerEvent:Connect(function(player, perkId)
 	touch(player, true)
 end)
 
+-- Battle Training: aura upgrades that only count in player duels (Training.luau).
+BuyTrainingRemote.OnServerEvent:Connect(function(player, trainingId)
+	if not allow(player, "BuyTraining", 5, 10) then
+		return
+	end
+	local data = PlayerData.get(player)
+	local def = type(trainingId) == "string" and Training.Defs[trainingId] or nil
+	if data == nil or def == nil then
+		return
+	end
+	local level = Training.level(data.training, trainingId)
+	if level >= def.max then
+		notify(player, def.name .. " is maxed out.", "error")
+		return
+	end
+	if not spend(data, "aura", def.cost(level)) then
+		notify(player, "Not enough aura.", "error")
+		return
+	end
+	data.training[trainingId] = level + 1
+	notify(player, def.icon .. " " .. def.name .. " is now level " .. (level + 1) .. " for player duels.", "good")
+	touch(player, true)
+end)
+
 ---------------------------------------------------------------------
 -- Battle tower (PvE)
 ---------------------------------------------------------------------
@@ -1674,7 +1701,13 @@ PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
 	for side, who in ipairs(players) do
 		decks[side] = battleDeckFor(PlayerData.get(who))
 	end
-	local state = Duel.pvpNew(decks[1], challenger.DisplayName, decks[2], player.DisplayName, rng)
+	local trained = {}
+	for side, who in ipairs(players) do
+		local training = PlayerData.get(who).training
+		trained[side] = Training.stats(training)
+		trained[side].levels = Training.total(training)
+	end
+	local state = Duel.pvpNew(decks[1], challenger.DisplayName, decks[2], player.DisplayName, rng, trained[1], trained[2])
 	if state == nil then
 		notify(player, "You both need at least one card to duel.", "error")
 		notify(challenger, "You both need at least one card to duel.", "error")

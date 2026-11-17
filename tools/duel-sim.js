@@ -32,7 +32,7 @@ for day=0,13 do local c=Duel.challenge(day) local w,rounds=0,0
   print("  day "..day.." "..c.set.." floor "..c.floor.." deck "..#c.deck..": "..math.floor(w/60*100).."% "..string.format("%.0f",rounds/60).."r") end
 local function top(profile,label)
   local best=0 local line={} firstfail=nil
-  for floor=1,50 do local w,r=winrate(profile,floor,30) if w>=0.5 then best=floor end if floor%5==0 or floor<4 then line[#line+1]=floor..":"..math.floor(w*100).."%/"..string.format("%.0f",r).."r" end if w==0 and floor>best+3 then break end if w<0.5 and not firstfail then firstfail=floor end end
+  for floor=1,60 do local w,r=winrate(profile,floor,30) if w>=0.5 then best=floor end if floor%5==0 or floor<4 then line[#line+1]=floor..":"..math.floor(w*100).."%/"..string.format("%.0f",r).."r" end if w==0 and floor>best+3 then break end if w<0.5 and not firstfail then firstfail=floor end end
   local deck=Duel.autoDeck(profile) local costs={} for _,k in ipairs(deck) do costs[#costs+1]=Duel.card(k).cost end
   print(label,"deck "..#deck.." hp "..Duel.deckHealth(deck),"first wall "..tostring(firstfail).." max "..best,table.concat(line," "))
 end

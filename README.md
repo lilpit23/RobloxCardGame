@@ -47,7 +47,7 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     **Luck** is a stat with many sources: Lucky Charms (cash), Aura Luck (aura), the Fortune perk,
     rebirths, completed sets, tower floors, deck combos and lucky events. Each level makes better
     rarities 10% more likely.
-13. **Battle Tower:** turn-based card duels up a 50-floor tower for aura and cash, with a boss
+13. **Battle Tower:** turn-based card duels up a 60-floor tower (the top floors are Norse) for aura and cash, with a boss
     every tenth floor. You build a 20-card battle deck from cards you own (they are not used
     up). Each round you gain 1 energy and play one card from a hand of five: strikes, blasts,
     heals, shields, power-ups and weakens. Rarer cards cost more energy. Each type deals +30%

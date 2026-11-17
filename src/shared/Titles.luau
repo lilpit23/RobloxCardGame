@@ -50,6 +50,7 @@ for _, entry in ipairs({
 	{ 30, "Tower Champion" },
 	{ 40, "Tower Legend" },
 	{ 50, "Master of the Tower" },
+	{ 60, "Storm-Climber" },
 }) do
 	local floor = entry[1]
 	add("tower_" .. floor, entry[2], "Clear floor " .. floor .. " of the Battle Tower", 30 * floor, 3 * floor, function(profile)

@@ -265,16 +265,25 @@ function Duel.deckHealth(deck)
 end
 
 -- The enemies on a floor. Same floor = same enemies for everyone.
+-- Past floor 49 (the Norse floors, for players who have opened every set) it grows more
+-- slowly, so the last floors are a climb for an endgame collection rather than a wall.
+Duel.LateFloor = 49
+Duel.LateGrowth = 1.08
 function Duel.floorPower(floor)
-	return 10 * 1.16 ^ (floor - 1)
+	local early = math.min(floor, Duel.LateFloor)
+	return 10 * 1.16 ^ (early - 1) * Duel.LateGrowth ^ math.max(0, floor - Duel.LateFloor)
 end
 
--- The tower is themed by set: the first floors are haunted by Storybook characters, the last
--- by Romans. Returns the set id for a floor.
+-- The tower is themed by set: the first floors are haunted by Storybook characters, then
+-- seven floors per set up to Rome, and the top floors (50 and up) by the Norse myths.
+-- Sets of real people (Pax Americana) are never tower enemies, so they are not in this list.
 Duel.FloorsPerSet = 7
-Duel.TowerSets = 7 -- the tower's enemies are drawn from the first seven sets
+Duel.TowerSets = { "storybook", "seas", "west", "midnight", "olympus", "knights", "rome", "norse" }
+for _, setId in ipairs(Duel.TowerSets) do
+	assert(Cards.Sets[setId], "Duel.TowerSets names unknown set " .. setId)
+end
 function Duel.floorSet(floor)
-	return Cards.SetOrder[math.min(Duel.TowerSets, math.floor((floor - 1) / Duel.FloorsPerSet) + 1)]
+	return Duel.TowerSets[math.min(#Duel.TowerSets, math.floor((floor - 1) / Duel.FloorsPerSet) + 1)]
 end
 
 local SET_PREFIX = {
@@ -285,7 +294,7 @@ local SET_PREFIX = {
 	olympus = "Fallen",
 	knights = "Rogue",
 	rome = "Rebel",
-	america = "Rival", -- only met in the daily challenge; the tower stops at the Rome floors
+	america = "Rival", -- only met in the daily challenge; real people are never tower enemies
 	norse = "Frostbound",
 }
 

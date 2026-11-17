@@ -463,7 +463,7 @@ local function openPacks(player, data, pack, count, autoSell)
 	local pulled = {}
 	local rareCount = 0 -- Epic or better, for the quest
 	for _ = 1, count do
-		for _, key in ipairs(Packs.open(pack, luck, rng)) do
+		for _, key in ipairs(Packs.open(pack, luck, rng, data.rebirths)) do
 			local def, variantId = Cards.parse(key)
 			local order = Cards.Rarities[def.rarity].order
 			if order >= 4 then

@@ -2,7 +2,7 @@
 -- turn-based duels; their rules live in Duel.luau.
 local Battle = {}
 
-Battle.MaxFloor = 50
+Battle.MaxFloor = 60 -- floors 50 to 60 are the Norse floors
 
 -- Aura and cash for clearing a floor. The cash is limited to a share of the wallet cap so
 -- the tower can never outrun the rest of the economy.

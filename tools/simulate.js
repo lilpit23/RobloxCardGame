@@ -61,7 +61,7 @@ local function rebuildDeck()
   deckScore = Deck.score(deck)
 end
 local function openPack(pack)
-  for _, key in ipairs(Packs.open(pack, rebirths, rng)) do owned[key] = (owned[key] or 0) + 1 end
+  for _, key in ipairs(Packs.open(pack, rebirths, rng, rebirths)) do owned[key] = (owned[key] or 0) + 1 end
   packsOpened = packsOpened + 1
   packCounts[pack.id] = (packCounts[pack.id] or 0) + 1
 end

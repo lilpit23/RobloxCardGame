@@ -52,7 +52,7 @@ for setIndex, setId in ipairs(Cards.SetOrder) do
 	end
 end
 
--- Special pack that pulls from every set (sets = nil).
+-- Special pack that pulls from every set the player has opened so far (sets = nil).
 table.insert(Packs.List, {
 	id = "champion",
 	name = "Champion Pack",
@@ -117,7 +117,7 @@ end
 -- "Storybook Friends", "High Seas" or "All sets"
 function Packs.setsText(pack)
 	if pack.sets == nil then
-		return "All sets"
+		return "Every set you have opened"
 	end
 	local names = {}
 	for _, setId in ipairs(pack.sets) do
@@ -186,7 +186,18 @@ function Packs.slotOdds(pack, slot, luckLevel)
 	return odds
 end
 
-local function rollSlot(pack, slot, luckLevel, rng)
+-- The sets whose own packs are open after this many rebirths (set n opens at rebirth n - 1).
+function Packs.openSets(rebirths)
+	local sets = {}
+	for position, setId in ipairs(Cards.SetOrder) do
+		if position - 1 <= (rebirths or 0) then
+			table.insert(sets, setId)
+		end
+	end
+	return sets
+end
+
+local function rollSlot(pack, slot, luckLevel, rng, sets)
 	local odds = Packs.slotOdds(pack, slot, luckLevel)
 	local pick = rng:NextNumber()
 	local chosenRarity = nil
@@ -201,7 +212,7 @@ local function rollSlot(pack, slot, luckLevel, rng)
 		end
 	end
 
-	local pool = Cards.pool(chosenRarity, pack.sets)
+	local pool = Cards.pool(chosenRarity, sets)
 	local def = pool[rng:NextInteger(1, #pool)]
 
 	-- Card effect: rarest first, the first hit is kept. Luck helps a little.
@@ -218,10 +229,12 @@ local function rollSlot(pack, slot, luckLevel, rng)
 end
 
 -- Opens one pack: returns an array of card keys, one per slot. rng is a Random object.
-function Packs.open(pack, luckLevel, rng)
+-- rebirths limits an all-set pack to the sets the player has opened (Packs.openSets).
+function Packs.open(pack, luckLevel, rng, rebirths)
+	local sets = pack.sets or (rebirths and Packs.openSets(rebirths)) or nil
 	local keys = {}
 	for index, slot in ipairs(pack.slots) do
-		keys[index] = rollSlot(pack, slot, luckLevel, rng)
+		keys[index] = rollSlot(pack, slot, luckLevel, rng, sets)
 	end
 	return keys
 end

@@ -62,6 +62,13 @@ way so the repo stays the whole game.
   rebirths) is bought with aura and only applies in player duels; the opponent sees the total
   levels. Practice duels (`Duel.PracticeLevels`, `Duel.botMove`) use the same match loop with a
   bot as side 2 and pay nothing. `data.pvpOpen = false` blocks challenges.
+- Co-op battles (`Duel.coop*`): players team up on the inviter's next tower floor. The tower
+  engine works on "heroes" (`heroesOf`): a solo duel is its own hero, a co-op state has
+  `state.heroes`; enemies hit a random standing hero and get `Duel.CoopEnemyHealth` more health
+  per extra hero. The match runs through the same `session.pvp` slot and remotes as player
+  duels (`runCoop`, `finishCoop`); a win clears the floor for everyone whose next floor it was
+  (`clearFloor`) and pays the rest a helper's share of aura. Events name heroes by index and
+  are converted per player with `Duel.coopEventsFor`.
 - A new set every rebirth: a set's packs unlock by rebirth count (`pack.rebirths`,
   `Packs.unlocked`), not by store tier. The store tier only gives the income multiplier and
   shelves. Rebirth costs in `Rebirth.luau` assume this, and each level's required cards must

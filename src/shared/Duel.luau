@@ -559,7 +559,8 @@ function Duel.chillToFreeze(enemy)
 end
 
 -- What the client is allowed to see (everything except the order of the draw pile).
-function Duel.view(state)
+-- hero = whose side is shown (the state itself in a solo duel).
+local function viewOf(state, hero)
 	local enemies = {}
 	for index, enemy in ipairs(state.enemies) do
 		enemies[index] = {
@@ -591,19 +592,23 @@ function Duel.view(state)
 		floor = state.floor,
 		mode = state.mode,
 		round = state.round,
-		energy = state.energy,
-		hp = state.hp,
-		maxHp = state.maxHp,
-		shields = #state.shields,
-		charges = #state.charges,
-		poison = state.poison,
-		mend = state.mendRounds > 0 and state.mend or 0,
+		energy = hero.energy,
+		hp = hero.hp,
+		maxHp = hero.maxHp,
+		shields = #hero.shields,
+		charges = #hero.charges,
+		poison = hero.poison,
+		mend = hero.mendRounds > 0 and hero.mend or 0,
 		enemies = enemies,
-		hand = table.clone(state.hand),
-		deckLeft = #state.deck,
+		hand = table.clone(hero.hand),
+		deckLeft = #hero.deck,
 		over = state.over,
 		win = state.win,
 	}
+end
+
+function Duel.view(state)
+	return viewOf(state, state)
 end
 
 -- Throw a card away for free; a new one is drawn at the start of the next round.
@@ -725,6 +730,43 @@ local function mostHurt(state)
 end
 
 -- The enemies' turn, then the start of the next round.
+local applyCard -- (state, hero, heroIndex, handIndex, targetIndex, events): defined below
+
+-- The heroes of a duel: a solo duel is its own (only) hero; a co-op duel has state.heroes.
+local function heroesOf(state)
+	return state.heroes or { state }
+end
+
+local function heroStanding(state)
+	for _, hero in ipairs(heroesOf(state)) do
+		if hero.hp > 0 then
+			return true
+		end
+	end
+	return false
+end
+
+-- Who an enemy attacks: in a team, a random hero still standing.
+local function pickHero(state, rng)
+	local heroes = heroesOf(state)
+	if #heroes == 1 then
+		return heroes[1], 1
+	end
+	local standing = {}
+	for index, hero in ipairs(heroes) do
+		if hero.hp > 0 then
+			table.insert(standing, index)
+		end
+	end
+	local index = standing[rng:NextInteger(1, #standing)]
+	return heroes[index], index
+end
+
+-- "you" in a solo duel, the hero's name in a team.
+local function whoIs(hero)
+	return hero.name or "you"
+end
+
 local function finishRound(state, events, rng)
 	if firstAlive(state) == nil then
 		state.over, state.win = true, true
@@ -758,14 +800,14 @@ local function finishRound(state, events, rng)
 			end
 			table.insert(events, { kind = "tick", text = text, enemy = index, enemyHp = enemy.hp, damage = damage })
 		end
-		if enemy.hp > 0 and enemy.stunned and state.hp > 0 then
+		if enemy.hp > 0 and enemy.stunned and heroStanding(state) then
 			enemy.stunned = false
 			enemy.stunGuard = true
 			table.insert(events, { kind = "frozen", text = "💫 " .. enemy.name .. " is stunned and loses its turn.", enemy = index })
-		elseif enemy.hp > 0 and enemy.frozen and state.hp > 0 then
+		elseif enemy.hp > 0 and enemy.frozen and heroStanding(state) then
 			enemy.frozen = false
 			table.insert(events, { kind = "frozen", text = "❄️ " .. enemy.name .. " is frozen solid and loses its turn.", enemy = index })
-		elseif enemy.hp > 0 and state.hp > 0 then
+		elseif enemy.hp > 0 and heroStanding(state) then
 			enemy.stunGuard = false
 			if enemy.regen and enemy.hp < enemy.maxHp then
 				enemy.hp = math.min(enemy.maxHp, enemy.hp + math.floor(enemy.maxHp * Duel.BossRegen))
@@ -798,6 +840,7 @@ local function finishRound(state, events, rng)
 				enemy.winding = true
 				table.insert(events, { kind = "windup", text = "⚠️ " .. enemy.name .. " is winding up a huge attack!", enemy = index })
 			else
+				local hero, heroIndex = pickHero(state, rng)
 				local damage = enemy.attack * (0.85 + 0.3 * rng:NextNumber())
 				local bigHit = enemy.winding
 				if bigHit then
@@ -812,7 +855,7 @@ local function finishRound(state, events, rng)
 				if weak then
 					damage = damage * (1 - weak)
 				end
-				local blocked = table.remove(state.shields, 1)
+				local blocked = table.remove(hero.shields, 1)
 				local parried = 0
 				if blocked then
 					if bigHit then
@@ -821,10 +864,10 @@ local function finishRound(state, events, rng)
 					damage = damage * (1 - blocked)
 				end
 				damage = math.max(1, math.floor(damage))
-				state.hp = math.max(0, state.hp - damage)
-				local text = enemy.name .. (enraged and " is enraged and hits you for " or " hits you for ") .. short(damage)
+				hero.hp = math.max(0, hero.hp - damage)
+				local text = enemy.name .. (enraged and " is enraged and hits " or " hits ") .. whoIs(hero) .. " for " .. short(damage)
 				if enemy.kind == "venomous" then
-					state.poison = state.poison + math.max(1, math.floor(damage * Duel.PoisonShare))
+					hero.poison = hero.poison + math.max(1, math.floor(damage * Duel.PoisonShare))
 					text = text .. " 🐍"
 				end
 				if enemy.kind == "berserker" then
@@ -835,7 +878,10 @@ local function finishRound(state, events, rng)
 				elseif weak then
 					text = text .. " (weakened)"
 				end
-				table.insert(events, { kind = "hurt", text = text, enemy = index, hp = state.hp, damage = damage, attack = enemy.attack })
+				if hero.hp <= 0 and state.heroes then
+					text = text .. "  💀 " .. whoIs(hero) .. " is down!"
+				end
+				table.insert(events, { kind = "hurt", text = text, enemy = index, hp = hero.hp, hero = heroIndex, damage = damage, attack = enemy.attack })
 				if parried > 0 then
 					enemy.hp = math.max(0, enemy.hp - parried)
 					table.insert(events, { kind = "parry", text = "🛡️ Parried! " .. short(parried) .. " goes back at " .. enemy.name .. (enemy.hp <= 0 and "  KO!" or ""), enemy = index, enemyHp = enemy.hp, damage = parried })
@@ -844,24 +890,26 @@ local function finishRound(state, events, rng)
 		end
 	end
 
-	if state.hp > 0 and firstAlive(state) == nil then
+	if heroStanding(state) and firstAlive(state) == nil then
 		state.over, state.win = true, true
 		table.insert(events, { kind = "win", text = "🏆 Victory!" })
 		return
 	end
-	if state.mendRounds > 0 and state.hp > 0 then
-		state.mendRounds = state.mendRounds - 1
-		local healed = math.min(state.mend, state.maxHp - state.hp)
-		state.hp = state.hp + healed
-		table.insert(events, { kind = "heal", text = "🌿 You mend " .. short(healed) .. " health.", hp = state.hp })
-	end
-	if state.poison > 0 and state.hp > 0 then
-		state.hp = math.max(0, state.hp - state.poison)
-		table.insert(events, { kind = "poison", text = "🐍 Poison hurts you for " .. short(state.poison), hp = state.hp, damage = state.poison })
-		state.poison = math.floor(state.poison / 2)
+	for heroIndex, hero in ipairs(heroesOf(state)) do
+		if hero.mendRounds > 0 and hero.hp > 0 then
+			hero.mendRounds = hero.mendRounds - 1
+			local healed = math.min(hero.mend, hero.maxHp - hero.hp)
+			hero.hp = hero.hp + healed
+			table.insert(events, { kind = "heal", text = "🌿 " .. (hero.name or "You") .. " mend" .. (hero.name and "s " or " ") .. short(healed) .. " health.", hp = hero.hp, hero = heroIndex })
+		end
+		if hero.poison > 0 and hero.hp > 0 then
+			hero.hp = math.max(0, hero.hp - hero.poison)
+			table.insert(events, { kind = "poison", text = "🐍 Poison hurts " .. whoIs(hero) .. " for " .. short(hero.poison), hp = hero.hp, hero = heroIndex, damage = hero.poison })
+			hero.poison = math.floor(hero.poison / 2)
+		end
 	end
 
-	if state.hp <= 0 then
+	if not heroStanding(state) then
 		state.over, state.win = true, false
 		table.insert(events, { kind = "lose", text = "💀 Defeated on round " .. state.round .. "." })
 		return
@@ -873,8 +921,12 @@ local function finishRound(state, events, rng)
 	end
 
 	state.round = state.round + 1
-	state.energy = math.min(Duel.MaxEnergy, state.energy + 1)
-	draw(state, rng)
+	for _, hero in ipairs(heroesOf(state)) do
+		if hero.hp > 0 then
+			hero.energy = math.min(Duel.MaxEnergy, hero.energy + 1)
+			draw(hero, rng)
+		end
+	end
 end
 
 -- Save your energy this round. Returns the list of events.
@@ -908,12 +960,21 @@ function Duel.play(state, handIndex, targetIndex, rng)
 		end
 	end
 
-	state.energy = state.energy - card.cost
-	table.insert(state.discard, table.remove(state.hand, handIndex))
 	local events = {}
+	applyCard(state, state, 1, handIndex, targetIndex, events)
+	finishRound(state, events, rng)
+	return events
+end
+
+-- Spend the hero's energy on the card at handIndex and do what it does. Targets must already
+-- be checked. The hero is the state itself in a solo duel, or one of state.heroes.
+function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
+	local card = Duel.card(hero.hand[handIndex])
+	hero.energy = hero.energy - card.cost
+	table.insert(hero.discard, table.remove(hero.hand, handIndex))
 
 	if card.role == "attack" or card.role == "blast" or card.role == "drain" then
-		local boost = table.remove(state.charges, 1)
+		local boost = table.remove(hero.charges, 1)
 		local damage = card.amount * (1 + (boost or 0))
 		if boost then
 			table.insert(events, { kind = "boost", text = "💪 Power-up: +" .. percent(boost) .. " damage!" })
@@ -922,9 +983,9 @@ function Duel.play(state, handIndex, targetIndex, rng)
 			hitEnemy(state, events, card, targetIndex, damage)
 		elseif card.role == "drain" then
 			local dealt = hitEnemy(state, events, card, targetIndex, damage)
-			local healed = math.min(math.floor(dealt * Duel.DrainHeal), state.maxHp - state.hp)
-			state.hp = state.hp + healed
-			table.insert(events, { kind = "heal", text = "🧛 " .. card.name .. " drains " .. short(healed) .. " health back to you", hp = state.hp })
+			local healed = math.min(math.floor(dealt * Duel.DrainHeal), hero.maxHp - hero.hp)
+			hero.hp = hero.hp + healed
+			table.insert(events, { kind = "heal", text = "🧛 " .. card.name .. " drains " .. short(healed) .. " health back to " .. whoIs(hero), hp = hero.hp, hero = heroIndex })
 		else
 			for index, enemy in ipairs(state.enemies) do
 				if enemy.hp > 0 then
@@ -933,27 +994,37 @@ function Duel.play(state, handIndex, targetIndex, rng)
 			end
 		end
 	elseif card.role == "heal" then
-		local healed = math.min(card.amount, state.maxHp - state.hp)
-		state.hp = state.hp + healed
-		local cured = state.poison > 0
-		state.poison = 0
-		table.insert(events, { kind = "heal", text = card.name .. " heals you for " .. short(healed) .. (cured and " and cures the poison" or ""), hp = state.hp })
+		-- in a team, a Heal goes to whoever is most hurt (yourself included)
+		local patient, patientIndex = hero, heroIndex
+		if state.heroes then
+			local worst = hero.hp / hero.maxHp
+			for otherIndex, other in ipairs(state.heroes) do
+				if other.hp > 0 and other.hp / other.maxHp < worst then
+					patient, patientIndex, worst = other, otherIndex, other.hp / other.maxHp
+				end
+			end
+		end
+		local healed = math.min(card.amount, patient.maxHp - patient.hp)
+		patient.hp = patient.hp + healed
+		local cured = patient.poison > 0
+		patient.poison = 0
+		table.insert(events, { kind = "heal", text = card.name .. " heals " .. whoIs(patient) .. " for " .. short(healed) .. (cured and " and cures the poison" or ""), hp = patient.hp, hero = patientIndex })
 	elseif card.role == "shield" then
-		if #state.shields >= Duel.MaxStacks then
-			table.remove(state.shields, 1)
+		if #hero.shields >= Duel.MaxStacks then
+			table.remove(hero.shields, 1)
 		end
-		table.insert(state.shields, card.amount)
-		table.insert(events, { kind = "shield", text = card.name .. " shields you: the next hit is cut by " .. percent(card.amount) })
+		table.insert(hero.shields, card.amount)
+		table.insert(events, { kind = "shield", text = card.name .. " shields " .. whoIs(hero) .. ": the next hit is cut by " .. percent(card.amount) })
 	elseif card.role == "charge" then
-		if #state.charges >= Duel.MaxStacks then
-			table.remove(state.charges, 1)
+		if #hero.charges >= Duel.MaxStacks then
+			table.remove(hero.charges, 1)
 		end
-		table.insert(state.charges, card.amount)
-		table.insert(events, { kind = "charge", text = card.name .. " powers you up: your next attack deals +" .. percent(card.amount) })
+		table.insert(hero.charges, card.amount)
+		table.insert(events, { kind = "charge", text = card.name .. " powers up " .. whoIs(hero) .. ": the next attack deals +" .. percent(card.amount) })
 	elseif card.role == "mend" then
-		state.mend = math.max(state.mendRounds > 0 and state.mend or 0, card.amount)
-		state.mendRounds = Duel.MendRounds
-		table.insert(events, { kind = "charge", text = "🌿 " .. card.name .. ": you will heal " .. short(state.mend) .. " a round for " .. Duel.MendRounds .. " rounds" })
+		hero.mend = math.max(hero.mendRounds > 0 and hero.mend or 0, card.amount)
+		hero.mendRounds = Duel.MendRounds
+		table.insert(events, { kind = "charge", text = "🌿 " .. card.name .. ": " .. whoIs(hero) .. " will heal " .. short(hero.mend) .. " a round for " .. Duel.MendRounds .. " rounds" })
 	elseif card.role == "stun" then
 		local enemy = state.enemies[targetIndex]
 		hitEnemy(state, events, card, targetIndex, card.amount)
@@ -990,9 +1061,184 @@ function Duel.play(state, handIndex, targetIndex, rng)
 		table.insert(enemy.weak, card.amount)
 		table.insert(events, { kind = "weaken", text = card.name .. " weakens " .. enemy.name .. ": its next attack deals -" .. percent(card.amount), enemy = targetIndex })
 	end
+end
 
+-- Co-op duels -----------------------------------------------------------------------------
+-- Up to Duel.CoopMax players fight one tower floor together. Each hero has their own deck,
+-- hand, energy and health; every round all of them pick a move, the moves play out in
+-- order, then each enemy attacks a random hero still standing. A Heal goes to the most hurt
+-- teammate. The enemies get more health for every extra hero. The team wins when every enemy
+-- is down and loses when every hero is.
+Duel.CoopMax = 4
+Duel.CoopEnemyHealth = 1.1 -- each extra hero adds this share of the enemies' health
+
+function Duel.coopNew(floor, decks, names, rng, enemies)
+	local heroes = {}
+	for index, deck in ipairs(decks) do
+		local pile = {}
+		for _, key in ipairs(deck) do
+			if Duel.card(key) then
+				table.insert(pile, key)
+			end
+		end
+		if #pile == 0 then
+			return nil
+		end
+		local health = Duel.deckHealth(pile)
+		shuffle(pile, rng)
+		local hero = {
+			name = names[index],
+			energy = Duel.StartEnergy,
+			hp = health,
+			maxHp = health,
+			shields = {},
+			charges = {},
+			poison = 0,
+			mend = 0,
+			mendRounds = 0,
+			deck = pile,
+			hand = {},
+			discard = {},
+			move = nil, -- { kind = "play", hand, target } or { kind = "pass" } once chosen
+			left = false, -- walked out of the fight
+		}
+		draw(hero, rng)
+		heroes[index] = hero
+	end
+	enemies = enemies or Duel.enemies(floor)
+	local scale = 1 + Duel.CoopEnemyHealth * (#heroes - 1)
+	for _, enemy in ipairs(enemies) do
+		enemy.maxHp = math.floor(enemy.maxHp * scale)
+		enemy.hp = enemy.maxHp
+	end
+	return {
+		floor = floor,
+		mode = "coop",
+		round = 1,
+		heroes = heroes,
+		enemies = enemies,
+		over = false,
+		win = false,
+	}
+end
+
+-- Lock in a hero's move. action = { kind = "play", hand, target } or { kind = "pass" }.
+function Duel.coopChoose(state, heroIndex, action)
+	local hero = state.heroes[heroIndex]
+	if state.over or hero == nil then
+		return nil, "This battle is over."
+	end
+	if hero.hp <= 0 then
+		return nil, "You're down. Your team fights on!"
+	end
+	if hero.move then
+		return nil, "You already picked your move. Waiting for your team."
+	end
+	if action.kind == "pass" then
+		hero.move = { kind = "pass" }
+		return true
+	end
+	local key = type(action.hand) == "number" and hero.hand[action.hand] or nil
+	if key == nil then
+		return nil, "Pick a card from your hand."
+	end
+	if Duel.card(key).cost > hero.energy then
+		return nil, "Not enough energy: that card costs " .. Duel.card(key).cost .. "."
+	end
+	hero.move = { kind = "play", hand = action.hand, target = type(action.target) == "number" and action.target or nil }
+	return true
+end
+
+function Duel.coopDiscard(state, heroIndex, handIndex)
+	local hero = state.heroes[heroIndex]
+	if state.over or hero == nil or hero.hp <= 0 or hero.move or type(handIndex) ~= "number" or hero.hand[handIndex] == nil then
+		return false
+	end
+	table.insert(hero.discard, table.remove(hero.hand, handIndex))
+	return true
+end
+
+-- True when every hero still standing has picked a move.
+function Duel.coopReady(state)
+	for _, hero in ipairs(state.heroes) do
+		if hero.hp > 0 and hero.move == nil then
+			return false
+		end
+	end
+	return true
+end
+
+-- Play out the round (a missing move is a pass). Returns the events, which name heroes by
+-- index in `hero` (see Duel.coopEventsFor).
+function Duel.coopResolve(state, rng)
+	local events = {}
+	for heroIndex, hero in ipairs(state.heroes) do
+		local move = hero.move or { kind = "pass" }
+		if hero.hp > 0 and not state.over and firstAlive(state) then
+			local key = move.kind == "play" and hero.hand[move.hand] or nil
+			local card = key and Duel.card(key) or nil
+			if card and card.cost <= hero.energy then
+				local target = move.target
+				if Duel.Roles[card.role].target then
+					local enemy = type(target) == "number" and state.enemies[target] or nil
+					if enemy == nil or enemy.hp <= 0 then
+						target = firstAlive(state)
+					end
+				end
+				applyCard(state, hero, heroIndex, move.hand, target, events)
+			else
+				table.insert(events, { kind = "pass", text = hero.name .. " holds and gathers energy." })
+			end
+		end
+		hero.move = nil
+	end
 	finishRound(state, events, rng)
 	return events
+end
+
+-- A hero walks out (fled or left the game). The team fights on without them.
+function Duel.coopLeave(state, heroIndex)
+	local hero = state.heroes[heroIndex]
+	if hero == nil or state.over then
+		return
+	end
+	hero.hp = 0
+	hero.left = true
+	hero.move = nil
+	if not heroStanding(state) then
+		state.over, state.win = true, false
+	end
+end
+
+-- The events as one hero sees them: their own health changes keep `hp`; a teammate's become
+-- "allyhurt" / "allyheal" so the screen does not mistake them for yours.
+function Duel.coopEventsFor(events, heroIndex)
+	local list = {}
+	for index, event in ipairs(events) do
+		if event.hero and event.hero ~= heroIndex then
+			local copy = table.clone(event)
+			copy.hp = nil
+			copy.kind = (event.kind == "heal") and "allyheal" or "allyhurt"
+			list[index] = copy
+		else
+			list[index] = event
+		end
+	end
+	return list
+end
+
+-- One hero's view, with their teammates' health.
+function Duel.coopView(state, heroIndex)
+	local hero = state.heroes[heroIndex]
+	local view = viewOf(state, hero)
+	view.chosen = hero.move ~= nil
+	view.allies = {}
+	for index, other in ipairs(state.heroes) do
+		if index ~= heroIndex then
+			table.insert(view.allies, { name = other.name, hp = other.hp, maxHp = other.maxHp, ready = other.move ~= nil, left = other.left })
+		end
+	end
+	return view
 end
 
 -- How much a hit of `damage` from `card` is worth against one enemy in a view, counting its

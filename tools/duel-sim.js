@@ -44,6 +44,28 @@ for s,setId in ipairs(Cards.SetOrder) do
   local inv={} for _,d in ipairs(Cards.List) do if table.find(Cards.SetOrder,d.set)<=s and Cards.Rarities[d.rarity].order<=5 then inv[d.id]=2 end end
   top({inventory=inv,slots={},vault={}},"sets<="..s.." up to Legendary x2")
 end
+-- co-op: two players with the same collection on the floor where one alone stalls
+local function coopRate(profile,floor,heroes,n)
+  local deck=Duel.usableDeck(profile,Duel.autoDeck(profile)) local w=0
+  for i=1,n do
+    local decks,names={}, {} for h=1,heroes do decks[h]=deck names[h]="P"..h end
+    local s=Duel.coopNew(floor,decks,names,rng)
+    while not s.over do
+      for h=1,heroes do if s.heroes[h].hp>0 then local a=Duel.suggest(Duel.coopView(s,h)) assert(Duel.coopChoose(s,h,a)) end end
+      Duel.coopResolve(s,rng)
+    end
+    if s.win then w=w+1 end
+  end
+  return w/n
+end
+print("co-op (bot win rate, same deck for every hero):")
+for _,sets in ipairs({3,5,7}) do
+  local inv={} for _,d in ipairs(Cards.List) do if table.find(Cards.SetOrder,d.set)<=sets and Cards.Rarities[d.rarity].order<=5 then inv[d.id]=2 end end
+  local p={inventory=inv,slots={},vault={}}
+  local line={} for _,f in ipairs({sets*5-2, sets*5, sets*5+2, sets*5+4}) do
+    line[#line+1]=f..": solo "..math.floor(coopRate(p,f,1,30)*100).."% duo "..math.floor(coopRate(p,f,2,30)*100).."% trio "..math.floor(coopRate(p,f,3,30)*100).."%" end
+  print("  sets<="..sets.."  "..table.concat(line,"   "))
+end
 local inv={} for _,d in ipairs(Cards.List) do inv[d.id..":prism"]=3 end
 top({inventory=inv,slots={},vault={}},"everything prism")
 local inv={} for _,d in ipairs(Cards.List) do inv[d.id..":gold"]=1 end

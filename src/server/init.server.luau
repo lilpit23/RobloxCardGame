@@ -1562,11 +1562,42 @@ end
 -- (Duel.pvpCard). Both pick a move each round; a loop per match resolves the round when both
 -- have chosen or the timer runs out. No cards or currency change hands; the first win of the
 -- day pays one quest's worth of aura.
+-- Pays for clearing the player's next tower floor (solo or with a team): aura, cash, the
+-- floor itself, and a Legendary the first time a boss falls. Fills result.aura/cash/drop.
+local function clearFloor(player, data, floor, result)
+	local aura, cash = Battle.reward(floor, Rebirth.cashCap(data.rebirths))
+	aura = aura * (Season.event().tower or 1)
+	data.tower = floor
+	data.aura = data.aura + aura
+	result.aura = aura
+	result.cash = addCash(data, cash)
+	if floor % Duel.BossEvery == 0 then
+		-- beating a boss for the first time drops a Legendary from that part of the tower
+		local pool = Cards.pool("Legendary", { Duel.floorSet(floor) })
+		if #pool > 0 then
+			local key = pool[rng:NextInteger(1, #pool)].id
+			addCard(data, key, 1)
+			result.drop = key
+		end
+	end
+	checkTitles(player, data)
+	touch(player, true)
+end
+
+-- Co-op: helping on a floor you already cleared (or have not reached) pays this share of
+-- its aura instead.
+local COOP_HELPER_SHARE = 0.25
+
 local PVP_INVITE_TIME = 30
 local PVP_PLAYBACK = 4 -- seconds added to each round's timer for the clients' playback
-local pvpInvites = {} -- [target player] = { [challenger player] = os.clock() sent }
+local pvpInvites = {} -- [target player] = { [challenger player] = { at = os.clock(), kind = "duel" | "coop" } }
 
 local function pvpViewFor(match, side)
+	if match.coop then
+		local view = Duel.coopView(match.state, side)
+		view.timeLeft = math.max(0, math.ceil(match.deadline - os.clock()))
+		return view
+	end
 	local view = Duel.pvpView(match.state, side)
 	view.timeLeft = math.max(0, math.ceil(match.deadline - os.clock()))
 	view.practice = match.practice -- the bot's level in a practice duel
@@ -1640,9 +1671,80 @@ local function runPvp(match)
 	end
 end
 
--- side gives up (fled, reset or left the game): the other side wins.
+-- Ends a co-op battle once. Every hero who stayed shares the win: it clears the floor for
+-- whoever had it next, and pays the others a helper's share of its aura.
+local function finishCoop(match)
+	if match.finished then
+		return {}
+	end
+	match.finished = true
+	local extras = {}
+	for side, player in ipairs(match.players) do
+		local session = sessions[player]
+		local data = PlayerData.get(player)
+		local hero = match.state.heroes[side]
+		extras[side] = {}
+		if session and session.pvp and session.pvp.match == match then
+			session.pvp = nil
+		end
+		if data and not hero.left then
+			data.stats.duels = (data.stats.duels or 0) + 1
+			if match.state.win then
+				if match.floor == data.tower + 1 then
+					clearFloor(player, data, match.floor, extras[side])
+				else
+					local aura = Battle.reward(match.floor, Rebirth.cashCap(data.rebirths))
+					aura = math.floor(aura * COOP_HELPER_SHARE * (Season.event().tower or 1))
+					data.aura = data.aura + aura
+					extras[side].aura = aura
+					extras[side].helper = true
+				end
+			end
+			touch(player, true)
+		end
+	end
+	return extras
+end
+
+local function sendCoopRound(match, events, extras)
+	for side, player in ipairs(match.players) do
+		if player.Parent == Players and not match.state.heroes[side].left then
+			local result = { ok = true, events = Duel.coopEventsFor(events, side), view = pvpViewFor(match, side) }
+			local extra = extras and extras[side]
+			if extra then
+				result.aura, result.cash, result.drop, result.helper = extra.aura, extra.cash, extra.drop, extra.helper
+			end
+			PvpRoundRemote:FireClient(player, result)
+		end
+	end
+end
+
+local function runCoop(match)
+	while not match.state.over do
+		if Duel.coopReady(match.state) or os.clock() >= match.deadline then
+			local events = Duel.coopResolve(match.state, rng)
+			match.deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK
+			sendCoopRound(match, events, match.state.over and finishCoop(match) or nil)
+		end
+		task.wait(0.2)
+	end
+end
+
+-- side gives up (fled, reset or left the game): the other side wins. In co-op the team
+-- fights on without them.
 function forfeitPvp(match, side)
 	if match.finished then
+		return
+	end
+	if match.coop then
+		local leaver = match.players[side]
+		Duel.coopLeave(match.state, side)
+		local session = sessions[leaver]
+		if session and session.pvp and session.pvp.match == match then
+			session.pvp = nil
+		end
+		local events = { { kind = "pass", text = "🚪 " .. leaver.DisplayName .. " left the battle." } }
+		sendCoopRound(match, events, match.state.over and finishCoop(match) or nil)
 		return
 	end
 	Duel.pvpForfeit(match.state, side)
@@ -1662,7 +1764,8 @@ local function canDuel(player)
 	return session ~= nil and data ~= nil and session.duel == nil and session.pvp == nil
 end
 
-PvpChallengeRemote.OnServerEvent:Connect(function(player, target)
+PvpChallengeRemote.OnServerEvent:Connect(function(player, target, kind)
+	kind = kind == "coop" and "coop" or "duel"
 	if not allow(player, "PvpChallenge", 0.2, 2) then
 		notify(player, "Wait a few seconds before challenging again.", "error")
 		return
@@ -1682,10 +1785,15 @@ PvpChallengeRemote.OnServerEvent:Connect(function(player, target)
 		notify(player, target.DisplayName .. " isn't taking challenges right now.", "error")
 		return
 	end
+	local floor = PlayerData.get(player).tower + 1
+	if kind == "coop" and floor > Battle.MaxFloor then
+		notify(player, "You have cleared the whole tower already!", "error")
+		return
+	end
 	pvpInvites[target] = pvpInvites[target] or {}
-	pvpInvites[target][player] = os.clock()
-	PvpInviteRemote:FireClient(target, player, player.DisplayName, PVP_INVITE_TIME)
-	notify(player, "⚔️ Challenge sent to " .. target.DisplayName .. ".", "info")
+	pvpInvites[target][player] = { at = os.clock(), kind = kind }
+	PvpInviteRemote:FireClient(target, player, player.DisplayName, PVP_INVITE_TIME, kind, floor)
+	notify(player, (kind == "coop" and "🤝 Team-up request" or "⚔️ Challenge") .. " sent to " .. target.DisplayName .. ".", "info")
 end)
 
 PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
@@ -1696,12 +1804,12 @@ PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
 		return
 	end
 	local invites = pvpInvites[player]
-	local sent = invites and invites[challenger]
-	if sent == nil then
+	local invite = invites and invites[challenger]
+	if invite == nil then
 		return
 	end
 	invites[challenger] = nil
-	if challenger.Parent ~= Players or os.clock() - sent > PVP_INVITE_TIME then
+	if challenger.Parent ~= Players or os.clock() - invite.at > PVP_INVITE_TIME then
 		notify(player, "That challenge has expired.", "error")
 		return
 	end
@@ -1718,6 +1826,35 @@ PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
 	local decks = {}
 	for side, who in ipairs(players) do
 		decks[side] = battleDeckFor(PlayerData.get(who))
+	end
+	if invite.kind == "coop" then
+		-- team up on the challenger's next floor
+		local floor = PlayerData.get(challenger).tower + 1
+		if floor > Battle.MaxFloor then
+			return
+		end
+		local state = Duel.coopNew(floor, decks, { challenger.DisplayName, player.DisplayName }, rng)
+		if state == nil then
+			notify(player, "You both need at least one card to battle.", "error")
+			notify(challenger, "You both need at least one card to battle.", "error")
+			return
+		end
+		local match = { coop = true, floor = floor, players = players, state = state, deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK }
+		for side, who in ipairs(players) do
+			local session = sessions[who]
+			session.pvp = { match = match, side = side }
+			if pvpInvites[who] then
+				table.clear(pvpInvites[who])
+			end
+			local spot = Plots.getDuelSpot(session.plot)
+			local character = who.Character
+			if character and character:FindFirstChild("HumanoidRootPart") then
+				character:PivotTo(spot + Vector3.new(0, 3, 0))
+			end
+			PvpStartRemote:FireClient(who, pvpViewFor(match, side), spot)
+		end
+		task.spawn(runCoop, match)
+		return
 	end
 	local trained = {}
 	for side, who in ipairs(players) do
@@ -1793,6 +1930,21 @@ end)
 -- in; the round's events arrive later through PvpRound.
 local function pvpAct(session, action)
 	local match, side = session.pvp.match, session.pvp.side
+	if match.coop and action.kind ~= "flee" then
+		if action.kind == "discard" then
+			if not Duel.coopDiscard(match.state, side, action.hand) then
+				return { ok = false, error = "You can only throw cards away before picking your move." }
+			end
+			return { ok = true, events = {}, view = pvpViewFor(match, side) }
+		elseif action.kind == "play" or action.kind == "pass" then
+			local ok, problem = Duel.coopChoose(match.state, side, { kind = action.kind, hand = action.hand, target = action.target })
+			if not ok then
+				return { ok = false, error = problem }
+			end
+			return { ok = true, waiting = true, view = pvpViewFor(match, side) }
+		end
+		return { ok = false, error = "You can't do that right now." }
+	end
 	if action.kind == "flee" then
 		forfeitPvp(match, side)
 		return { ok = true, events = {}, view = { over = true, win = false, fled = true } }
@@ -1876,23 +2028,7 @@ DuelActRemote.OnServerInvoke = function(player, action)
 				touch(player, true)
 			end
 		elseif duel.win and duel.floor == data.tower + 1 then
-			local aura, cash = Battle.reward(duel.floor, Rebirth.cashCap(data.rebirths))
-			aura = aura * (Season.event().tower or 1)
-			data.tower = duel.floor
-			data.aura = data.aura + aura
-			result.aura = aura
-			result.cash = addCash(data, cash)
-			if duel.floor % Duel.BossEvery == 0 then
-				-- beating a boss for the first time drops a Legendary from that part of the tower
-				local pool = Cards.pool("Legendary", { Duel.floorSet(duel.floor) })
-				if #pool > 0 then
-					local key = pool[rng:NextInteger(1, #pool)].id
-					addCard(data, key, 1)
-					result.drop = key
-				end
-			end
-			checkTitles(player, data)
-			touch(player, true)
+			clearFloor(player, data, duel.floor, result)
 		end
 	end
 	return result

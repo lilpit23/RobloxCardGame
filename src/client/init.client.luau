@@ -2518,9 +2518,19 @@ autoButton.Activated:Connect(function()
 	end
 end)
 
--- The duel's title line; player duels show the time left to pick a move.
+-- The duel's title line; player duels and co-op show the time left to pick a move.
 local pvpDeadline = 0
+local function together()
+	return duel ~= nil and (duel.mode == "pvp" or duel.mode == "coop")
+end
 function duelTitleText()
+	if duel.mode == "coop" then
+		local text = "🤝 Co-op  ·  Floor " .. duel.floor .. "  ·  Round " .. duel.round
+		if not duelEnding then
+			text = text .. "  ·  ⏳ " .. math.max(0, math.ceil(pvpDeadline - os.clock())) .. "s"
+		end
+		return text
+	end
 	if duel.mode == "pvp" then
 		local opponent = duel.enemies[1] and duel.enemies[1].name or "?"
 		local text = "🤺 vs " .. opponent .. "  ·  Round " .. duel.round
@@ -2534,7 +2544,7 @@ end
 task.spawn(function()
 	while true do
 		task.wait(0.5)
-		if duel and duel.mode == "pvp" then
+		if together() then
 			duelTitle.Text = duelTitleText()
 		end
 	end
@@ -2545,13 +2555,18 @@ function renderDuelHud()
 		return
 	end
 	local pvp = duel.mode == "pvp"
-	autoButton.Visible = autoUnlocked() and not pvp
+	local coop = duel.mode == "coop"
+	autoButton.Visible = autoUnlocked() and not pvp and not coop
 	autoButton.Text = duelAuto and "🤖 Auto: ON" or "🤖 Auto: OFF"
 	autoButton.BackgroundColor3 = duelAuto and COLORS.good or COLORS.locked
 	duelTitle.Text = duelTitleText()
 	duelLogLabel.Text = #duelLog > 0 and table.concat(duelLog, "\n") or (pvp and "Both of you pick a card in secret, then the moves play out. Cards hit by rarity here, not income." or "Tap an enemy to aim, then play a card. Rarer cards cost more ⚡ — Pass to save up.")
 	if pvp and duel.chosen and not duelEnding then
 		duelLogLabel.Text = duelLogLabel.Text .. "\n⏳ Move locked in. Waiting for " .. (duel.enemies[1] and duel.enemies[1].name or "your opponent") .. "…"
+	elseif coop and duel.chosen and not duelEnding then
+		duelLogLabel.Text = duelLogLabel.Text .. "\n⏳ Move locked in. Waiting for your team…"
+	elseif coop and duel.hp <= 0 and not duelEnding then
+		duelLogLabel.Text = duelLogLabel.Text .. "\n💀 You're down. Your team fights on!"
 	end
 
 	-- the figures in the arena
@@ -2662,6 +2677,9 @@ function renderDuelHud()
 	if (duel.mend or 0) > 0 then
 		extras = extras .. "   🌿 " .. Duel.short(duel.mend)
 	end
+	for _, ally in ipairs(duel.allies or {}) do
+		extras = extras .. "   🤝 " .. ally.name .. " " .. (ally.left and "left" or (ally.hp > 0 and (Duel.short(ally.hp) .. "/" .. Duel.short(ally.maxHp) .. (ally.ready and " ✅" or "")) or "💀"))
+	end
 	if (duel.curse or 0) > 0 then
 		extras = extras .. "   ☠️ " .. duel.curse
 	end
@@ -2734,14 +2752,14 @@ function renderDuelHud()
 		duelAct({ kind = "pass" })
 	end)
 	passButton.TextSize = 14
-	newButton(status, pvp and "Forfeit" or "Flee", UDim2.new(0, 544, 0, 5), UDim2.new(0, 88, 0, 36), COLORS.locked, function()
+	newButton(status, pvp and "Forfeit" or (coop and "Leave" or "Flee"), UDim2.new(0, 544, 0, 5), UDim2.new(0, 88, 0, 36), COLORS.locked, function()
 		duelAuto = false
 		duelAct({ kind = "flee" })
 	end).TextSize = 14
 
 	-- the coach, for a player's first few duels
 	local suggestion = nil
-	if learningDuels() and not duelAuto and not duelBusy and not pvp then
+	if learningDuels() and not duelAuto and not duelBusy and not pvp and not coop then
 		suggestion = Duel.suggest(duel)
 		local coach = make("TextLabel", {
 			Position = UDim2.new(0, 0, 0, -50),
@@ -2950,7 +2968,20 @@ function playResult(result)
 		end
 	end
 	if duel.over then
-		if duel.mode == "pvp" then
+		if duel.mode == "coop" then
+			if duel.win and result.helper then
+				duelEnding = "🤝 Floor " .. duel.floor .. " cleared together! You helped: +" .. Format.short(result.aura or 0) .. " aura"
+				playSound("bigPull")
+			elseif duel.win then
+				duelEnding = "🏆 Floor " .. duel.floor .. " cleared together!  +" .. Format.short(result.aura or 0) .. " aura, " .. Format.cash(result.cash or 0)
+				if result.drop then
+					duelEnding = duelEnding .. "\n👑 Boss drop: " .. Cards.getDisplayName(result.drop) .. "!"
+				end
+				playSound("bigPull")
+			else
+				duelEnding = "💀 Your team fell on floor " .. duel.floor .. ". Regroup and try again!"
+			end
+		elseif duel.mode == "pvp" then
 			local opponent = duel.enemies[1] and duel.enemies[1].name or "your opponent"
 			if duel.win then
 				duelEnding = "🏆 You beat " .. opponent .. "!" .. (result.aura and ("  +" .. Format.short(result.aura) .. " aura (first win today)") or "")
@@ -3012,7 +3043,7 @@ function enterDuel(view, spot)
 	duelEnding = nil
 	duelBusy = false
 	deckEditing = false
-	if view.mode == "pvp" then
+	if view.mode == "pvp" or view.mode == "coop" then
 		duelAuto = false
 		pvpDeadline = os.clock() + (view.timeLeft or Duel.PvpTurnTime)
 	end
@@ -3035,7 +3066,7 @@ Remotes.PvpStart.OnClientEvent:Connect(function(view, spot)
 end)
 
 Remotes.PvpRound.OnClientEvent:Connect(function(result)
-	if duel == nil or duel.mode ~= "pvp" or type(result) ~= "table" then
+	if not together() or type(result) ~= "table" then
 		return
 	end
 	playResult(result)
@@ -3071,12 +3102,16 @@ newButton(inviteBox, "Decline", UDim2.new(0.5, 7, 0, 58), UDim2.new(0.5, -21, 0,
 	answerInvite(false)
 end)
 
-Remotes.PvpInvite.OnClientEvent:Connect(function(from, name, seconds)
+Remotes.PvpInvite.OnClientEvent:Connect(function(from, name, seconds, kind, floor)
 	if duel then
 		return -- busy: the challenge lapses on its own
 	end
 	inviteFrom = from
-	inviteText.Text = "🤺 " .. tostring(name) .. " challenges you to a duel!\nNothing is at stake: it's for glory."
+	if kind == "coop" then
+		inviteText.Text = "🤝 " .. tostring(name) .. " wants to team up on tower floor " .. tostring(floor) .. "!\nFight it together, each with your own deck."
+	else
+		inviteText.Text = "🤺 " .. tostring(name) .. " challenges you to a duel!\nNothing is at stake: it's for glory."
+	end
 	inviteBox.Visible = true
 	playSound("flip")
 	task.delay(tonumber(seconds) or 30, function()
@@ -3182,12 +3217,12 @@ panels.Battle = function()
 	local pvpRow = newRow(3, 78 + math.max(1, shown) * 40 + 96)
 	pvpRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
 	local stats = state.stats or {}
-	newLabel(pvpRow, "🤺 Player duels  ·  " .. (stats.pvpWins or 0) .. " won of " .. (stats.pvpDuels or 0), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+	newLabel(pvpRow, "👥 Battle with players  ·  duels won " .. (stats.pvpWins or 0) .. " of " .. (stats.pvpDuels or 0), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 17,
 		TextColor3 = Color3.fromRGB(200, 170, 255),
 	})
-	newLabel(pvpRow, "Challenge someone in this server with your battle deck. Nothing is at stake, and cards hit by rarity (not income), so skill and deck matter. Your first win each day pays " .. Format.short(Quests.reward(state.rebirths)) .. " aura.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 44), {
+	newLabel(pvpRow, "🤝 Team up to fight your next tower floor together (it counts for everyone whose next floor it is; helpers get bonus aura). ⚔️ Challenge for a duel: nothing at stake, cards hit by rarity, first win each day pays " .. Format.short(Quests.reward(state.rebirths)) .. " aura.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 44), {
 		TextSize = 12,
 		TextColor3 = COLORS.dim,
 		TextYAlignment = Enum.TextYAlignment.Top,
@@ -3215,11 +3250,14 @@ panels.Battle = function()
 	for index = 1, shown do
 		local other = others[index]
 		local y = 78 + (index - 1) * 40
-		newLabel(pvpRow, other.DisplayName, UDim2.new(0, 14, 0, y), UDim2.new(1, -190, 0, 34), {
+		newLabel(pvpRow, other.DisplayName, UDim2.new(0, 14, 0, y), UDim2.new(1, -340, 0, 34), {
 			TextSize = 14,
 			TextWrapped = false,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 		})
+		newButton(pvpRow, "🤝 Team up", UDim2.new(1, -316, 0, y + 2), UDim2.new(0, 148, 0, 32), COLORS.good, function()
+			Remotes.PvpChallenge:FireServer(other, "coop")
+		end).TextSize = 13
 		newButton(pvpRow, "⚔️ Challenge", UDim2.new(1, -160, 0, y + 2), UDim2.new(0, 148, 0, 32), Color3.fromRGB(150, 95, 230), function()
 			Remotes.PvpChallenge:FireServer(other)
 		end).TextSize = 13

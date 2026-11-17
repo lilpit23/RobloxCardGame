@@ -248,6 +248,7 @@ local function pushState(player)
 		vault = data.vault,
 		battleDeck = data.battleDeck,
 		challengeDay = data.challengeDay,
+		bossDay = data.bossDay,
 		pvpOpen = data.pvpOpen,
 		titles = data.titles,
 		title = data.title,
@@ -1513,7 +1514,7 @@ BattleDeckRemote.OnServerEvent:Connect(function(player, action, key)
 end)
 
 -- Start a duel against the next tower floor. Returns { ok, view } or { ok = false, error }.
-DuelStartRemote.OnServerInvoke = function(player, mode)
+DuelStartRemote.OnServerInvoke = function(player, mode, bossFloor)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
 	if session == nil or data == nil then
@@ -1532,6 +1533,15 @@ DuelStartRemote.OnServerInvoke = function(player, mode)
 		local challenge = Duel.challenge(Quests.today())
 		duel = Duel.new(challenge.floor, challenge.deck, rng, "daily", Duel.enemies(challenge.floor, challenge.power, challenge.set))
 		duel.day = Quests.today()
+	elseif mode == "boss" then
+		-- a rematch with a boss already beaten
+		if type(bossFloor) ~= "number" or bossFloor % Duel.BossEvery ~= 0 or bossFloor < Duel.BossEvery or bossFloor > data.tower then
+			return { ok = false, error = "Beat that boss in the tower first." }
+		end
+		duel = Duel.new(bossFloor, battleDeckFor(data), rng, "boss")
+		if duel then
+			duel.day = Quests.today()
+		end
 	else
 		local floor = data.tower + 1
 		if floor > Battle.MaxFloor then
@@ -2049,6 +2059,25 @@ DuelActRemote.OnServerInvoke = function(player, action)
 				if data.gifts < Config.GiftMax then
 					data.gifts = data.gifts + 1
 					result.gift = true
+				end
+				touch(player, true)
+			end
+		elseif duel.win and duel.mode == "boss" then
+			-- pays once a day per boss; replays are just for fun
+			local slot = tostring(duel.floor)
+			if duel.day == Quests.today() and data.bossDay[slot] ~= duel.day then
+				data.bossDay[slot] = duel.day
+				local aura = Battle.reward(duel.floor, Rebirth.cashCap(data.rebirths))
+				aura = math.floor(aura * Battle.RematchAuraShare * (Season.event().tower or 1))
+				data.aura = data.aura + aura
+				result.aura = aura
+				if rng:NextNumber() < Battle.RematchDropChance then
+					local pool = Cards.pool("Legendary", { Duel.floorSet(duel.floor) })
+					if #pool > 0 then
+						local key = pool[rng:NextInteger(1, #pool)].id
+						addCard(data, key, 1)
+						result.drop = key
+					end
 				end
 				touch(player, true)
 			end

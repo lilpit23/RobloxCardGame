@@ -57,7 +57,8 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     parries part of it back. Duels are staged on your duel pad in the arena: the enemies stand
     as giant shadow cards, themed on the sets, and some heal, wear armour, go berserk, poison
     you, shrug off marks or call fallen allies back. Beating a boss for the first time drops a Legendary card. A daily challenge gives
-    everyone the same preset deck for aura and a free booster. `node tools/duel-sim.js` shows
+    everyone the same preset deck for aura and a free booster. Beaten bosses can be rematched
+    once a day each for half their floor's aura and a 15% chance at a Legendary. `node tools/duel-sim.js` shows
     how far different collections get.
     Keyboard: **1-5** play a card, **Tab** aims, **Space** passes (gamepad: **RB** aims, **X**
     passes).

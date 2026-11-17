@@ -16,4 +16,9 @@ function Battle.reward(floor, cashCap)
 	return 40 * floor, cash
 end
 
+-- Boss rematches: once a day, each boss you have beaten can be fought again for a share of
+-- its floor's aura and a chance at a Legendary from that part of the tower.
+Battle.RematchAuraShare = 0.5
+Battle.RematchDropChance = 0.15
+
 return Battle

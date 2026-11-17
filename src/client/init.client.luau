@@ -65,6 +65,7 @@ local state = {
 	perks = {},
 	training = {},
 	pvpOpen = true,
+	bossDay = {},
 	tower = 0,
 	luckEventEndsAt = 0,
 	slotCount = Config.BaseSlots,
@@ -2588,6 +2589,9 @@ function duelTitleText()
 		end
 		return text
 	end
+	if duel.mode == "boss" then
+		return "👑 Boss rematch  ·  Floor " .. duel.floor .. "  ·  Round " .. duel.round
+	end
 	return (duel.mode == "daily" and "📅 Daily challenge" or ("⚔️ Floor " .. duel.floor)) .. "  ·  Round " .. duel.round
 end
 task.spawn(function()
@@ -3061,6 +3065,16 @@ function playResult(result)
 			else
 				duelEnding = "💀 " .. opponent .. " wins this duel. Rematch?"
 			end
+		elseif duel.win and duel.mode == "boss" then
+			if result.aura then
+				duelEnding = "👑 Boss beaten again!  +" .. Format.short(result.aura) .. " aura"
+				if result.drop then
+					duelEnding = duelEnding .. "\n🎁 Bonus drop: " .. Cards.getDisplayName(result.drop) .. "!"
+				end
+			else
+				duelEnding = "👑 Boss beaten again!  (today's rematch reward is already yours)"
+			end
+			playSound("bigPull")
 		elseif duel.win and duel.mode == "daily" then
 			if result.aura then
 				duelEnding = "🏆 Challenge complete!  +" .. Format.short(result.aura) .. " aura" .. (result.gift and " and a free booster 🎁" or "")
@@ -3083,13 +3097,13 @@ function playResult(result)
 	task.defer(autoStep)
 end
 
-function startDuel(mode)
+function startDuel(mode, bossFloor)
 	if battling then
 		return
 	end
 	battling = true
 	local ok, result = pcall(function()
-		return Remotes.DuelStart:InvokeServer(mode)
+		return Remotes.DuelStart:InvokeServer(mode, bossFloor)
 	end)
 	if not ok or type(result) ~= "table" or not result.ok then
 		battling = false
@@ -3127,6 +3141,26 @@ function enterDuel(view, spot)
 	buildStage(spot, duel)
 	aimCamera(spot)
 	renderDuelHud()
+	-- a boss gets an entrance
+	for _, enemy in ipairs(duel.enemies) do
+		if enemy.boss then
+			local trait = enemy.trait and Duel.BossTraits[enemy.trait]
+			local banner = newLabel(duelGui, enemy.name .. (trait and ("\n" .. trait.name .. ": " .. trait.text) or ""), UDim2.new(0.1, 0, 0.32, 0), UDim2.new(0.8, 0, 0.16, 0), {
+				Font = Enum.Font.FredokaOne,
+				TextScaled = true,
+				TextXAlignment = Enum.TextXAlignment.Center,
+				TextColor3 = Color3.fromRGB(255, 210, 120),
+				TextStrokeTransparency = 0.2,
+			})
+			playSound("bigPull")
+			task.delay(2.5, function()
+				TweenService:Create(banner, TweenInfo.new(0.6), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+				task.wait(0.7)
+				banner:Destroy()
+			end)
+			break
+		end
+	end
 	task.defer(autoStep)
 end
 
@@ -3280,6 +3314,36 @@ panels.Battle = function()
 		startDuel("daily")
 	end)
 
+	-- boss rematches: each beaten boss once a day for aura and a chance at a Legendary
+	local beaten = math.floor(math.min(state.tower, Battle.MaxFloor) / Duel.BossEvery)
+	if beaten > 0 then
+		local bossRow = newRow(3, 36 + beaten * 40)
+		bossRow.BackgroundColor3 = Color3.fromRGB(70, 45, 40)
+		newLabel(bossRow, "👑 Boss rematches  ·  once a day each: " .. math.floor(Battle.RematchAuraShare * 100) .. "% of the floor's aura and a " .. math.floor(Battle.RematchDropChance * 100) .. "% Legendary chance", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 24), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 14,
+			TextColor3 = Color3.fromRGB(255, 200, 120),
+			TextWrapped = false,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		for number = 1, beaten do
+			local bossFloor = number * Duel.BossEvery
+			local boss = Duel.enemies(bossFloor)[1]
+			local trait = boss.trait and Duel.BossTraits[boss.trait]
+			local done = (state.bossDay or {})[tostring(bossFloor)] == state.today
+			local y = 34 + (number - 1) * 40
+			newLabel(bossRow, "Floor " .. bossFloor .. ": " .. boss.name .. (trait and ("  ·  " .. trait.name) or ""), UDim2.new(0, 14, 0, y), UDim2.new(1, -190, 0, 34), {
+				TextSize = 13,
+				TextWrapped = false,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			})
+			newButton(bossRow, done and "✅ Replay" or "👑 Rematch", UDim2.new(1, -160, 0, y + 2), UDim2.new(0, 148, 0, 32), done and COLORS.locked or Color3.fromRGB(215, 120, 60), function()
+				duelAuto = false
+				startDuel("boss", bossFloor)
+			end).TextSize = 13
+		end
+	end
+
 	-- player duels: challenge anyone in the server; nothing is at stake
 	local others = {}
 	for _, other in ipairs(Players:GetPlayers()) do
@@ -3288,7 +3352,7 @@ panels.Battle = function()
 		end
 	end
 	local shown = math.min(#others, 8)
-	local pvpRow = newRow(3, 78 + math.max(1, shown) * 40 + 96)
+	local pvpRow = newRow(4, 78 + math.max(1, shown) * 40 + 96)
 	pvpRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
 	local stats = state.stats or {}
 	newLabel(pvpRow, "👥 Battle with players  ·  duels won " .. (stats.pvpWins or 0) .. " of " .. (stats.pvpDuels or 0), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
@@ -3338,7 +3402,7 @@ panels.Battle = function()
 	end
 
 	-- Battle Training: aura upgrades for player duels
-	local trainingRow = newRow(4, 40 + #Training.Order * 44)
+	local trainingRow = newRow(5, 40 + #Training.Order * 44)
 	trainingRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
 	newLabel(trainingRow, "🏋️ Battle Training  ·  player duels only, kept through rebirths", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 26), {
 		Font = Enum.Font.FredokaOne,
@@ -3371,7 +3435,7 @@ panels.Battle = function()
 
 	-- how battles work: open for anyone who has never fought, a tap away for everyone else
 	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
-	local helpRow = newRow(5, showHelp and 520 or 40)
+	local helpRow = newRow(6, showHelp and 520 or 40)
 	helpRow.BackgroundTransparency = showHelp and 0 or 1
 	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
 		battleHelp = not showHelp
@@ -3411,7 +3475,7 @@ panels.Battle = function()
 	local saved = Duel.usableDeck(state, state.battleDeck)
 	local automatic = #saved == 0
 	local deck = automatic and Duel.autoDeck(state) or saved
-	local deckRow = newRow(6, 46)
+	local deckRow = newRow(7, 46)
 	newLabel(deckRow, "Battle deck: " .. #deck .. "/" .. Duel.DeckSize .. (automatic and " (automatic)" or "") .. "   ·   " .. Duel.short(Duel.deckHealth(deck)) .. " health", UDim2.new(0, 14, 0, 0), UDim2.new(1, -300, 1, 0), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 15,
@@ -3458,7 +3522,7 @@ panels.Battle = function()
 		for index, card in ipairs(options) do
 			local have = inDeck[card.key] or 0
 			local most = math.min(owned[card.key], Duel.MaxCopies)
-			fillLazily(newRow(7 + index, 40), function(row)
+			fillLazily(newRow(8 + index, 40), function(row)
 				newCardLine(row, card.key, UDim2.new(0, 12, 0, 2), UDim2.new(1, -190, 0, 18))
 				newLabel(row, roleLine(card) .. "  ·  " .. card.text, UDim2.new(0, 12, 0, 20), UDim2.new(1, -190, 0, 16), {
 					TextSize = 11,

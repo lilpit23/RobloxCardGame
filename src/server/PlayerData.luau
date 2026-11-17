@@ -48,6 +48,7 @@ local function newData()
 		tower = 0, -- highest battle tower floor cleared
 		battleDeck = {}, -- array of cardKeys to bring to tower duels (empty = pick automatically)
 		challengeDay = 0, -- Quests.today() of the last daily challenge won
+		bossDay = {}, -- [tostring(boss floor)] = Quests.today() of the last paid boss rematch
 		pvpDay = 0, -- Quests.today() of the last player duel won (the first win each day pays aura)
 		pvpOpen = true, -- whether other players may challenge you to duels
 		titles = {}, -- [titleId] = true for titles earned (see Titles.luau)

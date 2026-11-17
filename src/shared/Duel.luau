@@ -1600,6 +1600,65 @@ function Duel.pvpResolve(state, rng)
 	return events
 end
 
+-- Practice duels: a bot opponent for player-duel rules, at three levels. rarities = the
+-- rarest card it may bring; training = Battle Training levels in every upgrade; health = added
+-- to (or taken from) its health; sloppy = the share of rounds it plays a random card.
+Duel.PracticeLevels = {
+	{ name = "Apprentice", rarities = 3, training = 0, health = -100, sloppy = 0.6 },
+	{ name = "Adept", rarities = 5, training = 1, health = -40, sloppy = 0.3 },
+	{ name = "Master", rarities = 7, training = 4, health = 0, sloppy = 0 },
+}
+
+-- What the practice bot of a level gets, in the shape Duel.pvpNew takes.
+function Duel.practiceTraining(level, Training)
+	local settings = Duel.PracticeLevels[level]
+	local levels = {}
+	for _, id in ipairs(Training.Order) do
+		levels[id] = settings.training
+	end
+	local stats = Training.stats(levels)
+	stats.health = stats.health + settings.health
+	stats.levels = Training.total(levels)
+	return stats
+end
+
+-- The practice bot's deck: an auto-built deck from random cards up to the level's rarity.
+function Duel.practiceDeck(level, rng)
+	local settings = Duel.PracticeLevels[level]
+	local pool = {}
+	for _, def in ipairs(Cards.List) do
+		if Cards.Rarities[def.rarity].order <= settings.rarities then
+			table.insert(pool, def.id)
+		end
+	end
+	local inventory = {}
+	for _ = 1, 60 do
+		local id = pool[rng:NextInteger(1, #pool)]
+		inventory[id] = (inventory[id] or 0) + 1
+	end
+	return Duel.autoDeck({ inventory = inventory, slots = {}, vault = {} })
+end
+
+-- The bot's move for one side of a player duel.
+function Duel.botMove(state, side, level, rng)
+	local view = Duel.pvpView(state, side)
+	local settings = Duel.PracticeLevels[level] or Duel.PracticeLevels[1]
+	if rng:NextNumber() < settings.sloppy then
+		local options = {}
+		for index, key in ipairs(view.hand) do
+			if Duel.pvpCard(key).cost <= view.energy then
+				table.insert(options, index)
+			end
+		end
+		if #options > 0 then
+			return { kind = "play", hand = options[rng:NextInteger(1, #options)] }
+		end
+		return { kind = "pass" }
+	end
+	local suggestion = Duel.suggest(view)
+	return { kind = suggestion.kind, hand = suggestion.hand }
+end
+
 -- One side forfeits (fled or left the game).
 function Duel.pvpForfeit(state, side)
 	if not state.over then

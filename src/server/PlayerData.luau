@@ -49,6 +49,7 @@ local function newData()
 		battleDeck = {}, -- array of cardKeys to bring to tower duels (empty = pick automatically)
 		challengeDay = 0, -- Quests.today() of the last daily challenge won
 		pvpDay = 0, -- Quests.today() of the last player duel won (the first win each day pays aura)
+		pvpOpen = true, -- whether other players may challenge you to duels
 		titles = {}, -- [titleId] = true for titles earned (see Titles.luau)
 		title = "", -- the title being worn, "" for none
 		loadouts = {}, -- saved decks: [tostring(1..Config.Loadouts)] = array of cardKeys

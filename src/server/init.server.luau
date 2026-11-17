@@ -72,6 +72,8 @@ local PvpRespondRemote = newRemote("RemoteEvent", "PvpRespond")
 local PvpInviteRemote = newRemote("RemoteEvent", "PvpInvite") -- server -> client
 local PvpStartRemote = newRemote("RemoteEvent", "PvpStart") -- server -> client
 local PvpRoundRemote = newRemote("RemoteEvent", "PvpRound") -- server -> client
+local PvpPracticeRemote = newRemote("RemoteEvent", "PvpPractice")
+local PvpOpenRemote = newRemote("RemoteEvent", "PvpOpen")
 local BattleDeckRemote = newRemote("RemoteEvent", "BattleDeck")
 local SetTitleRemote = newRemote("RemoteEvent", "SetTitle")
 local LoadoutRemote = newRemote("RemoteEvent", "Loadout")
@@ -246,6 +248,7 @@ local function pushState(player)
 		vault = data.vault,
 		battleDeck = data.battleDeck,
 		challengeDay = data.challengeDay,
+		pvpOpen = data.pvpOpen,
 		titles = data.titles,
 		title = data.title,
 		loadouts = data.loadouts,
@@ -1566,6 +1569,9 @@ local pvpInvites = {} -- [target player] = { [challenger player] = os.clock() se
 local function pvpViewFor(match, side)
 	local view = Duel.pvpView(match.state, side)
 	view.timeLeft = math.max(0, math.ceil(match.deadline - os.clock()))
+	view.practice = match.practice -- the bot's level in a practice duel
+	local opponent = match.players[3 - side]
+	view.opponent = opponent -- the Player to challenge for a rematch (nil for the bot)
 	return view
 end
 
@@ -1582,7 +1588,11 @@ local function finishPvp(match)
 		if session and session.pvp and session.pvp.match == match then
 			session.pvp = nil
 		end
-		if data then
+		if data and match.practice then
+			-- practice pays nothing and counts for nothing; it is just practice
+			data.stats.duels = (data.stats.duels or 0) + 1
+			touch(player, false)
+		elseif data then
 			data.stats.duels = (data.stats.duels or 0) + 1
 			data.stats.pvpDuels = (data.stats.pvpDuels or 0) + 1
 			if match.state.winner == side then
@@ -1617,6 +1627,10 @@ end
 local function runPvp(match)
 	while not match.state.over do
 		local fighters = match.state.fighters
+		if match.practice and fighters[2].move == nil and fighters[1].move then
+			-- the bot answers once the player has picked
+			Duel.pvpChoose(match.state, 2, Duel.botMove(match.state, 2, match.practice, rng))
+		end
 		if (fighters[1].move and fighters[2].move) or os.clock() >= match.deadline then
 			local events = Duel.pvpResolve(match.state, rng)
 			match.deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK
@@ -1636,7 +1650,7 @@ function forfeitPvp(match, side)
 	local events = { { { kind = "lose", text = text } }, { { kind = "lose", text = text } } }
 	local extras = finishPvp(match)
 	local other = match.players[3 - side]
-	if other.Parent == Players then
+	if other and other.Parent == Players then
 		local result = { ok = true, events = events[3 - side], view = pvpViewFor(match, 3 - side), aura = extras[3 - side].aura }
 		PvpRoundRemote:FireClient(other, result)
 	end
@@ -1662,6 +1676,10 @@ PvpChallengeRemote.OnServerEvent:Connect(function(player, target)
 	end
 	if not canDuel(target) then
 		notify(player, target.DisplayName .. " is busy battling. Try again soon.", "error")
+		return
+	end
+	if PlayerData.get(target).pvpOpen == false then
+		notify(player, target.DisplayName .. " isn't taking challenges right now.", "error")
 		return
 	end
 	pvpInvites[target] = pvpInvites[target] or {}
@@ -1728,6 +1746,47 @@ PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
 		PvpStartRemote:FireClient(who, pvpViewFor(match, side), spot)
 	end
 	task.spawn(runPvp, match)
+end)
+
+-- A practice duel against a bot (Duel.PracticeLevels): player-duel rules, no rewards.
+PvpPracticeRemote.OnServerEvent:Connect(function(player, level)
+	if not allow(player, "PvpPractice", 0.5, 2) then
+		return
+	end
+	if type(level) ~= "number" or Duel.PracticeLevels[level] == nil or not canDuel(player) then
+		return
+	end
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	local settings = Duel.PracticeLevels[level]
+	local trained = { Training.stats(data.training), Duel.practiceTraining(level, Training) }
+	trained[1].levels = Training.total(data.training)
+	local state = Duel.pvpNew(battleDeckFor(data), player.DisplayName, Duel.practiceDeck(level, rng), "🤖 " .. settings.name .. " Bot", rng, trained[1], trained[2])
+	if state == nil then
+		notify(player, "You need at least one card to duel.", "error")
+		return
+	end
+	local match = { players = { player }, state = state, practice = level, deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK }
+	session.pvp = { match = match, side = 1 }
+	local spot = Plots.getDuelSpot(session.plot)
+	local character = player.Character
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		character:PivotTo(spot + Vector3.new(0, 3, 0))
+	end
+	PvpStartRemote:FireClient(player, pvpViewFor(match, 1), spot)
+	task.spawn(runPvp, match)
+end)
+
+-- Whether other players may challenge you (saved).
+PvpOpenRemote.OnServerEvent:Connect(function(player, open)
+	if not allow(player, "PvpOpen", 1, 3) or type(open) ~= "boolean" then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data then
+		data.pvpOpen = open
+		touch(player, true)
+	end
 end)
 
 -- A move in a player duel (called from DuelAct). Picking a card or passing only locks the move

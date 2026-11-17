@@ -47,6 +47,13 @@ series("Legendaries vs Secrets",5,nil,7,nil,300)
 series("Epics: training 2 vs none",4,nil,4,nil,300,trained(2),nil)
 series("Epics: full training vs none",4,nil,4,nil,300,trained(5),nil)
 series("Commons+full training vs Secrets",2,nil,7,nil,300,trained(5),nil)
+for level,settings in ipairs(Duel.PracticeLevels) do
+  local st=Duel.practiceTraining(level,Training)
+  local w=0 for i=1,300 do local s=Duel.pvpNew(Duel.practiceDeck(2,rng),"P",Duel.practiceDeck(level,rng),"Bot",rng,nil,st)
+    while not s.over do assert(Duel.pvpChoose(s,1,bot(Duel.pvpView(s,1)))) assert(Duel.pvpChoose(s,2,Duel.botMove(s,2,level,rng))) Duel.pvpResolve(s,rng) end
+    if s.winner==1 then w=w+1 end end
+  print(string.format("%-36s player wins %3d%%","auto deck vs "..settings.name.." bot",w*100//300))
+end
 for _,t in ipairs(Cards.TypeOrder) do series("mono "..t.." vs mixed (Epic)",4,t,4,nil,300) end
 `;
 lauxlib.luaL_loadstring(L,to_luastring(pre));

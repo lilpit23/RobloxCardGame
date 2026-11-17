@@ -60,7 +60,8 @@ way so the repo stays the whole game.
   match (`runPvp`) and sends each round through `PvpRound`. Run `node tools/pvp-sim.js` after
   changing PvP numbers. Battle Training (`Training.luau`, saved in `data.training`, kept through
   rebirths) is bought with aura and only applies in player duels; the opponent sees the total
-  levels.
+  levels. Practice duels (`Duel.PracticeLevels`, `Duel.botMove`) use the same match loop with a
+  bot as side 2 and pay nothing. `data.pvpOpen = false` blocks challenges.
 - A new set every rebirth: a set's packs unlock by rebirth count (`pack.rebirths`,
   `Packs.unlocked`), not by store tier. The store tier only gives the income multiplier and
   shelves. Rebirth costs in `Rebirth.luau` assume this, and each level's required cards must

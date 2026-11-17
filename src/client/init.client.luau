@@ -64,6 +64,7 @@ local state = {
 	autoUpgrade = false,
 	perks = {},
 	training = {},
+	pvpOpen = true,
 	tower = 0,
 	luckEventEndsAt = 0,
 	slotCount = Config.BaseSlots,
@@ -2693,12 +2694,25 @@ function renderDuelHud()
 			BorderSizePixel = 0,
 		}, duelControls)
 		round(box, 12)
-		newLabel(box, duelEnding, UDim2.new(0, 16, 0, 0), UDim2.new(1, -32, 1, 0), {
+		local rematch = pvp and (duel.practice or duel.opponent) or nil
+		newLabel(box, duelEnding, UDim2.new(0, 16, 0, 0), UDim2.new(1, rematch and -200 or -32, 1, 0), {
 			Font = Enum.Font.FredokaOne,
 			TextSize = 20,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextColor3 = duel.win and COLORS.cash or COLORS.bad,
 		})
+		if rematch then
+			local practice, opponent = duel.practice, duel.opponent
+			newButton(box, "🔁 Rematch", UDim2.new(1, -176, 0.5, -22), UDim2.new(0, 160, 0, 44), Color3.fromRGB(150, 95, 230), function()
+				leaveDuel()
+				if practice then
+					Remotes.PvpPractice:FireServer(practice)
+				else
+					Remotes.PvpChallenge:FireServer(opponent)
+					openPanel("Battle")
+				end
+			end)
+		end
 		return
 	end
 
@@ -3165,7 +3179,7 @@ panels.Battle = function()
 		end
 	end
 	local shown = math.min(#others, 8)
-	local pvpRow = newRow(3, 78 + math.max(1, shown) * 40)
+	local pvpRow = newRow(3, 78 + math.max(1, shown) * 40 + 96)
 	pvpRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
 	local stats = state.stats or {}
 	newLabel(pvpRow, "🤺 Player duels  ·  " .. (stats.pvpWins or 0) .. " won of " .. (stats.pvpDuels or 0), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
@@ -3179,10 +3193,25 @@ panels.Battle = function()
 		TextYAlignment = Enum.TextYAlignment.Top,
 	})
 	if #others == 0 then
-		newLabel(pvpRow, "Nobody else is in this server right now. Invite a friend!", UDim2.new(0, 14, 0, 78), UDim2.new(1, -28, 0, 32), {
+		newLabel(pvpRow, "Nobody else is in this server right now. Invite a friend, or practise below!", UDim2.new(0, 14, 0, 78), UDim2.new(1, -28, 0, 32), {
 			TextSize = 13,
 		})
 	end
+	-- practice against a bot, and whether others may challenge you
+	local practiceY = 78 + math.max(1, shown) * 40 + 6
+	newLabel(pvpRow, "🤖 Practice (no rewards):", UDim2.new(0, 14, 0, practiceY), UDim2.new(0, 190, 0, 34), {
+		TextSize = 13,
+		TextWrapped = false,
+	})
+	for level, settings in ipairs(Duel.PracticeLevels) do
+		newButton(pvpRow, settings.name, UDim2.new(0, 200 + (level - 1) * 112, 0, practiceY), UDim2.new(0, 104, 0, 34), COLORS.button, function()
+			Remotes.PvpPractice:FireServer(level)
+		end).TextSize = 13
+	end
+	local open = state.pvpOpen ~= false
+	newButton(pvpRow, open and "✅ Open to challenges" or "🚫 Not taking challenges", UDim2.new(0, 14, 0, practiceY + 44), UDim2.new(0, 260, 0, 34), open and COLORS.good or COLORS.locked, function()
+		Remotes.PvpOpen:FireServer(not open)
+	end).TextSize = 13
 	for index = 1, shown do
 		local other = others[index]
 		local y = 78 + (index - 1) * 40

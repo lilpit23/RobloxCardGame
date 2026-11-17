@@ -38,6 +38,11 @@ way so the repo stays the whole game.
   the client only gets `Duel.view` and the event list. Battling never uses up cards. After
   changing duel numbers run `node tools/duel-sim.js`. The enemy figures and camera of a duel
   are built on the client (`buildStage`); the server only moves the player to their duel pad.
+  Each card type's hits leave a mark (`Duel.Effects`: bleed, burn, chill/freeze, shock,
+  stagger), shields parry wind-up hits, and enemy kinds (`Duel.Kinds`) add healers, armour,
+  berserkers, venom (poisons you), wards (immune to marks) and summoners. New statuses go in
+  `Duel.view`, `Duel.suggest` (so the Auto battler and coach use them) and the enemy marks on
+  the client.
 - Admins: `isAdmin(player)` on the server (the owner, or a user id in the shared admin list
   kept by `PlayerData.setAdmin`). Only `isOwner` may change that list. Every admin-only remote
   must check `isAdmin` on the server; hiding the tab on the client is not protection.

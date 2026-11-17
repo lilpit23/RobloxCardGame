@@ -21,13 +21,40 @@ Duel.Strong = 1.3 -- damage multiplier when the card's type beats the target's
 Duel.Resisted = 0.75 -- ...and when the target's type beats the card's
 Duel.BossEvery = 10 -- every tenth floor is a boss
 
+-- Every type does its own kind of damage, and a Strike or Blast leaves its mark:
+--   🐾 Beast   Bleed   the target loses a share of the hit at the end of each round; it stacks
+--                       and halves every round
+--   🔮 Mystic  Burn    the target burns for a few rounds (a new burn replaces a weaker one)
+--   ⭐ Star    Chill   enough chills freeze the target: it loses its next turn and its wind-up,
+--                       but takes less damage while frozen
+--   ⚙️ Tech    Shock   ignores armour, and a Strike arcs to a second enemy
+--   ⚔️ Warrior Stagger a hit on an enemy winding up breaks the wind-up and lands harder
+-- And a Shield that takes a wind-up hit parries it: part of what it blocked hits the attacker.
+Duel.Effects = {
+	beast = { name = "Bleed", icon = "🩸", text = "Strikes make the target bleed every round (stacks)" },
+	mystic = { name = "Burn", icon = "♨️", text = "Strikes set the target burning for 3 rounds" },
+	star = { name = "Chill", icon = "❄️", text = "3 chills freeze an enemy: it loses its turn (bosses need 5)" },
+	tech = { name = "Shock", icon = "⚡", text = "Ignores armour; Strikes arc to a second enemy" },
+	warrior = { name = "Stagger", icon = "🔨", text = "Breaks a wind-up and hits it +25% harder" },
+}
+Duel.BleedShare = 0.15 -- of the damage dealt, added to the target's bleed
+Duel.BurnShare = 0.12 -- of the damage dealt, burned each round...
+Duel.BurnRounds = 3 -- ...for this many rounds
+Duel.ChillToFreeze = 3
+Duel.BossChillToFreeze = 5
+Duel.FrozenGuard = 0.3 -- a frozen enemy takes this much less damage
+Duel.ShockArc = 0.3 -- share of a Tech Strike that arcs to another enemy
+Duel.StaggerBonus = 1.25
+Duel.Parry = 0.5 -- share of the damage a shield blocks from a wind-up hit that goes back
+Duel.PoisonShare = 0.4 -- of a venomous enemy's hit, added to your poison
+
 -- What a card does when played. Every card has exactly one role.
 Duel.Roles = {
 	attack = { name = "Strike", icon = "⚔️", target = true },
 	blast = { name = "Blast", icon = "💥" },
 	heal = { name = "Heal", icon = "💚" },
 	shield = { name = "Shield", icon = "🛡️" },
-	charge = { name = "Power-up", icon = "🔥" },
+	charge = { name = "Power-up", icon = "💪" },
 	weaken = { name = "Weaken", icon = "🌀", target = true },
 }
 
@@ -119,15 +146,16 @@ function Duel.card(key)
 	local power = math.max(1, math.floor(10 * math.sqrt(Cards.getIncome(key))))
 	local role = roleOf(def)
 	local amount, text
+	local effect = Duel.Effects[def.type]
 	if role == "attack" then
 		amount = power
-		text = short(amount) .. " damage to one enemy"
+		text = short(amount) .. " damage to one enemy" .. (effect and (" · " .. effect.icon .. " " .. effect.name) or "")
 	elseif role == "blast" then
 		amount = math.max(1, math.floor(power * 0.5))
-		text = short(amount) .. " damage to every enemy"
+		text = short(amount) .. " damage to every enemy" .. (effect and (" · " .. effect.icon .. " " .. effect.name) or "")
 	elseif role == "heal" then
 		amount = math.floor(power * 1.5)
-		text = "Heal " .. short(amount) .. " health"
+		text = "Heal " .. short(amount) .. " health and cure poison"
 	elseif role == "shield" then
 		amount = math.min(0.8, 0.3 + 0.08 * cost)
 		text = "Block " .. percent(amount) .. " of the next hit on you"
@@ -267,6 +295,9 @@ Duel.Kinds = {
 	healer = { name = "💚 Healer", text = "Heals its most hurt ally instead of attacking" },
 	armored = { name = "🛡️ Armoured", text = "Takes 35% less damage" },
 	berserker = { name = "😡 Berserker", text = "Hits harder every round" },
+	venomous = { name = "🐍 Venomous", text = "Its hits poison you; a Heal cures it" },
+	warded = { name = "🔮 Warded", text = "Shrugs off bleed, burn and chill" },
+	summoner = { name = "📯 Summoner", text = "Calls a knocked-out ally back to fight (once each)" },
 }
 Duel.Armor = 0.35
 Duel.HealShare = 0.12 -- of the healed ally's full health
@@ -274,6 +305,7 @@ Duel.BerserkGrowth = 1.12
 Duel.BossRegen = 0.04 -- of the boss's full health, each round (second boss onwards)
 Duel.EnrageBelow = 0.5 -- third boss onwards: below this share of health it hits harder
 Duel.EnrageDamage = 1.4
+Duel.SummonShare = 0.4 -- of its full health, a called-back ally returns with
 
 local function kindFor(floor, index, isBoss)
 	if isBoss or index == 1 then
@@ -286,10 +318,12 @@ local function kindFor(floor, index, isBoss)
 		return "armored"
 	elseif floor >= 18 and roll == 2 then
 		return "berserker"
-	elseif floor >= 26 and roll == 3 then
-		return "healer"
-	elseif floor >= 34 and roll == 4 then
-		return "armored"
+	elseif floor >= 15 and roll == 3 then
+		return "venomous"
+	elseif floor >= 22 and roll == 4 then
+		return "warded"
+	elseif floor >= 30 and roll == 5 then
+		return "summoner"
 	end
 	return "brute"
 end
@@ -315,10 +349,12 @@ function Duel.enemies(floor, power, setId)
 		local kind = kindFor(floor, index, isBoss)
 		local hp = math.max(10, math.floor(power * (isBoss and 6 or 2.5)))
 		local attack = power * (isBoss and 0.55 or 0.32)
-		if kind == "healer" then
+		if kind == "healer" or kind == "summoner" then
 			attack = attack * 0.6
 		elseif kind == "berserker" then
 			attack = attack * 0.7
+		elseif kind == "venomous" then
+			attack = attack * 0.8
 		end
 		list[index] = {
 			name = (isBoss and "👑 " or "") .. SET_PREFIX[setId] .. " " .. def.name,
@@ -334,6 +370,12 @@ function Duel.enemies(floor, power, setId)
 			hp = hp,
 			weak = {}, -- fractions taken off its next attacks
 			winding = false, -- a boss about to land its big hit
+			bleed = 0, -- damage at the end of each round, halving
+			burn = 0, -- damage at the end of each round...
+			burnRounds = 0, -- ...for this many more rounds
+			chill = 0,
+			frozen = false, -- loses its next turn
+			raised = false, -- already called back once by a summoner
 		}
 	end
 	return list
@@ -420,6 +462,7 @@ function Duel.new(floor, deck, rng, mode, enemies)
 		maxHp = health,
 		shields = {}, -- fractions blocked from the next hits
 		charges = {}, -- fractions added to the next attacks
+		poison = 0, -- damage you take at the end of each round, halving
 		enemies = enemies or Duel.enemies(floor),
 		deck = pile,
 		hand = {},
@@ -429,6 +472,10 @@ function Duel.new(floor, deck, rng, mode, enemies)
 	}
 	draw(state, rng)
 	return state
+end
+
+function Duel.chillToFreeze(enemy)
+	return enemy.boss and Duel.BossChillToFreeze or Duel.ChillToFreeze
 end
 
 -- What the client is allowed to see (everything except the order of the draw pile).
@@ -449,6 +496,11 @@ function Duel.view(state)
 			maxHp = enemy.maxHp,
 			weak = #enemy.weak,
 			winding = enemy.winding,
+			bleed = enemy.bleed,
+			burn = enemy.burnRounds > 0 and enemy.burn or 0,
+			chill = enemy.chill,
+			chillMax = Duel.chillToFreeze(enemy),
+			frozen = enemy.frozen,
 		}
 	end
 	return {
@@ -460,6 +512,7 @@ function Duel.view(state)
 		maxHp = state.maxHp,
 		shields = #state.shields,
 		charges = #state.charges,
+		poison = state.poison,
 		enemies = enemies,
 		hand = table.clone(state.hand),
 		deckLeft = #state.deck,
@@ -477,7 +530,39 @@ function Duel.discard(state, handIndex)
 	return true
 end
 
-local function hitEnemy(state, events, card, index, damage)
+-- The bleed, burn or chill a hit leaves (Duel.Effects). Returns a few words for the log.
+local function markEnemy(enemy, card, damage)
+	if card.type == "beast" or card.type == "mystic" or card.type == "star" then
+		if enemy.kind == "warded" then
+			return " (warded)"
+		end
+	end
+	if card.type == "beast" then
+		local added = math.max(1, math.floor(damage * Duel.BleedShare))
+		enemy.bleed = enemy.bleed + added
+		return " 🩸" .. short(enemy.bleed)
+	elseif card.type == "mystic" then
+		local burn = math.max(1, math.floor(damage * Duel.BurnShare))
+		if burn >= enemy.burn or enemy.burnRounds <= 0 then
+			enemy.burn = burn
+		end
+		enemy.burnRounds = Duel.BurnRounds
+		return " ♨️"
+	elseif card.type == "star" then
+		enemy.chill = enemy.chill + 1
+		if enemy.chill >= Duel.chillToFreeze(enemy) then
+			enemy.chill = 0
+			enemy.frozen = true
+			enemy.winding = false
+			return " ❄️ FROZEN!"
+		end
+		return " ❄️" .. enemy.chill .. "/" .. Duel.chillToFreeze(enemy)
+	end
+	return ""
+end
+
+-- arc: this is the second, smaller hit of a Tech Strike (it does not arc again).
+local function hitEnemy(state, events, card, index, damage, arc)
 	local enemy = state.enemies[index]
 	local strong = Cards.typeBeats(card.type, enemy.type)
 	local resisted = Cards.typeBeats(enemy.type, card.type)
@@ -486,13 +571,24 @@ local function hitEnemy(state, events, card, index, damage)
 	elseif resisted then
 		damage = damage * Duel.Resisted
 	end
-	if enemy.armor > 0 then
+	local pierced = card.type == "tech" and enemy.armor > 0
+	if enemy.armor > 0 and not pierced then
 		damage = damage * (1 - enemy.armor)
+	end
+	local staggered = card.type == "warrior" and enemy.winding
+	if staggered then
+		damage = damage * Duel.StaggerBonus
+		enemy.winding = false
+	end
+	if enemy.frozen then
+		damage = damage * (1 - Duel.FrozenGuard)
 	end
 	damage = math.max(1, math.floor(damage))
 	enemy.hp = math.max(0, enemy.hp - damage)
-	local text = card.name .. " hits " .. enemy.name .. " for " .. short(damage)
-	if enemy.armor > 0 then
+	local text = (arc and "⚡ The shock arcs to " or (card.name .. " hits ")) .. enemy.name .. " for " .. short(damage)
+	if pierced then
+		text = text .. " (through armour)"
+	elseif enemy.armor > 0 then
 		text = text .. " (armour)"
 	end
 	if strong then
@@ -500,10 +596,28 @@ local function hitEnemy(state, events, card, index, damage)
 	elseif resisted then
 		text = text .. " (resisted)"
 	end
+	if staggered then
+		text = text .. " 🔨 Wind-up broken!"
+	end
 	if enemy.hp <= 0 then
 		text = text .. "  KO!"
+	elseif not arc then
+		text = text .. markEnemy(enemy, card, damage)
 	end
 	table.insert(events, { kind = "hit", text = text, enemy = index, enemyHp = enemy.hp, damage = damage, strong = strong })
+
+	if card.type == "tech" and card.role == "attack" and not arc then
+		-- a Tech Strike arcs to the healthiest other enemy still standing
+		local other, most = nil, 0
+		for otherIndex, otherEnemy in ipairs(state.enemies) do
+			if otherIndex ~= index and otherEnemy.hp > most then
+				other, most = otherIndex, otherEnemy.hp
+			end
+		end
+		if other then
+			hitEnemy(state, events, card, other, card.amount * Duel.ShockArc, true)
+		end
+	end
 end
 
 -- The living enemy missing the biggest share of its health, or nil if nobody is hurt.
@@ -526,13 +640,52 @@ local function finishRound(state, events, rng)
 	end
 
 	for index, enemy in ipairs(state.enemies) do
-		if enemy.hp > 0 and state.hp > 0 then
+		-- bleeding and burning come first, and can finish an enemy before it acts
+		if enemy.hp > 0 and (enemy.bleed > 0 or enemy.burnRounds > 0) then
+			local damage, parts = 0, {}
+			if enemy.bleed > 0 then
+				damage = damage + enemy.bleed
+				table.insert(parts, "bleeds")
+				enemy.bleed = math.floor(enemy.bleed / 2)
+			end
+			if enemy.burnRounds > 0 then
+				damage = damage + enemy.burn
+				table.insert(parts, "burns")
+				enemy.burnRounds = enemy.burnRounds - 1
+			end
+			enemy.hp = math.max(0, enemy.hp - damage)
+			local text = enemy.name .. " " .. table.concat(parts, " and ") .. " for " .. short(damage)
+			if enemy.hp <= 0 then
+				text = text .. "  KO!"
+			end
+			table.insert(events, { kind = "tick", text = text, enemy = index, enemyHp = enemy.hp, damage = damage })
+		end
+		if enemy.hp > 0 and enemy.frozen and state.hp > 0 then
+			enemy.frozen = false
+			table.insert(events, { kind = "frozen", text = "❄️ " .. enemy.name .. " is frozen solid and loses its turn.", enemy = index })
+		elseif enemy.hp > 0 and state.hp > 0 then
 			if enemy.regen and enemy.hp < enemy.maxHp then
 				enemy.hp = math.min(enemy.maxHp, enemy.hp + math.floor(enemy.maxHp * Duel.BossRegen))
 				table.insert(events, { kind = "mend", text = enemy.name .. " regenerates.", enemy = index, enemyHp = enemy.hp })
 			end
 			local hurtAlly = enemy.kind == "healer" and mostHurt(state) or nil
-			if hurtAlly then
+			local fallen = nil
+			if enemy.kind == "summoner" then
+				for otherIndex, other in ipairs(state.enemies) do
+					if other.hp <= 0 and not other.raised then
+						fallen = otherIndex
+						break
+					end
+				end
+			end
+			if fallen then
+				local ally = state.enemies[fallen]
+				ally.raised = true
+				ally.hp = math.max(1, math.floor(ally.maxHp * Duel.SummonShare))
+				ally.bleed, ally.burn, ally.burnRounds, ally.chill, ally.frozen, ally.winding = 0, 0, 0, 0, false, false
+				ally.weak = {}
+				table.insert(events, { kind = "summon", text = "📯 " .. enemy.name .. " calls " .. ally.name .. " back to fight!", enemy = fallen, enemyHp = ally.hp })
+			elseif hurtAlly then
 				local ally = state.enemies[hurtAlly]
 				ally.hp = math.min(ally.maxHp, ally.hp + math.floor(ally.maxHp * Duel.HealShare))
 				table.insert(events, { kind = "mend", text = enemy.name .. " heals " .. (hurtAlly == index and "itself" or ally.name) .. ".", enemy = hurtAlly, enemyHp = ally.hp })
@@ -542,7 +695,8 @@ local function finishRound(state, events, rng)
 				table.insert(events, { kind = "windup", text = "⚠️ " .. enemy.name .. " is winding up a huge attack!", enemy = index })
 			else
 				local damage = enemy.attack * (0.85 + 0.3 * rng:NextNumber())
-				if enemy.winding then
+				local bigHit = enemy.winding
+				if bigHit then
 					damage = damage * 2.2
 					enemy.winding = false
 				end
@@ -555,12 +709,20 @@ local function finishRound(state, events, rng)
 					damage = damage * (1 - weak)
 				end
 				local blocked = table.remove(state.shields, 1)
+				local parried = 0
 				if blocked then
+					if bigHit then
+						parried = math.floor(damage * blocked * Duel.Parry)
+					end
 					damage = damage * (1 - blocked)
 				end
 				damage = math.max(1, math.floor(damage))
 				state.hp = math.max(0, state.hp - damage)
 				local text = enemy.name .. (enraged and " is enraged and hits you for " or " hits you for ") .. short(damage)
+				if enemy.kind == "venomous" then
+					state.poison = state.poison + math.max(1, math.floor(damage * Duel.PoisonShare))
+					text = text .. " 🐍"
+				end
 				if enemy.kind == "berserker" then
 					enemy.attack = math.max(enemy.attack + 1, math.floor(enemy.attack * Duel.BerserkGrowth))
 				end
@@ -570,8 +732,23 @@ local function finishRound(state, events, rng)
 					text = text .. " (weakened)"
 				end
 				table.insert(events, { kind = "hurt", text = text, enemy = index, hp = state.hp, damage = damage, attack = enemy.attack })
+				if parried > 0 then
+					enemy.hp = math.max(0, enemy.hp - parried)
+					table.insert(events, { kind = "parry", text = "🛡️ Parried! " .. short(parried) .. " goes back at " .. enemy.name .. (enemy.hp <= 0 and "  KO!" or ""), enemy = index, enemyHp = enemy.hp, damage = parried })
+				end
 			end
 		end
+	end
+
+	if state.hp > 0 and firstAlive(state) == nil then
+		state.over, state.win = true, true
+		table.insert(events, { kind = "win", text = "🏆 Victory!" })
+		return
+	end
+	if state.poison > 0 and state.hp > 0 then
+		state.hp = math.max(0, state.hp - state.poison)
+		table.insert(events, { kind = "poison", text = "🐍 Poison hurts you for " .. short(state.poison), hp = state.hp, damage = state.poison })
+		state.poison = math.floor(state.poison / 2)
 	end
 
 	if state.hp <= 0 then
@@ -643,7 +820,9 @@ function Duel.play(state, handIndex, targetIndex, rng)
 	elseif card.role == "heal" then
 		local healed = math.min(card.amount, state.maxHp - state.hp)
 		state.hp = state.hp + healed
-		table.insert(events, { kind = "heal", text = card.name .. " heals you for " .. short(healed), hp = state.hp })
+		local cured = state.poison > 0
+		state.poison = 0
+		table.insert(events, { kind = "heal", text = card.name .. " heals you for " .. short(healed) .. (cured and " and cures the poison" or ""), hp = state.hp })
 	elseif card.role == "shield" then
 		if #state.shields >= Duel.MaxStacks then
 			table.remove(state.shields, 1)
@@ -669,10 +848,53 @@ function Duel.play(state, handIndex, targetIndex, rng)
 	return events
 end
 
+-- How much a hit of `damage` from `card` is worth against one enemy in a view, counting its
+-- bleed / burn / chill / stagger and finishing the enemy off.
+local function hitValue(card, enemy, damage)
+	if Cards.typeBeats(card.type, enemy.type) then
+		damage = damage * Duel.Strong
+	elseif Cards.typeBeats(enemy.type, card.type) then
+		damage = damage * Duel.Resisted
+	end
+	if card.type ~= "tech" then
+		damage = damage * (1 - (enemy.armor or 0))
+	end
+	if enemy.frozen then
+		damage = damage * (1 - Duel.FrozenGuard)
+	end
+	local value = 0
+	if card.type == "warrior" and enemy.winding then
+		damage = damage * Duel.StaggerBonus
+		value = value + enemy.attack * 2 -- the big hit never lands
+	end
+	local hp = enemy.hp - (enemy.bleed or 0) - (enemy.burn or 0) -- what is left after this round's ticks
+	value = value + math.min(damage, math.max(0, hp))
+	if damage >= hp then
+		return value + enemy.attack * 3 -- it stops hitting back
+	end
+	if enemy.kind ~= "warded" then
+		if card.type == "beast" then
+			value = value + damage * Duel.BleedShare * 2
+		elseif card.type == "mystic" and damage * Duel.BurnShare > (enemy.burn or 0) then
+			value = value + (damage * Duel.BurnShare - (enemy.burn or 0)) * Duel.BurnRounds
+		elseif card.type == "star" and (enemy.chill or 0) + 1 >= (enemy.chillMax or Duel.ChillToFreeze) then
+			value = value + enemy.attack * (enemy.winding and 2.2 or 1)
+		end
+	end
+	return value
+end
+
 -- A sensible move for the given view (what Duel.view returns): the Auto battler plays these.
 -- Returns an action for the server: { kind = "play", hand, target } or { kind = "pass" }.
 function Duel.suggest(view)
 	local bestScore, bestHand, bestTarget = 0, nil, nil
+	local incoming, windingUp = 0, false
+	for _, enemy in ipairs(view.enemies) do
+		if enemy.hp > 0 and not enemy.frozen then
+			incoming = math.max(incoming, enemy.attack * (enemy.winding and 2.2 or 1))
+			windingUp = windingUp or enemy.winding
+		end
+	end
 	for handIndex, key in ipairs(view.hand) do
 		local card = Duel.card(key)
 		if card and card.cost <= view.energy then
@@ -680,14 +902,16 @@ function Duel.suggest(view)
 			if card.role == "attack" then
 				for index, enemy in ipairs(view.enemies) do
 					if enemy.hp > 0 then
-						local damage = card.amount * (1 - (enemy.armor or 0))
-						if Cards.typeBeats(card.type, enemy.type) then
-							damage = damage * Duel.Strong
-						elseif Cards.typeBeats(enemy.type, card.type) then
-							damage = damage * Duel.Resisted
+						local value = hitValue(card, enemy, card.amount)
+						if card.type == "tech" then
+							local arc = 0
+							for otherIndex, other in ipairs(view.enemies) do
+								if otherIndex ~= index and other.hp > 0 then
+									arc = math.max(arc, hitValue(card, other, card.amount * Duel.ShockArc))
+								end
+							end
+							value = value + arc
 						end
-						-- finishing an enemy off is worth extra: it stops hitting back
-						local value = math.min(damage, enemy.hp) + (damage >= enemy.hp and enemy.attack * 3 or 0)
 						if value > score then
 							score, target = value, index
 						end
@@ -696,20 +920,14 @@ function Duel.suggest(view)
 			elseif card.role == "blast" then
 				for _, enemy in ipairs(view.enemies) do
 					if enemy.hp > 0 then
-						score = score + math.min(card.amount * (1 - (enemy.armor or 0)), enemy.hp)
+						score = score + hitValue(card, enemy, card.amount)
 					end
 				end
 			elseif card.role == "heal" then
-				score = math.min(card.amount, view.maxHp - view.hp) * 1.2
+				score = (math.min(card.amount, view.maxHp - view.hp) + (view.poison or 0) * 2) * 1.2
 			elseif card.role == "shield" then
 				if view.shields == 0 then
-					local incoming = 0
-					for _, enemy in ipairs(view.enemies) do
-						if enemy.hp > 0 then
-							incoming = math.max(incoming, enemy.attack * (enemy.winding and 2.2 or 1))
-						end
-					end
-					score = incoming * card.amount * 1.5
+					score = incoming * card.amount * (windingUp and 1.5 * (1 + Duel.Parry) or 1.5)
 				end
 			elseif card.role == "charge" then
 				score = view.charges == 0 and 1 or 0

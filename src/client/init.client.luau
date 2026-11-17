@@ -2165,15 +2165,18 @@ local function coachText(suggestion)
 	if card.role == "heal" then
 		return "💚 You are hurt. A Heal card restores your health instead of attacking: the glowing one is a good play now."
 	elseif card.role == "shield" then
-		return winding and "⚠️ The boss is winding up a huge hit. Play the glowing 🛡️ Shield now to block most of it!" or "🛡️ A Shield cuts the next hit on you. Play it before the enemies strike."
+		return winding and "⚠️ The boss is winding up a huge hit. Play the glowing 🛡️ Shield now: it blocks most of it and parries some back!" or "🛡️ A Shield cuts the next hit on you. Play it before the enemies strike."
 	elseif card.role == "charge" then
-		return "🔥 A Power-up makes your NEXT attack much stronger. Play it now, then attack next round."
+		return "💪 A Power-up makes your NEXT attack much stronger. Play it now, then attack next round."
 	elseif card.role == "weaken" then
 		return "🌀 Weaken makes one enemy's next attack much smaller. Use it on whoever hits hardest."
 	elseif card.role == "blast" then
 		return "💥 A Blast hits every enemy at once: best when several are still standing."
 	end
 	local target = suggestion.target and duel.enemies[suggestion.target]
+	if target and target.winding and card.type == "warrior" then
+		return "🔨 Warrior cards stagger: hitting an enemy that is winding up breaks its big attack. Play the glowing card on it!"
+	end
 	if alive > 1 and target and suggestion.target ~= duelTarget then
 		return "🎯 Tap an enemy to aim at it (yellow outline). Try " .. target.name .. ": knocking one out means fewer hits on you."
 	elseif target and Cards.typeBeats(card.type, target.type) then
@@ -2538,11 +2541,26 @@ function renderDuelHud()
 				if enemy.weak > 0 then
 					table.insert(marks, "🌀 x" .. enemy.weak)
 				end
+				if enemy.frozen then
+					table.insert(marks, "🧊 FROZEN")
+				elseif (enemy.chill or 0) > 0 then
+					table.insert(marks, "❄️ " .. enemy.chill .. "/" .. (enemy.chillMax or Duel.ChillToFreeze))
+				end
+				if (enemy.bleed or 0) > 0 then
+					table.insert(marks, "🩸 " .. Duel.short(enemy.bleed))
+				end
+				if (enemy.burn or 0) > 0 then
+					table.insert(marks, "♨️ " .. Duel.short(enemy.burn))
+				end
 				table.insert(marks, "hits for " .. Duel.short(enemy.attack))
 				figure.marks.Text = alive and table.concat(marks, "  ·  ") or ""
 				figure.stroke.Enabled = alive and index == duelTarget
 				figure.glow.OutlineColor = (alive and index == duelTarget) and TARGET_GLOW or (TYPE_GLOW[enemy.type] or Color3.new(1, 1, 1))
-				if not alive and not figure.down then
+				if alive and figure.down then
+					-- a summoner called it back
+					figure.down = false
+					TweenService:Create(figure.part, TweenInfo.new(0.5), { CFrame = figure.home, Transparency = 0 }):Play()
+				elseif not alive and not figure.down then
 					figure.down = true
 					TweenService:Create(figure.part, TweenInfo.new(0.5), {
 						CFrame = figure.home * CFrame.new(0, -figure.part.Size.Y / 2 + 0.3, 2) * CFrame.Angles(math.rad(-85), 0, 0),
@@ -2570,7 +2588,10 @@ function renderDuelHud()
 		extras = extras .. "   🛡️ x" .. duel.shields
 	end
 	if duel.charges > 0 then
-		extras = extras .. "   🔥 x" .. duel.charges
+		extras = extras .. "   💪 x" .. duel.charges
+	end
+	if (duel.poison or 0) > 0 then
+		extras = extras .. "   🐍 " .. Duel.short(duel.poison) .. " poison"
 	end
 	newLabel(status, extras, UDim2.new(0, 10, 0, 26), UDim2.new(0, 236, 0, 16), { TextSize = 12, TextColor3 = COLORS.dim })
 	newLabel(status, "⚡ " .. duel.energy .. " / " .. Duel.MaxEnergy, UDim2.new(0, 254, 0, 0), UDim2.new(0, 100, 1, 0), {
@@ -2759,7 +2780,19 @@ function duelAct(action)
 			if figure then
 				lungeEffect(figure, "-" .. Duel.short(event.damage or 0))
 			end
-		elseif event.kind == "mend" then
+		elseif event.kind == "tick" or event.kind == "parry" then
+			playSound("hit")
+			if figure then
+				floatText(figure.home.Position + Vector3.new(0, 2, 0), "-" .. Duel.short(event.damage or 0), event.kind == "parry" and Color3.fromRGB(120, 200, 255) or Color3.fromRGB(255, 120, 90))
+			end
+		elseif event.kind == "frozen" then
+			if figure then
+				floatText(figure.home.Position + Vector3.new(0, 2, 0), "❄️", Color3.fromRGB(150, 220, 255))
+			end
+		elseif event.kind == "poison" then
+			playSound("hit")
+			flashScreen(Color3.fromRGB(120, 200, 60))
+		elseif event.kind == "mend" or event.kind == "summon" then
 			if figure then
 				floatText(figure.home.Position + Vector3.new(0, 2, 0), "+", Color3.fromRGB(120, 255, 150))
 			end
@@ -2944,7 +2977,7 @@ panels.Battle = function()
 
 	-- how battles work: open for anyone who has never fought, a tap away for everyone else
 	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
-	local helpRow = newRow(3, showHelp and 318 or 40)
+	local helpRow = newRow(3, showHelp and 400 or 40)
 	helpRow.BackgroundTransparency = showHelp and 0 or 1
 	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
 		battleHelp = not showHelp
@@ -2959,10 +2992,14 @@ panels.Battle = function()
 			"",
 			"⚔️ Strike: damage to one enemy          💥 Blast: damage to every enemy",
 			"💚 Heal: restores your health               🛡️ Shield: blocks most of the next hit on you",
-			"🔥 Power-up: your next attack is stronger   🌀 Weaken: an enemy's next attack is smaller",
+			"💪 Power-up: your next attack is stronger   🌀 Weaken: an enemy's next attack is smaller",
 			"",
 			"Types:  ⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️.  Beating a type deals +30%, the reverse −25%.",
-			"Bosses (every 10th floor) warn you one round before a huge hit: shield up or finish them.",
+			"Each type's Strikes and Blasts also leave a mark:",
+			"🐾 🩸 Bleed (stacks)   🔮 ♨️ Burn (3 rounds)   ⭐ ❄️ Chill (3 freeze an enemy for a turn)",
+			"⚙️ ⚡ Shock (ignores armour, Strikes arc)   ⚔️ 🔨 Stagger (breaks a wind-up)",
+			"Bosses (every 10th floor) warn you one round before a huge hit: shield up to block and parry it, stagger it, freeze it or finish it.",
+			"Watch for 🐍 Venomous enemies (Heal cures poison), 🔮 Warded ones (no bleed, burn or chill) and 📯 Summoners.",
 			"✖ throws a card away for free. Your first battles come with a coach that points out a good move.",
 		}, "\n"), UDim2.new(0, 14, 0, 42), UDim2.new(1, -28, 1, -48), {
 			TextSize = 13,

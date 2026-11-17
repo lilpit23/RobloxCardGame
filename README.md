@@ -51,9 +51,12 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     every tenth floor. You build a 20-card battle deck from cards you own (they are not used
     up). Each round you gain 1 energy and play one card from a hand of five: strikes, blasts,
     heals, shields, power-ups and weakens. Rarer cards cost more energy. Each type deals +30%
-    damage to the next one in the cycle. Duels are staged on your duel pad in the arena: the
-    enemies stand as giant shadow cards, themed on the sets, and some heal, wear armour or go
-    berserk. Beating a boss for the first time drops a Legendary card. A daily challenge gives
+    damage to the next one in the cycle, and each type's hits leave a mark: Beasts bleed,
+    Mystics burn, Stars chill (three chills freeze an enemy for a turn), Tech shocks through
+    armour and arcs, Warriors stagger a boss's wind-up. A shield that takes a wind-up hit
+    parries part of it back. Duels are staged on your duel pad in the arena: the enemies stand
+    as giant shadow cards, themed on the sets, and some heal, wear armour, go berserk, poison
+    you, shrug off marks or call fallen allies back. Beating a boss for the first time drops a Legendary card. A daily challenge gives
     everyone the same preset deck for aura and a free booster. `node tools/duel-sim.js` shows
     how far different collections get.
     Keyboard: **1-5** play a card, **Tab** aims, **Space** passes (gamepad: **RB** aims, **X**

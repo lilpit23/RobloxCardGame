@@ -12,9 +12,11 @@ Quests.Types = {
 	sell = { text = "Sell %s cards", goals = { 5, 10, 20 } },
 	fuse = { text = "Fuse cards %s times", goals = { 1, 2, 3 } },
 	collect = { text = "Earn %s from your display stands", cash = true },
+	win_battles = { text = "Win %s battles (tower, challenge, co-op or duels)", goals = { 1, 2, 3 } },
+	play_cards = { text = "Play %s cards in battles", goals = { 10, 20, 30 } },
 }
 
-Quests.Order = { "open_packs", "pull_rare", "sell", "fuse", "collect" }
+Quests.Order = { "open_packs", "pull_rare", "sell", "fuse", "collect", "win_battles", "play_cards" }
 
 function Quests.today()
 	return math.floor(os.time() / 86400)

@@ -2504,6 +2504,9 @@ local function autoStep()
 		end
 		return
 	end
+	if duel.mode == "coop" and (duel.hp <= 0 or duel.chosen) then
+		return -- down, or already waiting for the team
+	end
 	duelAct(Duel.suggest(duel))
 end
 
@@ -2556,7 +2559,7 @@ function renderDuelHud()
 	end
 	local pvp = duel.mode == "pvp"
 	local coop = duel.mode == "coop"
-	autoButton.Visible = autoUnlocked() and not pvp and not coop
+	autoButton.Visible = autoUnlocked() and not pvp
 	autoButton.Text = duelAuto and "🤖 Auto: ON" or "🤖 Auto: OFF"
 	autoButton.BackgroundColor3 = duelAuto and COLORS.good or COLORS.locked
 	duelTitle.Text = duelTitleText()
@@ -2759,7 +2762,7 @@ function renderDuelHud()
 
 	-- the coach, for a player's first few duels
 	local suggestion = nil
-	if learningDuels() and not duelAuto and not duelBusy and not pvp and not coop then
+	if learningDuels() and not duelAuto and not duelBusy and not pvp and not (coop and (duel.chosen or duel.hp <= 0)) then
 		suggestion = Duel.suggest(duel)
 		local coach = make("TextLabel", {
 			Position = UDim2.new(0, 0, 0, -50),
@@ -3044,7 +3047,10 @@ function enterDuel(view, spot)
 	duelBusy = false
 	deckEditing = false
 	if view.mode == "pvp" or view.mode == "coop" then
-		duelAuto = false
+		duelAuto = view.mode == "coop" and duelAuto
+		if view.mode == "pvp" then
+			duelAuto = false
+		end
 		pvpDeadline = os.clock() + (view.timeLeft or Duel.PvpTurnTime)
 	end
 	window.Visible = false
@@ -3222,7 +3228,7 @@ panels.Battle = function()
 		TextSize = 17,
 		TextColor3 = Color3.fromRGB(200, 170, 255),
 	})
-	newLabel(pvpRow, "🤝 Team up to fight your next tower floor together (it counts for everyone whose next floor it is; helpers get bonus aura). ⚔️ Challenge for a duel: nothing at stake, cards hit by rarity, first win each day pays " .. Format.short(Quests.reward(state.rebirths)) .. " aura.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 44), {
+	newLabel(pvpRow, "🤝 Team up to fight your next tower floor together side by side on your duel pad (it counts for everyone whose next floor it is; helpers get bonus aura). ⚔️ Challenge for a duel: nothing at stake, cards hit by rarity, first win each day pays " .. Format.short(Quests.reward(state.rebirths)) .. " aura.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 44), {
 		TextSize = 12,
 		TextColor3 = COLORS.dim,
 		TextYAlignment = Enum.TextYAlignment.Top,

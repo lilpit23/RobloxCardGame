@@ -96,7 +96,7 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     (Battle screen) spends aura on Vitality, Might, Guard and Restoration for player duels only.
     Alone in a server? Practise player-duel rules against an Apprentice, Adept or Master bot
     (no rewards). A Rematch button ends every duel, and you can switch challenges off.
-    **Co-op:** 🤝 Team up with someone to fight your next tower floor together, each with your
+    **Co-op:** 🤝 Team up with someone to fight your next tower floor together on your duel pad, each with your
     own hand and health. Enemies are tougher for a team, Heals go to whoever is most hurt, and
     a win counts for everyone whose next floor it was (others get helper aura).
 18. **Card roles:** not every card attacks. Each type has its own mix of Strikes, Blasts, Heals,

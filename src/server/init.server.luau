@@ -1627,6 +1627,7 @@ local function finishPvp(match)
 			data.stats.duels = (data.stats.duels or 0) + 1
 			data.stats.pvpDuels = (data.stats.pvpDuels or 0) + 1
 			if match.state.winner == side then
+				questProgress(player, "win_battles", 1)
 				data.stats.pvpWins = (data.stats.pvpWins or 0) + 1
 				local today = Quests.today()
 				if data.pvpDay ~= today then
@@ -1690,6 +1691,7 @@ local function finishCoop(match)
 		if data and not hero.left then
 			data.stats.duels = (data.stats.duels or 0) + 1
 			if match.state.win then
+				questProgress(player, "win_battles", 1)
 				if match.floor == data.tower + 1 then
 					clearFloor(player, data, match.floor, extras[side])
 				else
@@ -1846,10 +1848,11 @@ PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
 			if pvpInvites[who] then
 				table.clear(pvpInvites[who])
 			end
-			local spot = Plots.getDuelSpot(session.plot)
+			-- the whole team stands side by side on the inviter's duel pad
+			local spot = Plots.getDuelSpot(sessions[players[1]].plot)
 			local character = who.Character
 			if character and character:FindFirstChild("HumanoidRootPart") then
-				character:PivotTo(spot + Vector3.new(0, 3, 0))
+				character:PivotTo(spot * CFrame.new((side - 1.5) * 5, 3, 0))
 			end
 			PvpStartRemote:FireClient(who, pvpViewFor(match, side), spot)
 		end
@@ -1928,7 +1931,7 @@ end)
 
 -- A move in a player duel (called from DuelAct). Picking a card or passing only locks the move
 -- in; the round's events arrive later through PvpRound.
-local function pvpAct(session, action)
+local function pvpAct(player, session, action)
 	local match, side = session.pvp.match, session.pvp.side
 	if match.coop and action.kind ~= "flee" then
 		if action.kind == "discard" then
@@ -1940,6 +1943,9 @@ local function pvpAct(session, action)
 			local ok, problem = Duel.coopChoose(match.state, side, { kind = action.kind, hand = action.hand, target = action.target })
 			if not ok then
 				return { ok = false, error = problem }
+			end
+			if action.kind == "play" then
+				questProgress(player, "play_cards", 1)
 			end
 			return { ok = true, waiting = true, view = pvpViewFor(match, side) }
 		end
@@ -1957,6 +1963,9 @@ local function pvpAct(session, action)
 		local ok, problem = Duel.pvpChoose(match.state, side, { kind = action.kind, hand = action.hand })
 		if not ok then
 			return { ok = false, error = problem }
+		end
+		if action.kind == "play" then
+			questProgress(player, "play_cards", 1)
 		end
 		return { ok = true, waiting = true, view = pvpViewFor(match, side) }
 	end
@@ -1980,7 +1989,7 @@ DuelActRemote.OnServerInvoke = function(player, action)
 		return { ok = false, error = "Pick a card from your hand." }
 	end
 	if session.pvp then
-		return pvpAct(session, action)
+		return pvpAct(player, session, action)
 	end
 	local duel = session.duel
 	if duel == nil then
@@ -1993,6 +2002,9 @@ DuelActRemote.OnServerInvoke = function(player, action)
 	local events, problem
 	if action.kind == "play" then
 		events, problem = Duel.play(duel, hand, target, rng)
+		if events then
+			questProgress(player, "play_cards", 1)
+		end
 	elseif action.kind == "pass" then
 		events, problem = Duel.pass(duel, rng)
 	elseif action.kind == "discard" then
@@ -2012,6 +2024,9 @@ DuelActRemote.OnServerInvoke = function(player, action)
 	if duel.over then
 		session.duel = nil
 		data.stats.duels = (data.stats.duels or 0) + 1 -- the Auto battler unlocks after the first
+		if duel.win then
+			questProgress(player, "win_battles", 1)
+		end
 		-- data.tower is re-checked so a floor can only ever pay out once
 		if duel.win and duel.mode == "daily" then
 			-- pays once a day; replays are just for fun

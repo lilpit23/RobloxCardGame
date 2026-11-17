@@ -88,6 +88,17 @@ for _, entry in ipairs({
 	end)
 end
 
+for _, entry in ipairs({
+	{ 1, "Duelist" },
+	{ 10, "Arena Victor" },
+	{ 50, "Grand Duelist" },
+}) do
+	local wins = entry[1]
+	add("pvp_" .. wins, entry[2], "Win " .. wins .. " player duel" .. (wins == 1 and "" or "s"), 0, 2 * wins, function(profile)
+		return ((profile.stats and profile.stats.pvpWins) or 0) >= wins
+	end)
+end
+
 -- Titles the profile qualifies for but has not been given yet. profile needs: collection,
 -- tower, rebirths. owned = data.titles.
 function Titles.newlyEarned(profile, owned)

@@ -70,7 +70,7 @@ local state = {
 	boosts = { luckUntil = 0, cashUntil = 0 },
 	showcase = { left = "", right = "" },
 	packsOpened = 0,
-	stats = { fused = 0, earned = 0, duels = 0 },
+	stats = { fused = 0, earned = 0, duels = 0, pvpWins = 0, pvpDuels = 0 },
 	achievements = {},
 	packCounts = {},
 	autoPack = { packId = "", on = false, sell = 0 },
@@ -757,7 +757,7 @@ end
 local currentPanel = nil
 local renderPanel -- defined below; panels call it to refresh themselves
 local openPanel -- defined below
-local renderDuelHud, duelAct -- the duel screen, defined with the Battle panel
+local renderDuelHud, duelAct, duelTitleText, playResult -- the duel screen, defined with the Battle panel
 local renderedRev = -1
 local panels = {}
 
@@ -2138,7 +2138,7 @@ local deckEditing = false
 local stage = nil -- the 3D scene: { folder, spot, figures = { { part, home, gui, ... } } }
 local duelAuto = false -- the Auto battler is playing for you
 local autoToken = 0 -- changes whenever a duel ends, so a queued "next floor" can tell it is stale
-local startDuel -- defined below
+local startDuel, enterDuel -- defined below
 local battleHelp = false -- the "How battles work" box in the lobby is open
 
 -- New duellists get a coach: a line of advice each round and a glow on a good move.
@@ -2505,16 +2505,41 @@ autoButton.Activated:Connect(function()
 	end
 end)
 
+-- The duel's title line; player duels show the time left to pick a move.
+local pvpDeadline = 0
+function duelTitleText()
+	if duel.mode == "pvp" then
+		local opponent = duel.enemies[1] and duel.enemies[1].name or "?"
+		local text = "🤺 vs " .. opponent .. "  ·  Round " .. duel.round
+		if not duelEnding then
+			text = text .. "  ·  ⏳ " .. math.max(0, math.ceil(pvpDeadline - os.clock())) .. "s"
+		end
+		return text
+	end
+	return (duel.mode == "daily" and "📅 Daily challenge" or ("⚔️ Floor " .. duel.floor)) .. "  ·  Round " .. duel.round
+end
+task.spawn(function()
+	while true do
+		task.wait(0.5)
+		if duel and duel.mode == "pvp" then
+			duelTitle.Text = duelTitleText()
+		end
+	end
+end)
+
 function renderDuelHud()
 	if duel == nil then
 		return
 	end
-	autoButton.Visible = autoUnlocked()
+	local pvp = duel.mode == "pvp"
+	autoButton.Visible = autoUnlocked() and not pvp
 	autoButton.Text = duelAuto and "🤖 Auto: ON" or "🤖 Auto: OFF"
 	autoButton.BackgroundColor3 = duelAuto and COLORS.good or COLORS.locked
-	local daily = duel.mode == "daily"
-	duelTitle.Text = (daily and "📅 Daily challenge" or ("⚔️ Floor " .. duel.floor)) .. "  ·  Round " .. duel.round
-	duelLogLabel.Text = #duelLog > 0 and table.concat(duelLog, "\n") or "Tap an enemy to aim, then play a card. Rarer cards cost more ⚡ — Pass to save up."
+	duelTitle.Text = duelTitleText()
+	duelLogLabel.Text = #duelLog > 0 and table.concat(duelLog, "\n") or (pvp and "Both of you pick a card in secret, then the moves play out. Cards hit by rarity here, not income." or "Tap an enemy to aim, then play a card. Rarer cards cost more ⚡ — Pass to save up.")
+	if pvp and duel.chosen and not duelEnding then
+		duelLogLabel.Text = duelLogLabel.Text .. "\n⏳ Move locked in. Waiting for " .. (duel.enemies[1] and duel.enemies[1].name or "your opponent") .. "…"
+	end
 
 	-- the figures in the arena
 	if stage then
@@ -2552,7 +2577,17 @@ function renderDuelHud()
 				if (enemy.burn or 0) > 0 then
 					table.insert(marks, "♨️ " .. Duel.short(enemy.burn))
 				end
-				table.insert(marks, "hits for " .. Duel.short(enemy.attack))
+				if pvp then
+					if (enemy.shields or 0) > 0 then
+						table.insert(marks, "🛡️ x" .. enemy.shields)
+					end
+					if (enemy.charges or 0) > 0 then
+						table.insert(marks, "💪 x" .. enemy.charges)
+					end
+					table.insert(marks, enemy.ready and "✅ ready" or "🤔 choosing")
+				else
+					table.insert(marks, "hits for " .. Duel.short(enemy.attack))
+				end
 				figure.marks.Text = alive and table.concat(marks, "  ·  ") or ""
 				figure.stroke.Enabled = alive and index == duelTarget
 				figure.glow.OutlineColor = (alive and index == duelTarget) and TARGET_GLOW or (TYPE_GLOW[enemy.type] or Color3.new(1, 1, 1))
@@ -2592,6 +2627,17 @@ function renderDuelHud()
 	end
 	if (duel.poison or 0) > 0 then
 		extras = extras .. "   🐍 " .. Duel.short(duel.poison) .. " poison"
+	end
+	if (duel.bleed or 0) > 0 then
+		extras = extras .. "   🩸 " .. duel.bleed
+	end
+	if (duel.burn or 0) > 0 then
+		extras = extras .. "   ♨️ " .. duel.burn
+	end
+	if duel.frozen then
+		extras = extras .. "   🧊 frozen"
+	elseif (duel.chill or 0) > 0 then
+		extras = extras .. "   ❄️ " .. duel.chill
 	end
 	newLabel(status, extras, UDim2.new(0, 10, 0, 26), UDim2.new(0, 236, 0, 16), { TextSize = 12, TextColor3 = COLORS.dim })
 	newLabel(status, "⚡ " .. duel.energy .. " / " .. Duel.MaxEnergy, UDim2.new(0, 254, 0, 0), UDim2.new(0, 100, 1, 0), {
@@ -2641,14 +2687,14 @@ function renderDuelHud()
 		duelAct({ kind = "pass" })
 	end)
 	passButton.TextSize = 14
-	newButton(status, "Flee", UDim2.new(0, 544, 0, 5), UDim2.new(0, 88, 0, 36), COLORS.locked, function()
+	newButton(status, pvp and "Forfeit" or "Flee", UDim2.new(0, 544, 0, 5), UDim2.new(0, 88, 0, 36), COLORS.locked, function()
 		duelAuto = false
 		duelAct({ kind = "flee" })
 	end).TextSize = 14
 
 	-- the coach, for a player's first few duels
 	local suggestion = nil
-	if learningDuels() and not duelAuto and not duelBusy then
+	if learningDuels() and not duelAuto and not duelBusy and not pvp then
 		suggestion = Duel.suggest(duel)
 		local coach = make("TextLabel", {
 			Position = UDim2.new(0, 0, 0, -50),
@@ -2672,8 +2718,9 @@ function renderDuelHud()
 
 	local aim = duel.enemies[duelTarget]
 	local handCount = #duel.hand
+	local cardFor = pvp and Duel.pvpCard or Duel.card
 	for index, key in ipairs(duel.hand) do
-		local card = Duel.card(key)
+		local card = cardFor(key)
 		if card then
 			local cell = make("Frame", {
 				Position = UDim2.new(0.5, (index - (handCount + 1) / 2) * 128 - 62, 0, 52),
@@ -2744,7 +2791,28 @@ function duelAct(action)
 		end
 		return
 	end
+	if result.waiting then
+		-- a player duel: the move is locked in, and the round arrives through PvpRound
+		if duel then
+			duel.chosen = true
+			renderDuelHud()
+		end
+		return
+	end
+	playResult(result)
+end
+
+-- Play back a round's events (from DuelAct, or PvpRound in a player duel), then show the
+-- new state.
+function playResult(result)
+	if duel == nil then
+		return
+	end
+	duelBusy = true
 	local final = result.view
+	if final.timeLeft then
+		pvpDeadline = os.clock() + final.timeLeft
+	end
 	if final.fled then
 		leaveDuel()
 		openPanel("Battle")
@@ -2835,7 +2903,17 @@ function duelAct(action)
 		end
 	end
 	if duel.over then
-		if duel.win and duel.mode == "daily" then
+		if duel.mode == "pvp" then
+			local opponent = duel.enemies[1] and duel.enemies[1].name or "your opponent"
+			if duel.win then
+				duelEnding = "🏆 You beat " .. opponent .. "!" .. (result.aura and ("  +" .. Format.short(result.aura) .. " aura (first win today)") or "")
+				playSound("bigPull")
+			elseif final.draw then
+				duelEnding = "🤝 A draw with " .. opponent .. "."
+			else
+				duelEnding = "💀 " .. opponent .. " wins this duel. Rematch?"
+			end
+		elseif duel.win and duel.mode == "daily" then
 			if result.aura then
 				duelEnding = "🏆 Challenge complete!  +" .. Format.short(result.aura) .. " aura" .. (result.gift and " and a free booster 🎁" or "")
 			else
@@ -2875,21 +2953,92 @@ function startDuel(mode)
 		end
 		return
 	end
-	duel = result.view
+	enterDuel(result.view, result.spot)
+end
+
+-- Show the duel screen and stage for a duel that has just started.
+function enterDuel(view, spot)
+	battling = true
+	duel = view
 	duelTarget = 1
 	duelLog = {}
 	duelEnding = nil
 	duelBusy = false
 	deckEditing = false
+	if view.mode == "pvp" then
+		duelAuto = false
+		pvpDeadline = os.clock() + (view.timeLeft or Duel.PvpTurnTime)
+	end
 	window.Visible = false
 	currentPanel = nil
 	hud.Visible = false
 	duelGui.Visible = true
-	buildStage(result.spot, duel)
-	aimCamera(result.spot)
+	buildStage(spot, duel)
+	aimCamera(spot)
 	renderDuelHud()
 	task.defer(autoStep)
 end
+
+-- Player duels: someone accepted a challenge, a round was played, or you were challenged.
+Remotes.PvpStart.OnClientEvent:Connect(function(view, spot)
+	if duel then
+		leaveDuel()
+	end
+	enterDuel(view, spot)
+end)
+
+Remotes.PvpRound.OnClientEvent:Connect(function(result)
+	if duel == nil or duel.mode ~= "pvp" or type(result) ~= "table" then
+		return
+	end
+	playResult(result)
+end)
+
+local inviteBox = make("Frame", {
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.new(0.5, 0, 0, 80),
+	Size = UDim2.new(0, 380, 0, 104),
+	BackgroundColor3 = Color3.fromRGB(34, 26, 52),
+	BorderSizePixel = 0,
+	Visible = false,
+}, screen)
+round(inviteBox, 12)
+make("UIStroke", { Color = Color3.fromRGB(150, 95, 230), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, inviteBox)
+local inviteText = newLabel(inviteBox, "", UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 44), {
+	Font = Enum.Font.FredokaOne,
+	TextSize = 17,
+	TextXAlignment = Enum.TextXAlignment.Center,
+})
+local inviteFrom = nil -- the Player whose challenge is showing
+local function answerInvite(accept)
+	if inviteFrom then
+		Remotes.PvpRespond:FireServer(inviteFrom, accept)
+	end
+	inviteFrom = nil
+	inviteBox.Visible = false
+end
+newButton(inviteBox, "⚔️ Accept", UDim2.new(0, 14, 0, 58), UDim2.new(0.5, -21, 0, 38), COLORS.good, function()
+	answerInvite(true)
+end)
+newButton(inviteBox, "Decline", UDim2.new(0.5, 7, 0, 58), UDim2.new(0.5, -21, 0, 38), COLORS.locked, function()
+	answerInvite(false)
+end)
+
+Remotes.PvpInvite.OnClientEvent:Connect(function(from, name, seconds)
+	if duel then
+		return -- busy: the challenge lapses on its own
+	end
+	inviteFrom = from
+	inviteText.Text = "🤺 " .. tostring(name) .. " challenges you to a duel!\nNothing is at stake: it's for glory."
+	inviteBox.Visible = true
+	playSound("flip")
+	task.delay(tonumber(seconds) or 30, function()
+		if inviteFrom == from then
+			inviteFrom = nil
+			inviteBox.Visible = false
+		end
+	end)
+end)
 
 panels.Battle = function()
 	renderedTower = state.tower
@@ -2975,9 +3124,48 @@ panels.Battle = function()
 		startDuel("daily")
 	end)
 
+	-- player duels: challenge anyone in the server; nothing is at stake
+	local others = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other ~= player then
+			table.insert(others, other)
+		end
+	end
+	local shown = math.min(#others, 8)
+	local pvpRow = newRow(3, 78 + math.max(1, shown) * 40)
+	pvpRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
+	local stats = state.stats or {}
+	newLabel(pvpRow, "🤺 Player duels  ·  " .. (stats.pvpWins or 0) .. " won of " .. (stats.pvpDuels or 0), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 17,
+		TextColor3 = Color3.fromRGB(200, 170, 255),
+	})
+	newLabel(pvpRow, "Challenge someone in this server with your battle deck. Nothing is at stake, and cards hit by rarity (not income), so skill and deck matter. Your first win each day pays " .. Format.short(Quests.reward(state.rebirths)) .. " aura.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 44), {
+		TextSize = 12,
+		TextColor3 = COLORS.dim,
+		TextYAlignment = Enum.TextYAlignment.Top,
+	})
+	if #others == 0 then
+		newLabel(pvpRow, "Nobody else is in this server right now. Invite a friend!", UDim2.new(0, 14, 0, 78), UDim2.new(1, -28, 0, 32), {
+			TextSize = 13,
+		})
+	end
+	for index = 1, shown do
+		local other = others[index]
+		local y = 78 + (index - 1) * 40
+		newLabel(pvpRow, other.DisplayName, UDim2.new(0, 14, 0, y), UDim2.new(1, -190, 0, 34), {
+			TextSize = 14,
+			TextWrapped = false,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		newButton(pvpRow, "⚔️ Challenge", UDim2.new(1, -160, 0, y + 2), UDim2.new(0, 148, 0, 32), Color3.fromRGB(150, 95, 230), function()
+			Remotes.PvpChallenge:FireServer(other)
+		end).TextSize = 13
+	end
+
 	-- how battles work: open for anyone who has never fought, a tap away for everyone else
 	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
-	local helpRow = newRow(3, showHelp and 400 or 40)
+	local helpRow = newRow(4, showHelp and 440 or 40)
 	helpRow.BackgroundTransparency = showHelp and 0 or 1
 	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
 		battleHelp = not showHelp
@@ -3000,6 +3188,8 @@ panels.Battle = function()
 			"⚙️ ⚡ Shock (ignores armour, Strikes arc)   ⚔️ 🔨 Stagger (breaks a wind-up)",
 			"Bosses (every 10th floor) warn you one round before a huge hit: shield up to block and parry it, stagger it, freeze it or finish it.",
 			"Watch for 🐍 Venomous enemies (Heal cures poison), 🔮 Warded ones (no bleed, burn or chill) and 📯 Summoners.",
+			"Player duels: both pick in secret each round. Your school is your deck's main type. Shields parry 30% back;",
+			"⚡ Tech drains 1 energy, 🔨 Warrior breaks all shields (+15%), ❄️ 5 chills freeze a player.",
 			"✖ throws a card away for free. Your first battles come with a coach that points out a good move.",
 		}, "\n"), UDim2.new(0, 14, 0, 42), UDim2.new(1, -28, 1, -48), {
 			TextSize = 13,
@@ -3011,7 +3201,7 @@ panels.Battle = function()
 	local saved = Duel.usableDeck(state, state.battleDeck)
 	local automatic = #saved == 0
 	local deck = automatic and Duel.autoDeck(state) or saved
-	local deckRow = newRow(4, 46)
+	local deckRow = newRow(5, 46)
 	newLabel(deckRow, "Battle deck: " .. #deck .. "/" .. Duel.DeckSize .. (automatic and " (automatic)" or "") .. "   ·   " .. Duel.short(Duel.deckHealth(deck)) .. " health", UDim2.new(0, 14, 0, 0), UDim2.new(1, -300, 1, 0), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 15,
@@ -3058,7 +3248,7 @@ panels.Battle = function()
 		for index, card in ipairs(options) do
 			local have = inDeck[card.key] or 0
 			local most = math.min(owned[card.key], Duel.MaxCopies)
-			fillLazily(newRow(5 + index, 40), function(row)
+			fillLazily(newRow(6 + index, 40), function(row)
 				newCardLine(row, card.key, UDim2.new(0, 12, 0, 2), UDim2.new(1, -190, 0, 18))
 				newLabel(row, roleLine(card) .. "  ·  " .. card.text, UDim2.new(0, 12, 0, 20), UDim2.new(1, -190, 0, 16), {
 					TextSize = 11,

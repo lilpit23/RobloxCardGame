@@ -141,7 +141,7 @@ flatter rarity and effect multipliers, Auto Packer perk, simulator models the ca
   the cash-only upgrades (Lucky Charms, Aura Luck, Auto Collector) moved onto staff too.
 - Trading and the market were removed on purpose. Do not bring them back.
 
-## Track B — battles (PvE only; the owner has ruled out PvP and stealing for now)
+## Track B — battles (the owner has ruled out stealing; PvP is opt-in duels with nothing at stake)
 
 Done: card types with a five-way advantage cycle; turn-based duels (`Duel.luau`, pure and
 server-run): a saved 20-card battle deck, energy, a hand of five, six card roles, 50 floors with a
@@ -163,7 +163,8 @@ in `PlayerData.luau`, boards on the plaza island).
   KO; Mystic: hits the back row; Tech: shield; Star: buffs allies) to give fights more texture.
 - [ ] **B5 Bosses and raids.** Every tenth tower floor is a boss with a unique card reward; a
   co-op server-wide raid boss everyone attacks during an event.
-- On hold until the owner asks: PvP duels, staked duels, ranked ladder.
+- Done: opt-in player duels (no stakes, rarity-based card power, daily first-win aura, titles).
+- On hold until the owner asks: staked duels, ranked ladder.
 
 ## Track U — interface and feel
 

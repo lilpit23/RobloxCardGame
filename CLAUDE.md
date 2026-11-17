@@ -48,8 +48,13 @@ way so the repo stays the whole game.
   must check `isAdmin` on the server; hiding the tab on the client is not protection.
 - Global leaderboards use OrderedDataStores, and like every DataStore call they live in
   `PlayerData.luau`. Titles are data in `Titles.luau`; earned ones are saved in `data.titles`.
-- No stealing, no PvP, and no trading or market either (owner's decisions; trading and the
-  market were removed). Cards never move between players.
+- No stealing, and no trading or market either (owner's decisions; trading and the
+  market were removed). Cards never move between players. The only PvP is opt-in player
+  duels (owner's decision): one player challenges, the other accepts, nothing is at stake (no
+  cards or currency change hands, only a daily first-win aura reward), and cards fight by
+  rarity (`Duel.pvpCard`), not income. The rules are `Duel.pvp*`; the server runs one loop per
+  match (`runPvp`) and sends each round through `PvpRound`. Run `node tools/pvp-sim.js` after
+  changing PvP numbers.
 - A new set every rebirth: a set's packs unlock by rebirth count (`pack.rebirths`,
   `Packs.unlocked`), not by store tier. The store tier only gives the income multiplier and
   shelves. Rebirth costs in `Rebirth.luau` assume this, and each level's required cards must

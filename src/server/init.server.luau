@@ -65,6 +65,11 @@ local DailyClaimRemote = newRemote("RemoteEvent", "DailyClaim")
 local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
 local DuelStartRemote = newRemote("RemoteFunction", "DuelStart")
 local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
+local PvpChallengeRemote = newRemote("RemoteEvent", "PvpChallenge")
+local PvpRespondRemote = newRemote("RemoteEvent", "PvpRespond")
+local PvpInviteRemote = newRemote("RemoteEvent", "PvpInvite") -- server -> client
+local PvpStartRemote = newRemote("RemoteEvent", "PvpStart") -- server -> client
+local PvpRoundRemote = newRemote("RemoteEvent", "PvpRound") -- server -> client
 local BattleDeckRemote = newRemote("RemoteEvent", "BattleDeck")
 local SetTitleRemote = newRemote("RemoteEvent", "SetTitle")
 local LoadoutRemote = newRemote("RemoteEvent", "Loadout")
@@ -88,6 +93,7 @@ remotes.Parent = ReplicatedStorage
 ---------------------------------------------------------------------
 -- [player] = { plot, pending = uncollected cash at the register, rev, questRev, dirty, ... }
 local sessions = {}
+local forfeitPvp -- (match, side): defined with the player duels below
 
 -- Token-bucket rate limit, per player and per remote. First line of every remote handler.
 local buckets = {}
@@ -1146,6 +1152,9 @@ ResetDataRemote.OnServerEvent:Connect(function(player)
 		return
 	end
 	session.duel = nil
+	if session.pvp then
+		forfeitPvp(session.pvp.match, session.pvp.side)
+	end
 	session.pending = 0
 	session.playSeconds = 0
 
@@ -1480,6 +1489,9 @@ DuelStartRemote.OnServerInvoke = function(player, mode)
 	if session == nil or data == nil then
 		return { ok = false, error = "Something went wrong." }
 	end
+	if session.pvp then
+		return { ok = false, error = "Finish your player duel first." }
+	end
 	local now = os.clock()
 	if not allow(player, "DuelStart", 1, 2) or now - (session.lastBattle or 0) < Config.BattleCooldown then
 		return { ok = false, error = "Catch your breath. Try again in a moment." }
@@ -1512,6 +1524,201 @@ DuelStartRemote.OnServerInvoke = function(player, mode)
 	return { ok = true, view = Duel.view(duel), spot = spot }
 end
 
+---------------------------------------------------------------------
+-- Player duels: opt-in, nothing at stake
+---------------------------------------------------------------------
+-- One player challenges another from the Battle screen; the other accepts or declines. Each
+-- fights from their own duel pad with their own battle deck, cards scored by rarity only
+-- (Duel.pvpCard). Both pick a move each round; a loop per match resolves the round when both
+-- have chosen or the timer runs out. No cards or currency change hands; the first win of the
+-- day pays one quest's worth of aura.
+local PVP_INVITE_TIME = 30
+local PVP_PLAYBACK = 4 -- seconds added to each round's timer for the clients' playback
+local pvpInvites = {} -- [target player] = { [challenger player] = os.clock() sent }
+
+local function pvpViewFor(match, side)
+	local view = Duel.pvpView(match.state, side)
+	view.timeLeft = math.max(0, math.ceil(match.deadline - os.clock()))
+	return view
+end
+
+-- Ends a match once: stats, the daily first-win aura, titles. Returns extras per side.
+local function finishPvp(match)
+	if match.finished then
+		return { {}, {} }
+	end
+	match.finished = true
+	local extras = { {}, {} }
+	for side, player in ipairs(match.players) do
+		local session = sessions[player]
+		local data = PlayerData.get(player)
+		if session and session.pvp and session.pvp.match == match then
+			session.pvp = nil
+		end
+		if data then
+			data.stats.duels = (data.stats.duels or 0) + 1
+			data.stats.pvpDuels = (data.stats.pvpDuels or 0) + 1
+			if match.state.winner == side then
+				data.stats.pvpWins = (data.stats.pvpWins or 0) + 1
+				local today = Quests.today()
+				if data.pvpDay ~= today then
+					data.pvpDay = today
+					local aura = Quests.reward(data.rebirths)
+					data.aura = data.aura + aura
+					extras[side].aura = aura
+				end
+			end
+			checkTitles(player, data)
+			touch(player, true)
+		end
+	end
+	return extras
+end
+
+local function sendPvpRound(match, events, extras)
+	for side, player in ipairs(match.players) do
+		if player.Parent == Players then
+			local result = { ok = true, events = events[side] or {}, view = pvpViewFor(match, side) }
+			if extras and extras[side] then
+				result.aura = extras[side].aura
+			end
+			PvpRoundRemote:FireClient(player, result)
+		end
+	end
+end
+
+local function runPvp(match)
+	while not match.state.over do
+		local fighters = match.state.fighters
+		if (fighters[1].move and fighters[2].move) or os.clock() >= match.deadline then
+			local events = Duel.pvpResolve(match.state, rng)
+			match.deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK
+			sendPvpRound(match, events, match.state.over and finishPvp(match) or nil)
+		end
+		task.wait(0.2)
+	end
+end
+
+-- side gives up (fled, reset or left the game): the other side wins.
+function forfeitPvp(match, side)
+	if match.finished then
+		return
+	end
+	Duel.pvpForfeit(match.state, side)
+	local text = "🏳️ " .. match.state.fighters[side].name .. " forfeits the duel."
+	local events = { { { kind = "lose", text = text } }, { { kind = "lose", text = text } } }
+	local extras = finishPvp(match)
+	local other = match.players[3 - side]
+	if other.Parent == Players then
+		local result = { ok = true, events = events[3 - side], view = pvpViewFor(match, 3 - side), aura = extras[3 - side].aura }
+		PvpRoundRemote:FireClient(other, result)
+	end
+end
+
+local function canDuel(player)
+	local session = sessions[player]
+	local data = PlayerData.get(player)
+	return session ~= nil and data ~= nil and session.duel == nil and session.pvp == nil
+end
+
+PvpChallengeRemote.OnServerEvent:Connect(function(player, target)
+	if not allow(player, "PvpChallenge", 0.2, 2) then
+		notify(player, "Wait a few seconds before challenging again.", "error")
+		return
+	end
+	if typeof(target) ~= "Instance" or not target:IsA("Player") or target.Parent ~= Players or target == player then
+		return
+	end
+	if not canDuel(player) then
+		notify(player, "Finish your current battle first.", "error")
+		return
+	end
+	if not canDuel(target) then
+		notify(player, target.DisplayName .. " is busy battling. Try again soon.", "error")
+		return
+	end
+	pvpInvites[target] = pvpInvites[target] or {}
+	pvpInvites[target][player] = os.clock()
+	PvpInviteRemote:FireClient(target, player, player.DisplayName, PVP_INVITE_TIME)
+	notify(player, "⚔️ Challenge sent to " .. target.DisplayName .. ".", "info")
+end)
+
+PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
+	if not allow(player, "PvpRespond", 1, 3) then
+		return
+	end
+	if typeof(challenger) ~= "Instance" or not challenger:IsA("Player") then
+		return
+	end
+	local invites = pvpInvites[player]
+	local sent = invites and invites[challenger]
+	if sent == nil then
+		return
+	end
+	invites[challenger] = nil
+	if challenger.Parent ~= Players or os.clock() - sent > PVP_INVITE_TIME then
+		notify(player, "That challenge has expired.", "error")
+		return
+	end
+	if accept ~= true then
+		notify(challenger, player.DisplayName .. " declined your duel.", "info")
+		return
+	end
+	if not canDuel(player) or not canDuel(challenger) then
+		notify(player, "One of you is already battling. Try again soon.", "error")
+		notify(challenger, player.DisplayName .. " could not start the duel right now.", "error")
+		return
+	end
+	local players = { challenger, player }
+	local decks = {}
+	for side, who in ipairs(players) do
+		decks[side] = battleDeckFor(PlayerData.get(who))
+	end
+	local state = Duel.pvpNew(decks[1], challenger.DisplayName, decks[2], player.DisplayName, rng)
+	if state == nil then
+		notify(player, "You both need at least one card to duel.", "error")
+		notify(challenger, "You both need at least one card to duel.", "error")
+		return
+	end
+	local match = { players = players, state = state, deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK }
+	for side, who in ipairs(players) do
+		local session = sessions[who]
+		session.pvp = { match = match, side = side }
+		if pvpInvites[who] then
+			table.clear(pvpInvites[who]) -- other challenges to a busy player lapse
+		end
+		local spot = Plots.getDuelSpot(session.plot)
+		local character = who.Character
+		if character and character:FindFirstChild("HumanoidRootPart") then
+			character:PivotTo(spot + Vector3.new(0, 3, 0))
+		end
+		PvpStartRemote:FireClient(who, pvpViewFor(match, side), spot)
+	end
+	task.spawn(runPvp, match)
+end)
+
+-- A move in a player duel (called from DuelAct). Picking a card or passing only locks the move
+-- in; the round's events arrive later through PvpRound.
+local function pvpAct(session, action)
+	local match, side = session.pvp.match, session.pvp.side
+	if action.kind == "flee" then
+		forfeitPvp(match, side)
+		return { ok = true, events = {}, view = { over = true, win = false, fled = true } }
+	elseif action.kind == "discard" then
+		if not Duel.pvpDiscard(match.state, side, action.hand) then
+			return { ok = false, error = "You can only throw cards away before picking your move." }
+		end
+		return { ok = true, events = {}, view = pvpViewFor(match, side) }
+	elseif action.kind == "play" or action.kind == "pass" then
+		local ok, problem = Duel.pvpChoose(match.state, side, { kind = action.kind, hand = action.hand })
+		if not ok then
+			return { ok = false, error = problem }
+		end
+		return { ok = true, waiting = true, view = pvpViewFor(match, side) }
+	end
+	return { ok = false, error = "You can't do that right now." }
+end
+
 -- One move in the current duel. action = { kind = "play" | "pass" | "discard" | "flee",
 -- hand = index into the hand, target = enemy index }.
 -- Returns { ok, view, events, aura, cash } or { ok = false, error }.
@@ -1521,16 +1728,19 @@ DuelActRemote.OnServerInvoke = function(player, action)
 	if session == nil or data == nil or not allow(player, "DuelAct", 6, 12) then
 		return { ok = false, error = "Slow down a little." }
 	end
-	local duel = session.duel
-	if duel == nil then
-		return { ok = false, error = "That battle has ended.", ended = true }
-	end
 	if type(action) ~= "table" then
 		return { ok = false, error = "Pick a card from your hand." }
 	end
 	local hand, target = action.hand, action.target
 	if hand ~= nil and (type(hand) ~= "number" or hand % 1 ~= 0) then
 		return { ok = false, error = "Pick a card from your hand." }
+	end
+	if session.pvp then
+		return pvpAct(session, action)
+	end
+	local duel = session.duel
+	if duel == nil then
+		return { ok = false, error = "That battle has ended.", ended = true }
 	end
 	if target ~= nil and (type(target) ~= "number" or target % 1 ~= 0) then
 		target = nil
@@ -2258,6 +2468,13 @@ end
 local function onPlayerRemoving(player)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
+	if session and session.pvp then
+		forfeitPvp(session.pvp.match, session.pvp.side)
+	end
+	pvpInvites[player] = nil
+	for _, invites in pairs(pvpInvites) do
+		invites[player] = nil
+	end
 	if session and data then
 		-- bank uncollected cash so nothing is lost
 		addCash(data, session.pending)

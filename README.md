@@ -89,7 +89,10 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     then 8 more per storey up to 64) and are capped by rebirths (16, 24, 32, 40, 52, then all
     64 from the fifth rebirth). There is no deck-slot upgrade.
 15. **Lucky events:** every 20 minutes the whole server gets better pack odds for 5 minutes.
-16. There is no trading, no market, no stealing and no PvP: every card you own, you pulled.
+16. There is no trading, no market and no stealing: every card you own, you pulled.
+17. **Player duels:** challenge anyone in your server from the Battle screen. Both players pick
+    a card in secret each round, cards hit by rarity rather than income, and nothing is at
+    stake. The first win each day pays aura, and wins earn Duelist titles.
 
 ## Pacing: what makes a run last
 

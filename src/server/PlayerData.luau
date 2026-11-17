@@ -47,6 +47,7 @@ local function newData()
 		tower = 0, -- highest battle tower floor cleared
 		battleDeck = {}, -- array of cardKeys to bring to tower duels (empty = pick automatically)
 		challengeDay = 0, -- Quests.today() of the last daily challenge won
+		pvpDay = 0, -- Quests.today() of the last player duel won (the first win each day pays aura)
 		titles = {}, -- [titleId] = true for titles earned (see Titles.luau)
 		title = "", -- the title being worn, "" for none
 		loadouts = {}, -- saved decks: [tostring(1..Config.Loadouts)] = array of cardKeys
@@ -55,7 +56,7 @@ local function newData()
 		packCounts = {}, -- packs opened this run, per pack id (drives pack price; reset by rebirth)
 		autoPack = { packId = "", on = false, sell = 0 }, -- Auto Packer settings
 		achievements = {}, -- [achievementId] = true once claimed (permanent income bonus)
-		stats = { fused = 0, earned = 0, duels = 0 }, -- lifetime counters (achievements, Auto battler unlock)
+		stats = { fused = 0, earned = 0, duels = 0, pvpWins = 0, pvpDuels = 0 }, -- lifetime counters (achievements, Auto battler unlock, player duels)
 		gifts = 0, -- free boosters waiting to be opened (playtime and season rewards)
 		codes = {}, -- [CODE] = true for codes already redeemed
 		showcase = { left = "", right = "" }, -- cards chosen for the storefront frames ("" = automatic)

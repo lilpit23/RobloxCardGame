@@ -896,6 +896,7 @@ end
 -- A sensible move for the given view (what Duel.view returns): the Auto battler plays these.
 -- Returns an action for the server: { kind = "play", hand, target } or { kind = "pass" }.
 function Duel.suggest(view)
+	local cardFor = view.mode == "pvp" and Duel.pvpCard or Duel.card
 	local bestScore, bestHand, bestTarget = 0, nil, nil
 	local incoming, windingUp = 0, false
 	for _, enemy in ipairs(view.enemies) do
@@ -905,7 +906,7 @@ function Duel.suggest(view)
 		end
 	end
 	for handIndex, key in ipairs(view.hand) do
-		local card = Duel.card(key)
+		local card = cardFor(key)
 		if card and card.cost <= view.energy then
 			local score, target = 0, nil
 			if card.role == "attack" then
@@ -959,6 +960,423 @@ function Duel.suggest(view)
 		return { kind = "play", hand = bestHand, target = bestTarget }
 	end
 	return { kind = "pass" }
+end
+
+-- Player duels ----------------------------------------------------------------------------
+-- Two players who both agreed to fight. Nothing is at stake: no cards or currency change
+-- hands. Card strength comes from rarity alone (Duel.PvpPower), not from a card's income, so
+-- a new player's deck can beat a veteran's: it is a test of deck and play.
+-- Every round both players pick a move in secret (a card, or pass); then the moves resolve,
+-- with the first move alternating each round. Each player has a "school": the type most of
+-- their deck belongs to, which decides type advantage against them.
+Duel.PvpHealth = 300
+Duel.PvpPower = { 30, 64, 104, 146, 192, 240 } -- by energy cost: a little more per energy for rarer cards
+Duel.PvpBlast = 1 -- a Blast hits the one opponent for this share of its power
+Duel.PvpHeal = 1 -- a Heal restores this share of its power
+Duel.PvpMaxRounds = 30 -- then the healthier player (by share of health) wins
+Duel.PvpTurnTime = 30 -- seconds to pick a move; then you pass
+Duel.PvpChillToFreeze = 5
+Duel.PvpBleedShare = 0.25 -- of a Beast hit, added to the bleed (more than in the tower)
+Duel.PvpThreat = 80
+Duel.PvpParry = 0.3 -- of the damage a shield blocks, sent back at the attacker
+Duel.PvpShockDrain = 1 -- a Tech hit takes this much energy from the opponent
+Duel.PvpStagger = 1.15 -- a Warrior hit deals this much more and breaks every shield
+-- How each type's mark works in a player duel (bleed and burn work as in the tower).
+Duel.PvpEffects = {
+	beast = "🩸 Bleed: stacks, every round",
+	mystic = "♨️ Burn: 3 rounds",
+	star = "❄️ Chill: 5 freeze them for a turn",
+	tech = "⚡ Shock: drains 1 energy",
+	warrior = "🔨 Stagger: +15%, breaks all shields",
+}
+
+local pvpCache = {}
+function Duel.pvpCard(key)
+	local cached = pvpCache[key]
+	if cached then
+		return cached
+	end
+	local base = Duel.card(key)
+	if base == nil then
+		return nil
+	end
+	local power = Duel.PvpPower[base.cost] or Duel.PvpPower[#Duel.PvpPower]
+	local card = table.clone(base)
+	card.power = power
+	local effect = Duel.Effects[base.type]
+	local mark = effect and (" · " .. effect.icon .. " " .. effect.name) or ""
+	if base.role == "attack" then
+		card.amount = power
+		card.text = power .. " damage" .. mark
+	elseif base.role == "blast" then
+		card.amount = math.floor(power * Duel.PvpBlast)
+		card.text = card.amount .. " damage" .. mark
+	elseif base.role == "heal" then
+		card.amount = math.floor(power * Duel.PvpHeal)
+		card.text = "Heal " .. card.amount .. " health"
+	end
+	pvpCache[key] = card
+	return card
+end
+
+-- The type most of a deck belongs to (ties go to the earlier type in Cards.TypeOrder).
+function Duel.school(deck)
+	local counts = {}
+	for _, key in ipairs(deck) do
+		local card = Duel.card(key)
+		if card then
+			counts[card.type] = (counts[card.type] or 0) + 1
+		end
+	end
+	local best, most = Cards.TypeOrder[1], 0
+	for _, typeId in ipairs(Cards.TypeOrder) do
+		if (counts[typeId] or 0) > most then
+			best, most = typeId, counts[typeId]
+		end
+	end
+	return best
+end
+
+local function newFighter(deck, name, rng)
+	local pile = {}
+	for _, key in ipairs(deck) do
+		if Duel.card(key) then
+			table.insert(pile, key)
+		end
+	end
+	shuffle(pile, rng)
+	local fighter = {
+		name = name,
+		school = Duel.school(pile),
+		hp = Duel.PvpHealth,
+		maxHp = Duel.PvpHealth,
+		energy = Duel.StartEnergy,
+		shields = {},
+		charges = {},
+		weak = {},
+		bleed = 0,
+		burn = 0,
+		burnRounds = 0,
+		chill = 0,
+		frozen = false,
+		deck = pile,
+		hand = {},
+		discard = {},
+		move = nil, -- { kind = "play", hand = index } or { kind = "pass" } once chosen
+	}
+	draw(fighter, rng)
+	return fighter
+end
+
+-- A new player duel. Returns nil if either deck is empty.
+function Duel.pvpNew(deckA, nameA, deckB, nameB, rng)
+	if #deckA == 0 or #deckB == 0 then
+		return nil
+	end
+	return {
+		mode = "pvp",
+		round = 1,
+		fighters = { newFighter(deckA, nameA, rng), newFighter(deckB, nameB, rng) },
+		over = false,
+		winner = nil, -- 1 or 2, or 0 for a draw
+	}
+end
+
+-- Lock in a side's move for this round. action = { kind = "play", hand } or { kind = "pass" }.
+-- Returns true, or nil and a message.
+function Duel.pvpChoose(state, side, action)
+	local me = state.fighters[side]
+	if state.over or me == nil then
+		return nil, "This duel is over."
+	end
+	if me.move then
+		return nil, "You already picked your move. Waiting for your opponent."
+	end
+	if action.kind == "pass" then
+		me.move = { kind = "pass" }
+		return true
+	end
+	local key = type(action.hand) == "number" and me.hand[action.hand] or nil
+	if key == nil then
+		return nil, "Pick a card from your hand."
+	end
+	local card = Duel.pvpCard(key)
+	if card.cost > me.energy then
+		return nil, "Not enough energy: that card costs " .. card.cost .. "."
+	end
+	me.move = { kind = "play", hand = action.hand }
+	return true
+end
+
+-- Throw a card away for free (only before you pick your move, so the hand does not shift
+-- under it).
+function Duel.pvpDiscard(state, side, handIndex)
+	local me = state.fighters[side]
+	if state.over or me == nil or me.move or type(handIndex) ~= "number" or me.hand[handIndex] == nil then
+		return false
+	end
+	table.insert(me.discard, table.remove(me.hand, handIndex))
+	return true
+end
+
+-- Resolves the round once both moves are in (a missing move counts as a pass).
+-- Returns { [1] = events for side 1, [2] = events for side 2 }: each side sees the same
+-- story, with "hit" for its own hits and "hurt" for the other's, and its own health in hp.
+function Duel.pvpResolve(state, rng)
+	local events = { {}, {} }
+	local fighters = state.fighters
+	-- kinds: "hit" (actor hurts the other), "tick" (actor hurts itself over time), "heal",
+	-- "buff" (shield / power-up / weaken), "frozen", "pass"
+	local function emit(actor, kind, text, damage)
+		for viewer = 1, 2 do
+			local mine = viewer == actor
+			local shown = kind
+			if kind == "hit" then
+				shown = mine and "hit" or "hurt"
+			elseif kind == "tick" then
+				shown = mine and "poison" or "tick"
+			elseif kind == "heal" then
+				shown = mine and "heal" or "mend"
+			elseif kind == "buff" then
+				shown = "shield"
+			end
+			table.insert(events[viewer], {
+				kind = shown,
+				text = text,
+				damage = damage,
+				hp = fighters[viewer].hp,
+				enemy = 1,
+				enemyHp = fighters[3 - viewer].hp,
+			})
+		end
+	end
+
+	local function act(side)
+		local me, foe = fighters[side], fighters[3 - side]
+		local move = me.move or { kind = "pass" }
+		if me.frozen then
+			me.frozen = false
+			emit(side, "frozen", "❄️ " .. me.name .. " is frozen solid and loses the turn.")
+			return
+		end
+		local key = move.kind == "play" and me.hand[move.hand] or nil
+		local card = key and Duel.pvpCard(key) or nil
+		if card == nil or card.cost > me.energy then
+			emit(side, "pass", me.name .. " holds and gathers energy.")
+			return
+		end
+		me.energy = me.energy - card.cost
+		table.insert(me.discard, table.remove(me.hand, move.hand))
+		local prefix = me.name .. "'s " .. card.name
+
+		if card.role == "attack" or card.role == "blast" then
+			local damage = card.amount * (1 + (table.remove(me.charges, 1) or 0))
+			local notes = {}
+			if Cards.typeBeats(card.type, foe.school) then
+				damage = damage * Duel.Strong
+				table.insert(notes, "type advantage!")
+			elseif Cards.typeBeats(foe.school, card.type) then
+				damage = damage * Duel.Resisted
+				table.insert(notes, "resisted")
+			end
+			local weak = table.remove(me.weak, 1)
+			if weak then
+				damage = damage * (1 - weak)
+				table.insert(notes, "weakened")
+			end
+			if card.type == "warrior" then
+				damage = damage * Duel.PvpStagger
+				if #foe.shields > 0 then
+					foe.shields = {}
+					table.insert(notes, "🔨 shields broken")
+				end
+			end
+			local blocked = table.remove(foe.shields, 1)
+			local parried = 0
+			if blocked then
+				parried = math.floor(damage * blocked * Duel.PvpParry)
+				damage = damage * (1 - blocked)
+				table.insert(notes, "shield " .. percent(blocked))
+			end
+			if card.type == "tech" and foe.energy > 0 then
+				foe.energy = math.max(0, foe.energy - Duel.PvpShockDrain)
+				table.insert(notes, "⚡ -" .. Duel.PvpShockDrain .. " energy")
+			end
+			if foe.frozen then
+				damage = damage * (1 - Duel.FrozenGuard)
+			end
+			damage = math.max(1, math.floor(damage))
+			foe.hp = math.max(0, foe.hp - damage)
+			if foe.hp > 0 then
+				if card.type == "beast" then
+					foe.bleed = foe.bleed + math.max(1, math.floor(damage * Duel.PvpBleedShare))
+					table.insert(notes, "🩸")
+				elseif card.type == "mystic" then
+					foe.burn = math.max(foe.burnRounds > 0 and foe.burn or 0, math.max(1, math.floor(damage * Duel.BurnShare)))
+					foe.burnRounds = Duel.BurnRounds
+					table.insert(notes, "♨️")
+				elseif card.type == "star" then
+					foe.chill = foe.chill + 1
+					if foe.chill >= Duel.PvpChillToFreeze then
+						foe.chill = 0
+						foe.frozen = true
+						table.insert(notes, "❄️ FROZEN!")
+					else
+						table.insert(notes, "❄️" .. foe.chill .. "/" .. Duel.PvpChillToFreeze)
+					end
+				end
+			end
+			local text = prefix .. " hits " .. foe.name .. " for " .. damage
+			if #notes > 0 then
+				text = text .. " (" .. table.concat(notes, ", ") .. ")"
+			end
+			emit(side, "hit", text, damage)
+			if parried > 0 and foe.hp > 0 then
+				me.hp = math.max(0, me.hp - parried)
+				emit(3 - side, "hit", "🛡️ " .. foe.name .. " parries " .. parried .. " back at " .. me.name, parried)
+			end
+		elseif card.role == "heal" then
+			local healed = math.min(card.amount, me.maxHp - me.hp)
+			me.hp = me.hp + healed
+			emit(side, "heal", prefix .. " heals " .. me.name .. " for " .. healed)
+		elseif card.role == "shield" then
+			if #me.shields >= Duel.MaxStacks then
+				table.remove(me.shields, 1)
+			end
+			table.insert(me.shields, card.amount)
+			emit(side, "buff", prefix .. " raises a 🛡️ shield (" .. percent(card.amount) .. ")")
+		elseif card.role == "charge" then
+			if #me.charges >= Duel.MaxStacks then
+				table.remove(me.charges, 1)
+			end
+			table.insert(me.charges, card.amount)
+			emit(side, "buff", prefix .. " powers up 💪 (+" .. percent(card.amount) .. ")")
+		else
+			if #foe.weak >= Duel.MaxStacks then
+				table.remove(foe.weak, 1)
+			end
+			table.insert(foe.weak, card.amount)
+			emit(side, "buff", prefix .. " weakens " .. foe.name .. " 🌀 (-" .. percent(card.amount) .. ")")
+		end
+	end
+
+	local first = state.round % 2 == 1 and 1 or 2
+	for _, side in ipairs({ first, 3 - first }) do
+		if not state.over then
+			act(side)
+			if fighters[3 - side].hp <= 0 then
+				state.over, state.winner = true, side
+			end
+		end
+	end
+
+	-- bleeding and burning at the end of the round
+	if not state.over then
+		for side = 1, 2 do
+			local me = fighters[side]
+			local damage, parts = 0, {}
+			if me.bleed > 0 then
+				damage = damage + me.bleed
+				me.bleed = math.floor(me.bleed / 2)
+				table.insert(parts, "bleeds")
+			end
+			if me.burnRounds > 0 then
+				damage = damage + me.burn
+				me.burnRounds = me.burnRounds - 1
+				table.insert(parts, "burns")
+			end
+			if damage > 0 then
+				me.hp = math.max(0, me.hp - damage)
+				emit(side, "tick", me.name .. " " .. table.concat(parts, " and ") .. " for " .. damage, damage)
+			end
+		end
+		local down1, down2 = fighters[1].hp <= 0, fighters[2].hp <= 0
+		if down1 or down2 then
+			state.over = true
+			state.winner = (down1 and down2) and 0 or (down1 and 2 or 1)
+		end
+	end
+
+	if not state.over and state.round >= Duel.PvpMaxRounds then
+		local share1 = fighters[1].hp / fighters[1].maxHp
+		local share2 = fighters[2].hp / fighters[2].maxHp
+		state.over = true
+		state.winner = share1 > share2 and 1 or (share2 > share1 and 2 or 0)
+		emit(1, "pass", "⏱️ Time! The healthier duellist wins.")
+	end
+
+	for _, me in ipairs(fighters) do
+		me.move = nil
+	end
+	if not state.over then
+		state.round = state.round + 1
+		for _, me in ipairs(fighters) do
+			me.energy = math.min(Duel.MaxEnergy, me.energy + 1)
+			draw(me, rng)
+		end
+	end
+	return events
+end
+
+-- One side forfeits (fled or left the game).
+function Duel.pvpForfeit(state, side)
+	if not state.over then
+		state.over = true
+		state.winner = 3 - side
+	end
+end
+
+-- What one side is allowed to see. Shaped like Duel.view, with the opponent as the only
+-- "enemy", so the duel screen and stage work for both kinds of fight.
+function Duel.pvpView(state, side)
+	local me, foe = state.fighters[side], state.fighters[3 - side]
+	return {
+		mode = "pvp",
+		floor = 0,
+		round = state.round,
+		energy = me.energy,
+		hp = me.hp,
+		maxHp = me.maxHp,
+		shields = #me.shields,
+		charges = #me.charges,
+		poison = 0,
+		school = me.school,
+		bleed = me.bleed,
+		burn = me.burnRounds > 0 and me.burn or 0,
+		chill = me.chill,
+		frozen = me.frozen,
+		chosen = me.move ~= nil,
+		enemies = {
+			{
+				name = foe.name,
+				glyph = Cards.Types[foe.school].icon,
+				type = foe.school,
+				boss = false,
+				kind = "brute",
+				regen = false,
+				armor = 0,
+				enrages = false,
+				attack = Duel.PvpThreat, -- what the bot expects a hit to be; their hand is hidden
+				hp = foe.hp,
+				maxHp = foe.maxHp,
+				weak = #foe.weak,
+				winding = false,
+				bleed = foe.bleed,
+				burn = foe.burnRounds > 0 and foe.burn or 0,
+				chill = foe.chill,
+				chillMax = Duel.PvpChillToFreeze,
+				frozen = foe.frozen,
+				shields = #foe.shields,
+				charges = #foe.charges,
+				ready = foe.move ~= nil,
+			},
+		},
+		hand = table.clone(me.hand),
+		deckLeft = #me.deck,
+		over = state.over,
+		win = state.winner == side,
+		draw = state.winner == 0,
+	}
 end
 
 return Duel

@@ -2295,7 +2295,39 @@ local function clearStage()
 		for _, figure in ipairs(stage.figures) do
 			figure.gui:Destroy()
 		end
+		for _, tag in pairs(stage.allyTags or {}) do
+			tag.gui:Destroy()
+		end
 		stage = nil
+	end
+end
+
+-- Co-op: a health bar over each teammate's character (they stand on the same pad).
+local function updateAllyTags()
+	if stage == nil or duel == nil then
+		return
+	end
+	stage.allyTags = stage.allyTags or {}
+	for _, ally in ipairs(duel.allies or {}) do
+		local other = ally.userId and Players:GetPlayerByUserId(ally.userId)
+		local head = other and other.Character and other.Character:FindFirstChild("Head")
+		local tag = ally.userId and stage.allyTags[ally.userId]
+		if head and tag == nil then
+			local gui = Instance.new("BillboardGui")
+			gui.Name = "AllyTag"
+			gui.Size = UDim2.new(0, 150, 0, 36)
+			gui.StudsOffset = Vector3.new(0, 3.2, 0)
+			gui.AlwaysOnTop = true
+			gui.Adornee = head
+			gui.Parent = playerGui
+			local fill, label = newBar(gui, UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 0, 18), COLORS.good, 1, "")
+			tag = { gui = gui, fill = fill, label = label }
+			stage.allyTags[ally.userId] = tag
+		end
+		if tag then
+			tag.fill.Size = UDim2.new(math.clamp(ally.hp / math.max(1, ally.maxHp), 0, 1), 0, 1, 0)
+			tag.label.Text = "🤝 " .. ally.name .. "  " .. (ally.left and "left" or (ally.hp > 0 and (Duel.short(ally.hp) .. "/" .. Duel.short(ally.maxHp)) or "💀"))
+		end
 	end
 end
 
@@ -2331,10 +2363,24 @@ local function buildStage(spot, view)
 		face.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 		face.PixelsPerStud = 30
 		face.Parent = part
-		newLabel(face, enemy.glyph or "?", UDim2.new(0.1, 0, 0.2, 0), UDim2.new(0.8, 0, 0.5, 0), {
-			TextScaled = true,
-			TextXAlignment = Enum.TextXAlignment.Center,
-		})
+		if view.mode == "pvp" and view.opponent then
+			-- a real opponent shows their avatar's face; their school icon sits in the corner
+			make("ImageLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0.1, 0, 0.18, 0),
+				Size = UDim2.new(0.8, 0, 0.55, 0),
+				Image = "rbxthumb://type=AvatarHeadShot&id=" .. view.opponent.UserId .. "&w=150&h=150",
+				ScaleType = Enum.ScaleType.Fit,
+			}, face)
+			newLabel(face, enemy.glyph or "?", UDim2.new(0.05, 0, 0.03, 0), UDim2.new(0.25, 0, 0.14, 0), {
+				TextScaled = true,
+			})
+		else
+			newLabel(face, enemy.glyph or "?", UDim2.new(0.1, 0, 0.2, 0), UDim2.new(0.8, 0, 0.5, 0), {
+				TextScaled = true,
+				TextXAlignment = Enum.TextXAlignment.Center,
+			})
+		end
 		newLabel(face, typeText(enemy.type), UDim2.new(0.05, 0, 0.76, 0), UDim2.new(0.9, 0, 0.14, 0), {
 			TextScaled = true,
 			TextXAlignment = Enum.TextXAlignment.Center,
@@ -2572,7 +2618,10 @@ function renderDuelHud()
 		duelLogLabel.Text = duelLogLabel.Text .. "\n💀 You're down. Your team fights on!"
 	end
 
-	-- the figures in the arena
+	-- the figures in the arena, and teammates' health in co-op
+	if coop then
+		updateAllyTags()
+	end
 	if stage then
 		for index, figure in ipairs(stage.figures) do
 			local enemy = duel.enemies[index]
@@ -2937,6 +2986,21 @@ function playResult(result)
 			flashScreen(Color3.fromRGB(60, 200, 110))
 		elseif event.kind == "shield" or event.kind == "charge" or event.kind == "weaken" then
 			playSound("flip")
+			if figure and event.icon then
+				-- stun, curse, hex or weaken: its icon floats up from the target
+				floatText(figure.home.Position + Vector3.new(0, 3, 0), event.icon, Color3.fromRGB(200, 160, 255))
+				if event.icon == "💫" then
+					TweenService:Create(figure.part, TweenInfo.new(0.06, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 5, true), {
+						CFrame = figure.home * CFrame.new(0.6, 0, 0),
+					}):Play()
+				end
+			elseif event.kind == "shield" then
+				flashScreen(Color3.fromRGB(90, 160, 255))
+			elseif event.kind == "charge" then
+				flashScreen(Color3.fromRGB(255, 170, 60))
+			end
+		elseif event.kind == "allyhurt" or event.kind == "allyheal" then
+			updateAllyTags()
 		end
 		if duel == nil then
 			return

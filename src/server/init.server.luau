@@ -1596,6 +1596,16 @@ local function pvpViewFor(match, side)
 	if match.coop then
 		local view = Duel.coopView(match.state, side)
 		view.timeLeft = math.max(0, math.ceil(match.deadline - os.clock()))
+		-- teammates' user ids, in the same order as view.allies, for their health tags
+		local slot = 0
+		for index, teammate in ipairs(match.players) do
+			if index ~= side then
+				slot = slot + 1
+				if view.allies[slot] then
+					view.allies[slot].userId = teammate.UserId
+				end
+			end
+		end
 		return view
 	end
 	local view = Duel.pvpView(match.state, side)

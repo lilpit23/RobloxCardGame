@@ -1039,27 +1039,27 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 				enemy.stunned = true
 				text = "💫 " .. enemy.name .. " is stunned: it loses its next turn!"
 			end
-			table.insert(events, { kind = "weaken", text = text, enemy = targetIndex })
+			table.insert(events, { kind = "weaken", text = text, enemy = targetIndex, icon = "💫" })
 		end
 	elseif card.role == "curse" then
 		local enemy = state.enemies[targetIndex]
 		enemy.curse = math.max(enemy.curseRounds > 0 and enemy.curse or 0, card.amount)
 		enemy.curseRounds = Duel.CurseRounds
-		table.insert(events, { kind = "weaken", text = "☠️ " .. card.name .. " curses " .. enemy.name .. ": " .. short(enemy.curse) .. " damage a round for " .. Duel.CurseRounds .. " rounds", enemy = targetIndex })
+		table.insert(events, { kind = "weaken", text = "☠️ " .. card.name .. " curses " .. enemy.name .. ": " .. short(enemy.curse) .. " damage a round for " .. Duel.CurseRounds .. " rounds", enemy = targetIndex, icon = "☠️" })
 	elseif card.role == "hex" then
 		local enemy = state.enemies[targetIndex]
 		if #enemy.hex >= Duel.MaxStacks then
 			table.remove(enemy.hex, 1)
 		end
 		table.insert(enemy.hex, card.amount)
-		table.insert(events, { kind = "weaken", text = "🎯 " .. card.name .. " hexes " .. enemy.name .. ": the next hit on it deals +" .. percent(card.amount), enemy = targetIndex })
+		table.insert(events, { kind = "weaken", text = "🎯 " .. card.name .. " hexes " .. enemy.name .. ": the next hit on it deals +" .. percent(card.amount), enemy = targetIndex, icon = "🎯" })
 	else
 		local enemy = state.enemies[targetIndex]
 		if #enemy.weak >= Duel.MaxStacks then
 			table.remove(enemy.weak, 1)
 		end
 		table.insert(enemy.weak, card.amount)
-		table.insert(events, { kind = "weaken", text = card.name .. " weakens " .. enemy.name .. ": its next attack deals -" .. percent(card.amount), enemy = targetIndex })
+		table.insert(events, { kind = "weaken", text = card.name .. " weakens " .. enemy.name .. ": its next attack deals -" .. percent(card.amount), enemy = targetIndex, icon = "🌀" })
 	end
 end
 

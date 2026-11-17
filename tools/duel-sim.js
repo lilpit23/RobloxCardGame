@@ -72,5 +72,5 @@ local inv={} for _,d in ipairs(Cards.List) do inv[d.id..":gold"]=1 end
 top({inventory=inv,slots={},vault={}},"everything gold x1")
 `;
 lauxlib.luaL_loadstring(L,to_luastring(pre));
-lua.lua_newtable(L);for(const n of ['Cards','Format','Duel','Config']){lua.lua_pushstring(L,to_luastring(fs.readFileSync(dir+n+'.luau','utf8')));lua.lua_setfield(L,-2,to_luastring(n));}
+lua.lua_newtable(L);for(const n of ['Cards','Format','Duel','Config','Battle']){lua.lua_pushstring(L,to_luastring(fs.readFileSync(dir+n+'.luau','utf8')));lua.lua_setfield(L,-2,to_luastring(n));}
 if(lua.lua_pcall(L,1,0,0)!==0)console.log('ERR',lua.lua_tojsstring(L,-1));

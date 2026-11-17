@@ -44,7 +44,10 @@ way so the repo stays the whole game.
   challenge decks keep a mix (`Duel.MaxSupport`, `Duel.Damaging`).
   Each card type's hits leave a mark (`Duel.Effects`: bleed, burn, chill/freeze, shock,
   stagger), shields parry wind-up hits, and enemy kinds (`Duel.Kinds`) add healers, armour,
-  berserkers, venom (poisons you), wards (immune to marks) and summoners. New statuses go in
+  berserkers, venom (poisons you), wards (immune to marks) and summoners. Bosses come from a
+  set's Legendary/Mythic cards (its Secret card on the top floor) and carry a signature
+  (`Duel.BossTraits`, `Duel.bossTrait`). Real people in tower sets are listed in
+  `Duel.RealPeople` and never become enemies. New statuses go in
   `Duel.view`, `Duel.suggest` (so the Auto battler and coach use them) and the enemy marks on
   the client.
 - Admins: `isAdmin(player)` on the server (the owner, or a user id in the shared admin list

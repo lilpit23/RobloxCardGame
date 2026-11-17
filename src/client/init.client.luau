@@ -2637,6 +2637,9 @@ function renderDuelHud()
 				if enemy.boss and enemy.armor > 0 then
 					table.insert(marks, "🛡️ Armoured")
 				end
+				if enemy.trait and Duel.BossTraits[enemy.trait] then
+					table.insert(marks, Duel.BossTraits[enemy.trait].name)
+				end
 				if enemy.regen then
 					table.insert(marks, "♻️ Regenerates")
 				end
@@ -3230,7 +3233,8 @@ panels.Battle = function()
 		local names = {}
 		for _, enemy in ipairs(Duel.enemies(floor)) do
 			local kind = Duel.Kinds[enemy.kind]
-			table.insert(names, enemy.name .. " (" .. typeText(enemy.type) .. (kind.name ~= "" and (", " .. kind.name) or "") .. ", " .. Duel.short(enemy.maxHp) .. " HP)")
+			local trait = enemy.trait and Duel.BossTraits[enemy.trait]
+			table.insert(names, enemy.name .. " (" .. typeText(enemy.type) .. (kind.name ~= "" and (", " .. kind.name) or "") .. (trait and (", " .. trait.name .. ": " .. trait.text) or "") .. ", " .. Duel.short(enemy.maxHp) .. " HP)")
 		end
 		newLabel(infoRow, "Enemies: " .. table.concat(names, ",  "), UDim2.new(0, 14, 0, 32), UDim2.new(1, -190, 0, 54), {
 			TextSize = 12,
@@ -3367,7 +3371,7 @@ panels.Battle = function()
 
 	-- how battles work: open for anyone who has never fought, a tap away for everyone else
 	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
-	local helpRow = newRow(5, showHelp and 500 or 40)
+	local helpRow = newRow(5, showHelp and 520 or 40)
 	helpRow.BackgroundTransparency = showHelp and 0 or 1
 	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
 		battleHelp = not showHelp
@@ -3392,6 +3396,7 @@ panels.Battle = function()
 			"🐾 🩸 Bleed (stacks)   🔮 ♨️ Burn (3 rounds)   ⭐ ❄️ Chill (3 freeze an enemy for a turn)",
 			"⚙️ ⚡ Shock (ignores armour, Strikes arc)   ⚔️ 🔨 Stagger (breaks a wind-up)",
 			"Bosses (every 10th floor) warn you one round before a huge hit: shield up to block and parry it, stagger it, freeze it or finish it.",
+			"Each boss also has a signature (🌊 Undertow, ☁️ Cloud-step, ⚡ Thunderbolt, 📯 Rally, ❄️ Frostbite, 🔥 Ragnarok): check it before you fight.",
 			"Watch for 🐍 Venomous enemies (Heal cures poison), 🔮 Warded ones (no bleed, burn or chill) and 📯 Summoners.",
 			"Player duels: both pick in secret each round. Your school is your deck's main type. Shields parry 30% back;",
 			"⚡ Tech drains 1 energy, 🔨 Warrior breaks all shields (+15%), ❄️ 5 chills freeze a player.",

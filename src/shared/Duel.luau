@@ -6,6 +6,7 @@
 -- energy, draw back up to a full hand, and play ONE card (or pass and save your energy).
 -- Then every enemy takes its turn. Rarer cards cost more energy and hit harder.
 local Cards = require(script.Parent.Cards)
+local Battle = require(script.Parent.Battle)
 
 local Duel = {}
 
@@ -351,6 +352,57 @@ local SET_PREFIX = {
 	norse = "Frostbound",
 }
 
+-- Real people in the tower's sets (Glory of Rome). They are cards you can collect, and a boss
+-- can drop them, but they are never shown as enemies.
+Duel.RealPeople = {}
+for _, id in ipairs({
+	"spartacus",
+	"cicero",
+	"virgil",
+	"boudica",
+	"vitruvius",
+	"livia",
+	"mark_antony",
+	"cleopatra",
+	"scipio_africanus",
+	"hannibal",
+	"marcus_aurelius",
+	"julius_caesar",
+	"augustus",
+	"trajan",
+	"hadrian_the_builder",
+}) do
+	assert(Cards.ById[id], "Duel.RealPeople names unknown card " .. id)
+	Duel.RealPeople[id] = true
+end
+
+-- Every boss has a signature from its set's stories, on top of the wind-up and the tier
+-- tricks (regen, enrage, armour). The top floor's boss gets Ragnarok.
+Duel.BossTraits = {
+	undertow = { name = "🌊 Undertow", text = "Its big hit also drains 2 of your energy" },
+	cloudstep = { name = "☁️ Cloud-step", text = "The first hit on it each round deals half" },
+	thunder = { name = "⚡ Thunderbolt", text = "Its big hit goes straight through shields" },
+	rally = { name = "📯 Rally", text = "Calls knocked-out allies back to fight (once each)" },
+	frostbite = { name = "❄️ Frostbite", text = "Its hits leave frost that hurts every round; a Heal cures it" },
+	ragnarok = { name = "🔥 Ragnarok", text = "Below half health it winds up every other round" },
+}
+local SET_TRAIT = {
+	storybook = "cloudstep",
+	seas = "undertow",
+	west = "cloudstep",
+	midnight = "frostbite",
+	olympus = "thunder",
+	knights = "rally",
+	rome = "rally",
+	norse = "frostbite",
+}
+function Duel.bossTrait(floor, setId)
+	if floor >= Battle.MaxFloor then
+		return "ragnarok"
+	end
+	return SET_TRAIT[setId]
+end
+
 -- Kinds of enemy. Brutes just hit; the others have a trick, shown on the duel screen.
 Duel.Kinds = {
 	brute = { name = "", text = "" },
@@ -403,11 +455,25 @@ function Duel.enemies(floor, power, setId)
 		count = 2
 	end
 	setId = setId or Duel.floorSet(floor)
-	local pool = Cards.Sets[setId].cards
+	local pool, bossPool = {}, {}
+	for _, def in ipairs(Cards.Sets[setId].cards) do
+		if not Duel.RealPeople[def.id] then
+			table.insert(pool, def)
+			-- bosses come from the set's Legendary and Mythic cards; its Secret card is saved
+			-- for the top floor
+			local order = Cards.Rarities[def.rarity].order
+			if (floor >= Battle.MaxFloor and def.rarity == "Secret") or (floor < Battle.MaxFloor and order >= 5 and def.rarity ~= "Secret") then
+				table.insert(bossPool, def)
+			end
+		end
+	end
+	if #bossPool == 0 then
+		bossPool = pool
+	end
 	local list = {}
 	for index = 1, count do
-		local def = pool[(floor * 7 + index * 13) % #pool + 1]
 		local isBoss = boss and index == 1
+		local def = isBoss and bossPool[math.floor(floor / Duel.BossEvery) % #bossPool + 1] or pool[(floor * 7 + index * 13) % #pool + 1]
 		local kind = kindFor(floor, index, isBoss)
 		local hp = math.max(10, math.floor(power * (isBoss and 6 or 2.5)))
 		local attack = power * (isBoss and 0.55 or 0.32)
@@ -424,6 +490,7 @@ function Duel.enemies(floor, power, setId)
 			type = def.type,
 			boss = isBoss,
 			kind = kind,
+			trait = isBoss and Duel.bossTrait(floor, setId) or nil, -- the boss's signature (Duel.BossTraits)
 			regen = isBoss and bossNumber >= 2, -- heals a little every round
 			armor = (kind == "armored" or (isBoss and bossNumber >= 4)) and Duel.Armor or 0,
 			enrages = isBoss and bossNumber >= 3,
@@ -438,6 +505,7 @@ function Duel.enemies(floor, power, setId)
 			chill = 0,
 			frozen = false, -- loses its next turn
 			raised = false, -- already called back once by a summoner
+			dodged = false, -- an evasive boss already halved a hit this round
 			curse = 0, -- damage at the end of each round...
 			curseRounds = 0, -- ...for this many more rounds
 			hex = {}, -- fractions added to the next hits on it
@@ -586,6 +654,7 @@ local function viewOf(state, hero)
 			hex = #enemy.hex,
 			stunned = enemy.stunned,
 			stunGuard = enemy.stunGuard,
+			trait = enemy.trait,
 		}
 	end
 	return {
@@ -677,11 +746,19 @@ local function hitEnemy(state, events, card, index, damage, arc)
 	if hexed then
 		damage = damage * (1 + hexed)
 	end
+	local dodged = enemy.trait == "cloudstep" and not enemy.dodged
+	if dodged then
+		enemy.dodged = true
+		damage = damage * 0.5
+	end
 	damage = math.max(1, math.floor(damage))
 	enemy.hp = math.max(0, enemy.hp - damage)
 	local text = (arc and "⚡ The shock arcs to " or (card.name .. " hits ")) .. enemy.name .. " for " .. short(damage)
 	if hexed then
 		text = text .. " 🎯"
+	end
+	if dodged then
+		text = text .. " (☁️ half dodged)"
 	end
 	if pierced then
 		text = text .. " (through armour)"
@@ -775,6 +852,7 @@ local function finishRound(state, events, rng)
 	end
 
 	for index, enemy in ipairs(state.enemies) do
+		enemy.dodged = false
 		-- bleeding and burning come first, and can finish an enemy before it acts
 		if enemy.hp > 0 and (enemy.bleed > 0 or enemy.burnRounds > 0 or enemy.curseRounds > 0) then
 			local damage, parts = 0, {}
@@ -815,7 +893,7 @@ local function finishRound(state, events, rng)
 			end
 			local hurtAlly = enemy.kind == "healer" and mostHurt(state) or nil
 			local fallen = nil
-			if enemy.kind == "summoner" then
+			if enemy.kind == "summoner" or enemy.trait == "rally" then
 				for otherIndex, other in ipairs(state.enemies) do
 					if other.hp <= 0 and not other.raised then
 						fallen = otherIndex
@@ -835,7 +913,7 @@ local function finishRound(state, events, rng)
 				local ally = state.enemies[hurtAlly]
 				ally.hp = math.min(ally.maxHp, ally.hp + math.floor(ally.maxHp * Duel.HealShare))
 				table.insert(events, { kind = "mend", text = enemy.name .. " heals " .. (hurtAlly == index and "itself" or ally.name) .. ".", enemy = hurtAlly, enemyHp = ally.hp })
-			elseif enemy.boss and not enemy.winding and state.round % 3 == 2 then
+			elseif enemy.boss and not enemy.winding and (state.round % 3 == 2 or (enemy.trait == "ragnarok" and enemy.hp < enemy.maxHp * 0.5 and state.round % 2 == 0)) then
 				-- bosses spend a turn winding up, so you can see the big hit coming
 				enemy.winding = true
 				table.insert(events, { kind = "windup", text = "⚠️ " .. enemy.name .. " is winding up a huge attack!", enemy = index })
@@ -855,7 +933,8 @@ local function finishRound(state, events, rng)
 				if weak then
 					damage = damage * (1 - weak)
 				end
-				local blocked = table.remove(hero.shields, 1)
+				local thunder = bigHit and enemy.trait == "thunder" and #hero.shields > 0
+				local blocked = not thunder and table.remove(hero.shields, 1) or nil
 				local parried = 0
 				if blocked then
 					if bigHit then
@@ -866,9 +945,16 @@ local function finishRound(state, events, rng)
 				damage = math.max(1, math.floor(damage))
 				hero.hp = math.max(0, hero.hp - damage)
 				local text = enemy.name .. (enraged and " is enraged and hits " or " hits ") .. whoIs(hero) .. " for " .. short(damage)
-				if enemy.kind == "venomous" then
+				if enemy.kind == "venomous" or enemy.trait == "frostbite" then
 					hero.poison = hero.poison + math.max(1, math.floor(damage * Duel.PoisonShare))
-					text = text .. " 🐍"
+					text = text .. (enemy.kind == "venomous" and " 🐍" or " ❄️ frostbite")
+				end
+				if thunder then
+					text = text .. " ⚡ straight through the shield!"
+				end
+				if bigHit and enemy.trait == "undertow" then
+					hero.energy = math.max(0, hero.energy - 2)
+					text = text .. " 🌊 -2 energy"
 				end
 				if enemy.kind == "berserker" then
 					enemy.attack = math.max(enemy.attack + 1, math.floor(enemy.attack * Duel.BerserkGrowth))

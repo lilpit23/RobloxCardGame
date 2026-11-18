@@ -82,6 +82,11 @@ way so the repo stays the whole game.
   (`Pets.bonus`). Pets are kept through rebirths, never traded, and float beside their owner on
   every client (the player's "Pets" attribute, set by `updatePets`). Pets are original
   creatures, not from any story.
+  Pets are locked until the player beats Alabaster the Ragdoll (`data.alabasterBeaten`), a
+  seal-point Ragdoll cat built beside the Battle Tower (`buildAlabaster` in `Plots.luau`). His
+  fight is `Duel.alabasterNew` (duel mode "alabaster"): deliberately very hard, with Nine
+  Lives (`landOnFeet`), a half-dodge (`evasive`), regen and enrage. Tune it with the Alabaster
+  lines in `duel-sim.js`. (Not the same character as Alabaster the accountant in `Staff.luau`.)
 - World boss (`Duel.raid*`, `Config.Raid`): every so often the server fights one boss. Each
   fight is a solo duel of `Duel.RaidRounds` rounds against an unkillable copy; damage becomes
   points against the player's own health (`Duel.raidPoints`), so collections of any size

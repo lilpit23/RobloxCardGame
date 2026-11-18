@@ -99,6 +99,10 @@ for _, entry in ipairs({
 	end)
 end
 
+add("alabaster", "Cat Whisperer", "Beat Alabaster the Ragdoll", 0, 400, function(profile)
+	return profile.alabasterBeaten == true
+end)
+
 -- Titles the profile qualifies for but has not been given yet. profile needs: collection,
 -- tower, rebirths. owned = data.titles.
 function Titles.newlyEarned(profile, owned)

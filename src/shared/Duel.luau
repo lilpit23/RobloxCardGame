@@ -386,6 +386,7 @@ Duel.BossTraits = {
 	rally = { name = "📯 Rally", text = "Calls knocked-out allies back to fight (once each)" },
 	frostbite = { name = "❄️ Frostbite", text = "Its hits leave frost that hurts every round; a Heal cures it" },
 	ragnarok = { name = "🔥 Ragnarok", text = "Below half health it winds up every other round" },
+	ninelives = { name = "🐾 Nine Lives", text = "Knocked out, he lands on his feet: twice, at half health" },
 }
 local SET_TRAIT = {
 	storybook = "cloudstep",
@@ -657,6 +658,8 @@ local function viewOf(state, hero)
 			stunGuard = enemy.stunGuard,
 			trait = enemy.trait,
 			raid = enemy.raid,
+			evasive = enemy.evasive,
+			lives = enemy.lives,
 		}
 	end
 	return {
@@ -748,7 +751,7 @@ local function hitEnemy(state, events, card, index, damage, arc)
 	if hexed then
 		damage = damage * (1 + hexed)
 	end
-	local dodged = enemy.trait == "cloudstep" and not enemy.dodged
+	local dodged = (enemy.trait == "cloudstep" or enemy.evasive) and not enemy.dodged
 	if dodged then
 		enemy.dodged = true
 		damage = damage * 0.5
@@ -846,7 +849,26 @@ local function whoIs(hero)
 	return hero.name or "you"
 end
 
+-- Nine Lives: an enemy with lives left gets back up at half health.
+local function landOnFeet(state, events)
+	for index, enemy in ipairs(state.enemies) do
+		if enemy.hp <= 0 and (enemy.lives or 0) > 0 then
+			enemy.lives = enemy.lives - 1
+			enemy.hp = math.floor(enemy.maxHp * 0.5)
+			enemy.bleed, enemy.burn, enemy.burnRounds, enemy.curse, enemy.curseRounds = 0, 0, 0, 0, 0
+			enemy.stunned, enemy.frozen, enemy.winding = false, false, false
+			table.insert(events, {
+				kind = "summon",
+				text = "🐾 " .. enemy.name .. " lands on his feet! (" .. enemy.lives .. (enemy.lives == 1 and " life" or " lives") .. " left)",
+				enemy = index,
+				enemyHp = enemy.hp,
+			})
+		end
+	end
+end
+
 local function finishRound(state, events, rng)
+	landOnFeet(state, events)
 	if firstAlive(state) == nil then
 		state.over, state.win = true, true
 		table.insert(events, { kind = "win", text = "🏆 Victory!" })
@@ -978,6 +1000,7 @@ local function finishRound(state, events, rng)
 		end
 	end
 
+	landOnFeet(state, events)
 	if heroStanding(state) and firstAlive(state) == nil then
 		state.over, state.win = true, true
 		table.insert(events, { kind = "win", text = "🏆 Victory!" })
@@ -1158,6 +1181,37 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 		table.insert(enemy.weak, card.amount)
 		table.insert(events, { kind = "weaken", text = card.name .. " weakens " .. enemy.name .. ": its next attack deals -" .. percent(card.amount), enemy = targetIndex, icon = "🌀" })
 	end
+end
+
+-- Alabaster ---------------------------------------------------------------------------------
+-- Alabaster the Ragdoll, a seal-point Ragdoll cat who sits beside the Battle Tower and guards
+-- the pet eggs: beat him once to unlock pets. He is meant to be very hard: stronger than the
+-- top of the tower, half-dodges the first hit each round, regenerates, gets angrier when hurt
+-- and has Nine Lives (gets back up twice at half health).
+Duel.AlabasterFloor = 42 -- his strength, as a tower floor
+Duel.AlabasterHealth = 5 -- times his strength
+Duel.AlabasterAttack = 0.4 -- times his strength
+Duel.AlabasterLives = 2
+
+function Duel.alabasterNew(deck, rng)
+	local power = Duel.floorPower(Duel.AlabasterFloor)
+	local enemies = Duel.enemies(Duel.BossEvery)
+	local alabaster = enemies[1]
+	local state = Duel.new(Duel.AlabasterFloor, deck, rng, "alabaster", { alabaster })
+	if state == nil then
+		return nil
+	end
+	alabaster.name = "🐱 Alabaster"
+	alabaster.glyph = "🐱"
+	alabaster.type = "mystic"
+	alabaster.trait = "ninelives"
+	alabaster.evasive = true
+	alabaster.lives = Duel.AlabasterLives
+	alabaster.regen, alabaster.enrages, alabaster.armor = true, true, 0
+	alabaster.maxHp = math.floor(power * Duel.AlabasterHealth)
+	alabaster.hp = alabaster.maxHp
+	alabaster.attack = math.max(1, math.floor(power * Duel.AlabasterAttack))
+	return state
 end
 
 -- Card mastery ---------------------------------------------------------------------------

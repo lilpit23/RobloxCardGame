@@ -66,6 +66,15 @@ for _,sets in ipairs({3,5,7}) do
     line[#line+1]=f..": solo "..math.floor(coopRate(p,f,1,30)*100).."% duo "..math.floor(coopRate(p,f,2,30)*100).."% trio "..math.floor(coopRate(p,f,3,30)*100).."%" end
   print("  sets<="..sets.."  "..table.concat(line,"   "))
 end
+print("Alabaster (bot win rate):")
+local function alabasterRate(profile,label)
+  local deck=Duel.autoDeck(profile) local w=0
+  for i=1,60 do local s=Duel.alabasterNew(deck,rng) while not s.over do local a=Duel.suggest(Duel.view(s)) if a.kind=="play" then Duel.play(s,a.hand,a.target,rng) else Duel.pass(s,rng) end end if s.win then w=w+1 end end
+  print("  "..label..": "..math.floor(w/60*100).."%")
+end
+for _,sets in ipairs({7,8,9}) do local inv={} for _,d in ipairs(Cards.List) do if table.find(Cards.SetOrder,d.set)<=sets and Cards.Rarities[d.rarity].order<=5 then inv[d.id]=2 end end alabasterRate({inventory=inv,slots={},vault={}},"sets<="..sets.." up to Legendary") end
+do local inv={} for _,d in ipairs(Cards.List) do inv[d.id..":gold"]=1 end alabasterRate({inventory=inv,slots={},vault={}},"everything gold") end
+do local inv={} for _,d in ipairs(Cards.List) do inv[d.id..":prism"]=3 end alabasterRate({inventory=inv,slots={},vault={}},"everything prism") end
 print("world boss (points per fight, bot):")
 for _,sets in ipairs({1,3,5,9}) do
   local inv={} for _,d in ipairs(Cards.List) do if table.find(Cards.SetOrder,d.set)<=sets and Cards.Rarities[d.rarity].order<=5 then inv[d.id]=2 end end

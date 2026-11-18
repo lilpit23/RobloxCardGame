@@ -68,6 +68,7 @@ local state = {
 	mastery = {},
 	pets = {},
 	petsEquipped = {},
+	alabasterBeaten = false,
 	pvpOpen = true,
 	bossDay = {},
 	raid = false, -- the world boss while one is out (see raidView on the server)
@@ -2660,6 +2661,9 @@ function duelTitleText()
 		end
 		return text
 	end
+	if duel.mode == "alabaster" then
+		return "🐱 Alabaster the Ragdoll  ·  Round " .. duel.round
+	end
 	if duel.mode == "raid" then
 		return "🐉 World boss  ·  Round " .. duel.round .. "/" .. Duel.RaidRounds
 	end
@@ -2723,7 +2727,10 @@ function renderDuelHud()
 					table.insert(marks, "🛡️ Armoured")
 				end
 				if enemy.trait and Duel.BossTraits[enemy.trait] then
-					table.insert(marks, Duel.BossTraits[enemy.trait].name)
+					table.insert(marks, Duel.BossTraits[enemy.trait].name .. ((enemy.lives or 0) > 0 and (" x" .. enemy.lives) or ""))
+				end
+				if enemy.evasive then
+					table.insert(marks, Duel.BossTraits.cloudstep.name)
 				end
 				if enemy.regen then
 					table.insert(marks, "♻️ Regenerates")
@@ -3155,6 +3162,16 @@ local function playResultNow(result)
 				duelEnding = "🤝 A draw with " .. opponent .. "."
 			else
 				duelEnding = "💀 " .. opponent .. " wins this duel. Rematch?"
+			end
+		elseif duel.mode == "alabaster" then
+			if duel.win and result.unlocked then
+				duelEnding = "🐱 Alabaster yields! \"Fine. The eggs are yours.\"  Pets unlocked!  +" .. Format.short(result.aura or 0) .. " aura"
+				playSound("bigPull")
+			elseif duel.win then
+				duelEnding = "🐱 You beat Alabaster again. He pretends he let you win."
+				playSound("bigPull")
+			else
+				duelEnding = "😼 Alabaster flicks his tail. \"Come back when you're stronger.\"\nBuild your best deck and master your cards."
 			end
 		elseif duel.mode == "raid" then
 			duelEnding = "🐉 You dealt " .. (result.points or 0) .. " points to the world boss!"
@@ -3886,8 +3903,18 @@ panels.Pets = function()
 		Remotes.EquipPet:FireServer("best")
 	end).TextSize = 15
 
-	if state.rebirths < Pets.UnlockRebirths then
-		newNoteRow(2, "🔒 Pets arrive after your " .. Pets.UnlockRebirths .. "th rebirth. The eggs below show what's waiting for you!")
+	if not state.alabasterBeaten then
+		local gate = newRow(2, 64)
+		gate.BackgroundColor3 = Color3.fromRGB(70, 50, 90)
+		newLabel(gate, "🐱 Alabaster the Ragdoll guards the eggs. Find him beside the Battle Tower and beat him to unlock pets. He is very, very hard.", UDim2.new(0, 14, 0, 0), UDim2.new(1, -190, 1, 0), {
+			TextSize = 13,
+		})
+		newButton(gate, "🐱 Challenge", UDim2.new(1, -160, 0, 12), UDim2.new(0, 148, 0, 40), Color3.fromRGB(150, 95, 230), function()
+			duelAuto = false
+			startDuel("alabaster")
+		end).TextSize = 15
+	elseif state.rebirths < Pets.UnlockRebirths then
+		newNoteRow(2, "🔒 The first egg opens after your " .. Pets.UnlockRebirths .. "th rebirth. The eggs below show what's waiting for you!")
 	end
 
 	-- the eggs
@@ -3914,7 +3941,9 @@ panels.Pets = function()
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
 		})
-		if open then
+		if open and not state.alabasterBeaten then
+			newButton(row, "🐱 Beat Alabaster", UDim2.new(1, -160, 0, 26), UDim2.new(0, 148, 0, 44), COLORS.locked, nil).TextSize = 13
+		elseif open then
 			newButton(row, "🥚 Hatch", UDim2.new(1, -160, 0, 26), UDim2.new(0, 148, 0, 44), state.aura >= egg.cost and Color3.fromRGB(240, 110, 200) or COLORS.locked, function()
 				local ok, result = pcall(function()
 					return Remotes.HatchEgg:InvokeServer(egg.id)
@@ -4270,6 +4299,45 @@ end
 
 local seenAutoRev = 0
 
+-- Walking up to Alabaster: he says something and offers his challenge.
+local ALABASTER_LINES = {
+	"Mrrrow. You want my eggs? Beat me first. Nobody has. Well. Almost nobody.",
+	"I have nine lives and you have one deck. Interesting odds.",
+	"*stretches* *yawns* Oh, a challenger. How adorable.",
+	"Seal point, blue eyes, undefeated. Mostly. Shall we?",
+}
+Remotes.OpenAlabaster.OnClientEvent:Connect(function()
+	if duel then
+		return
+	end
+	local line = ALABASTER_LINES[math.random(1, #ALABASTER_LINES)]
+	local box = make("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 90),
+		Size = UDim2.new(0, 420, 0, 128),
+		BackgroundColor3 = Color3.fromRGB(40, 30, 58),
+		BorderSizePixel = 0,
+	}, screen)
+	round(box, 12)
+	make("UIStroke", { Color = Color3.fromRGB(150, 95, 230), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, box)
+	newLabel(box, "🐱 Alabaster: \"" .. line .. "\"", UDim2.new(0, 14, 0, 8), UDim2.new(1, -28, 0, 58), {
+		TextSize = 15,
+	})
+	newButton(box, state.alabasterBeaten and "🐱 Fight again" or "⚔️ Fight him", UDim2.new(0, 14, 0, 76), UDim2.new(0.5, -21, 0, 40), Color3.fromRGB(150, 95, 230), function()
+		box:Destroy()
+		duelAuto = false
+		startDuel("alabaster")
+	end).TextSize = 15
+	newButton(box, "Not yet", UDim2.new(0.5, 7, 0, 76), UDim2.new(0.5, -21, 0, 40), COLORS.locked, function()
+		box:Destroy()
+	end).TextSize = 15
+	task.delay(15, function()
+		if box.Parent then
+			box:Destroy()
+		end
+	end)
+end)
+
 -- Pets float beside every player who has some equipped (the server sets a "Pets" attribute).
 local petFolder = Instance.new("Folder")
 petFolder.Name = "PetFollowers"
@@ -4440,6 +4508,10 @@ Remotes.Announce.OnClientEvent:Connect(function(playerName, key)
 	if petId and Pets.ById[petId] then
 		local pet = Pets.ById[petId]
 		toast("🐾 " .. tostring(playerName) .. " hatched a " .. pet.rarity .. " " .. pet.glyph .. " " .. pet.name .. "!", "announce")
+		return
+	end
+	if key == "alabaster" then
+		toast("🐱 " .. tostring(playerName) .. " beat Alabaster the Ragdoll and unlocked pets!", "announce")
 		return
 	end
 	if Cards.parse(key) then

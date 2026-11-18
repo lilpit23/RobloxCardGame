@@ -846,6 +846,65 @@ local function buildTunnel(map, layout)
 end
 
 -- The PvE arena: a stone circle, the tower with its gate, a lane, braziers and monster gates.
+-- Alabaster the Ragdoll: a seal-point Ragdoll cat who guards the pet eggs. He sits on a
+-- cushion beside the Battle Tower; walking up to him offers his challenge.
+local function buildAlabaster(map, position)
+	local CREAM = Color3.fromRGB(240, 230, 210)
+	local WHITE = Color3.fromRGB(252, 250, 245)
+	local SEAL = Color3.fromRGB(78, 54, 42) -- the dark "seal" points: ears, mask, paws, tail
+	local EYES = Color3.fromRGB(70, 140, 255)
+	local model = Instance.new("Model")
+	model.Name = "Alabaster"
+	model.Parent = map
+	-- he faces down the lane (toward -X); z is forward in his own space
+	local base = CFrame.lookAt(position, position + Vector3.new(-1, 0, 0))
+	local function at(x, y, z)
+		return base * CFrame.new(x, y, -z)
+	end
+	local function piece(name, size, cframe, color, shape, material)
+		local part = newPart(model, name, size, cframe, color, material or Enum.Material.SmoothPlastic)
+		if shape then
+			part.Shape = shape
+		end
+		return part
+	end
+	local BALL = Enum.PartType.Ball
+	newDisc(model, "Cushion", 5.5, 1, position + Vector3.new(0, 0.5, 0), Color3.fromRGB(120, 60, 160), Enum.Material.Fabric)
+	piece("Body", Vector3.new(5, 5, 5), at(0, 3.4, -0.4), CREAM, BALL)
+	piece("Haunches", Vector3.new(5.6, 3.6, 4.6), at(0, 2.3, -1), CREAM, BALL)
+	piece("ChestRuff", Vector3.new(3.6, 3.6, 3.6), at(0, 4, 1.4), WHITE, BALL)
+	piece("Head", Vector3.new(4, 3.6, 3.6), at(0, 6.9, 1.3), CREAM, BALL)
+	piece("Mask", Vector3.new(2.4, 2.2, 1.6), at(0, 6.7, 2.7), SEAL, BALL)
+	for _, side in ipairs({ -1, 1 }) do
+		local ear = newPart(model, "Ear", Vector3.new(0.5, 1.6, 1.3), at(side * 1.15, 8.6, 1.2) * CFrame.Angles(0, math.rad(side * 90), math.rad(-side * 12)), SEAL, Enum.Material.SmoothPlastic)
+		local wedge = Instance.new("SpecialMesh")
+		wedge.MeshType = Enum.MeshType.Wedge
+		wedge.Parent = ear
+		local eye = piece("Eye", Vector3.new(0.55, 0.55, 0.55), at(side * 0.6, 7.1, 3.3), EYES, BALL, Enum.Material.Neon)
+		eye.CanCollide = false
+		piece("Paw", Vector3.new(1.3, 1, 1.6), at(side * 1.1, 1.1, 2.2), SEAL, BALL)
+	end
+	piece("Nose", Vector3.new(0.35, 0.3, 0.3), at(0, 6.55, 3.5), Color3.fromRGB(230, 150, 160), BALL)
+	-- a big fluffy tail curled around his side
+	piece("Tail", Vector3.new(1.4, 1.4, 4.8), at(2.6, 1.6, 0.4) * CFrame.Angles(0, math.rad(-25), 0), SEAL, nil, Enum.Material.Fabric)
+	piece("TailTip", Vector3.new(1.6, 1.6, 1.6), at(3.3, 1.7, 2.6), SEAL, BALL, Enum.Material.Fabric)
+
+	local head = model:FindFirstChild("Head")
+	newBillboard(head, "🐱 Alabaster the Ragdoll", 4, 14, 1.6)
+	newBillboard(head, "Guardian of the pet eggs. Beat him to unlock pets.", 2.6, 16, 0.9)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Challenge"
+	prompt.ObjectText = "Alabaster"
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = head
+	prompt.Triggered:Connect(function(player)
+		if callbacks.onAlabaster then
+			callbacks.onAlabaster(player)
+		end
+	end)
+end
+
 local arenaCenter = Vector3.new() -- set by buildArena; the world boss looms over it
 
 local function buildArena(map, layout)
@@ -886,6 +945,9 @@ local function buildArena(map, layout)
 			callbacks.onTower(player)
 		end
 	end)
+
+	-- Alabaster sits beside the tower, clear of the duel pads
+	buildAlabaster(map, Vector3.new(towerX - 6, 0.6, 38))
 
 	-- the lane from the tunnel to the gate
 	local laneStart = layout.tunnelEnd

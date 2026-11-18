@@ -70,6 +70,7 @@ local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
 local BuyTrainingRemote = newRemote("RemoteEvent", "BuyTraining")
 local HatchEggRemote = newRemote("RemoteFunction", "HatchEgg")
 local EquipPetRemote = newRemote("RemoteEvent", "EquipPet")
+local OpenAlabasterRemote = newRemote("RemoteEvent", "OpenAlabaster") -- server -> client
 local PvpChallengeRemote = newRemote("RemoteEvent", "PvpChallenge")
 local PvpRespondRemote = newRemote("RemoteEvent", "PvpRespond")
 local PvpInviteRemote = newRemote("RemoteEvent", "PvpInvite") -- server -> client
@@ -293,6 +294,7 @@ local function pushState(player)
 		perks = data.perks,
 		training = data.training,
 		pets = data.pets,
+		alabasterBeaten = data.alabasterBeaten,
 		petsEquipped = data.petsEquipped,
 		mastery = data.mastery,
 		tower = data.tower,
@@ -1476,6 +1478,9 @@ HatchEggRemote.OnServerInvoke = function(player, eggId)
 	if data == nil or egg == nil then
 		return { ok = false, error = "Pick an egg." }
 	end
+	if not data.alabasterBeaten then
+		return { ok = false, error = "Beat Alabaster the Ragdoll (beside the Battle Tower) to unlock pets." }
+	end
 	if not Pets.eggUnlocked(egg, data.rebirths) then
 		return { ok = false, error = egg.name .. " opens after " .. egg.rebirths .. " rebirths." }
 	end
@@ -1741,6 +1746,11 @@ DuelStartRemote.OnServerInvoke = function(player, mode, bossFloor)
 		end
 		if duel then
 			duel.raidStart = raid.endsAt -- which world boss this fight belongs to
+		end
+	elseif mode == "alabaster" then
+		duel = Duel.alabasterNew(battleDeckFor(data), rng)
+		if duel then
+			duel.mastery = data.mastery
 		end
 	elseif mode == "boss" then
 		-- a rematch with a boss already beaten
@@ -2315,6 +2325,20 @@ DuelActRemote.OnServerInvoke = function(player, action)
 				end
 				touch(player, true)
 			end
+		elseif duel.mode == "alabaster" then
+			if duel.win then
+				questProgress(player, "win_battles", 1)
+				if not data.alabasterBeaten then
+					data.alabasterBeaten = true
+					local aura = Quests.reward(data.rebirths) * 10
+					data.aura = data.aura + aura
+					result.aura = aura
+					result.unlocked = true
+					AnnounceRemote:FireAllClients(player.DisplayName, "alabaster")
+					checkTitles(player, data)
+				end
+				touch(player, true)
+			end
 		elseif duel.mode == "raid" then
 			-- win or lose, the damage counts if this world boss is still out
 			local points = Duel.raidPoints(duel)
@@ -2692,6 +2716,11 @@ Plots.init({
 
 	-- Someone walked up to an employee: they say hello out loud, and for the owner the staff
 	-- list opens too.
+	onAlabaster = function(player)
+		if allow(player, "AlabasterTalk", 1, 3) then
+			OpenAlabasterRemote:FireClient(player)
+		end
+	end,
 	onStaff = function(plot, player, staffId)
 		local owner = plot.owner
 		local data = owner and PlayerData.get(owner)

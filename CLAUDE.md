@@ -72,6 +72,11 @@ way so the repo stays the whole game.
   duels (`runCoop`, `finishCoop`); a win clears the floor for everyone whose next floor it was
   (`clearFloor`) and pays the rest a helper's share of aura. Events name heroes by index and
   are converted per player with `Duel.coopEventsFor`.
+- World boss (`Duel.raid*`, `Config.Raid`): every so often the server fights one boss. Each
+  fight is a solo duel of `Duel.RaidRounds` rounds against an unkillable copy; damage becomes
+  points against the player's own health (`Duel.raidPoints`), so collections of any size
+  count alike, and the server-wide `raid` table on the server subtracts them. A fall gives
+  every contributor a free booster. The state is sent as `raid` (false when none is out).
 - A new set every rebirth: a set's packs unlock by rebirth count (`pack.rebirths`,
   `Packs.unlocked`), not by store tier. The store tier only gives the income multiplier and
   shelves. Rebirth costs in `Rebirth.luau` assume this, and each level's required cards must

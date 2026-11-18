@@ -655,6 +655,7 @@ local function viewOf(state, hero)
 			stunned = enemy.stunned,
 			stunGuard = enemy.stunGuard,
 			trait = enemy.trait,
+			raid = enemy.raid,
 		}
 	end
 	return {
@@ -1000,6 +1001,11 @@ local function finishRound(state, events, rng)
 		table.insert(events, { kind = "lose", text = "💀 Defeated on round " .. state.round .. "." })
 		return
 	end
+	if state.mode == "raid" and state.round >= Duel.RaidRounds then
+		state.over, state.win = true, true
+		table.insert(events, { kind = "win", text = "⏱️ Time! You held your ground against the world boss." })
+		return
+	end
 	if state.round >= Duel.MaxRounds then
 		state.over, state.win = true, false
 		table.insert(events, { kind = "lose", text = "💀 Out of time — the tower's guardians outlast you." })
@@ -1147,6 +1153,65 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 		table.insert(enemy.weak, card.amount)
 		table.insert(events, { kind = "weaken", text = card.name .. " weakens " .. enemy.name .. ": its next attack deals -" .. percent(card.amount), enemy = targetIndex, icon = "🌀" })
 	end
+end
+
+-- World boss -------------------------------------------------------------------------------
+-- Every so often the whole server fights one giant boss. Each player's fight is a solo duel of
+-- Duel.RaidRounds rounds against a copy that cannot fall; what counts is the damage dealt,
+-- measured in "points" against the player's own health (one point = 2.5% of it),
+-- so a new player's hits count as much as a veteran's. The server adds the points up.
+Duel.RaidRounds = 10
+Duel.RaidStartEnergy = 4 -- a short fight, so it starts with more energy
+Duel.RaidHitShare = 0.07 -- the world boss hits for this share of your health
+Duel.RaidTraits = { "undertow", "cloudstep", "thunder", "frostbite" }
+
+-- Picks the next world boss: a Legendary or Mythic from a tower set (never a real person).
+function Duel.raidPick(rng)
+	local pool = {}
+	for _, setId in ipairs(Duel.TowerSets) do
+		for _, def in ipairs(Cards.Sets[setId].cards) do
+			local order = Cards.Rarities[def.rarity].order
+			if (order == 5 or order == 6) and not Duel.RealPeople[def.id] then
+				table.insert(pool, def)
+			end
+		end
+	end
+	local def = pool[rng:NextInteger(1, #pool)]
+	return {
+		cardId = def.id,
+		name = def.name,
+		glyph = def.glyph,
+		type = def.type,
+		trait = Duel.RaidTraits[rng:NextInteger(1, #Duel.RaidTraits)],
+	}
+end
+
+-- A duel against the world boss described by `boss` (from Duel.raidPick).
+function Duel.raidNew(boss, deck, rng)
+	local enemies = Duel.enemies(Duel.BossEvery)
+	local enemy = enemies[1]
+	local state = Duel.new(Duel.BossEvery, deck, rng, "raid", { enemy })
+	if state == nil then
+		return nil
+	end
+	enemy.name = "🐉 " .. boss.name
+	enemy.glyph = boss.glyph
+	enemy.type = boss.type
+	enemy.trait = boss.trait
+	enemy.raid = true
+	enemy.regen, enemy.enrages, enemy.armor = false, false, 0
+	enemy.maxHp = 1e12
+	enemy.hp = enemy.maxHp
+	enemy.attack = math.max(1, math.floor(state.maxHp * Duel.RaidHitShare))
+	state.energy = Duel.RaidStartEnergy
+	return state
+end
+
+-- Points a finished world-boss duel earned.
+function Duel.raidPoints(state)
+	local enemy = state.enemies[1]
+	local dealt = enemy.maxHp - enemy.hp
+	return math.floor(dealt / math.max(1, state.maxHp / 40))
 end
 
 -- Co-op duels -----------------------------------------------------------------------------

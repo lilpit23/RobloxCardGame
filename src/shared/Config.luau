@@ -76,6 +76,10 @@ return {
 	-- Server-wide lucky event: everyone gets bonus luck levels for a while.
 	LuckEvent = { Interval = 20 * 60, Duration = 5 * 60, BonusLevels = 5 },
 	BattleCooldown = 5, -- seconds between tower battles
+	-- World boss: the whole server fights one boss every Interval seconds, for Duration seconds.
+	-- Its health is PointsPerPlayer points per player online when it appears (at least
+	-- MinPoints); see Duel.raidPoints. Each player is paid for their first PaidFights fights.
+	Raid = { Interval = 2700, Duration = 600, PointsPerPlayer = 35, MinPoints = 50, PaidFights = 3, DefeatQuests = 3 },
 	ChallengeAuraQuests = 3, -- the daily challenge pays this many quest rewards' worth of aura
 	GlobalBoardInterval = 180, -- seconds between refreshes of the all-server leaderboards
 

@@ -100,7 +100,11 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     **Co-op:** 🤝 Team up with someone to fight your next tower floor together on your duel pad, each with your
     own hand and health. Enemies are tougher for a team, Heals go to whoever is most hurt, and
     a win counts for everyone whose next floor it was (others get helper aura).
-18. **Card roles:** not every card attacks. Each type has its own mix of Strikes, Blasts, Heals,
+18. **World boss:** every 45 minutes a world boss appears for 10 minutes. Everyone fights it
+    from the banner at the top; each fight scores points against your own deck's strength,
+    so new and veteran players count alike. Bring it down in time and every fighter gets a
+    free booster.
+19. **Card roles:** not every card attacks. Each type has its own mix of Strikes, Blasts, Heals,
     Mends, Shields, Power-ups, Weakens, Drains, Curses, Hexes and Stuns.
 
 ## Pacing: what makes a run last

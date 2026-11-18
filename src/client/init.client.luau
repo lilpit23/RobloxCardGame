@@ -66,6 +66,7 @@ local state = {
 	training = {},
 	pvpOpen = true,
 	bossDay = {},
+	raid = false, -- the world boss while one is out (see raidView on the server)
 	tower = 0,
 	luckEventEndsAt = 0,
 	slotCount = Config.BaseSlots,
@@ -2647,6 +2648,9 @@ function duelTitleText()
 		end
 		return text
 	end
+	if duel.mode == "raid" then
+		return "🐉 World boss  ·  Round " .. duel.round .. "/" .. Duel.RaidRounds
+	end
 	if duel.mode == "boss" then
 		return "👑 Boss rematch  ·  Floor " .. duel.floor .. "  ·  Round " .. duel.round
 	end
@@ -2691,6 +2695,13 @@ function renderDuelHud()
 				local alive = enemy.hp > 0
 				figure.fill.Size = UDim2.new(math.clamp(enemy.hp / enemy.maxHp, 0, 1), 0, 1, 0)
 				figure.hpLabel.Text = alive and (Duel.short(enemy.hp) .. " / " .. Duel.short(enemy.maxHp)) or "KO"
+				if enemy.raid then
+					-- the world boss's health is the whole server's, in points
+					local worldBoss = state.raid or nil
+					local share = worldBoss and worldBoss.maxHp > 0 and worldBoss.hp / worldBoss.maxHp or 1
+					figure.fill.Size = UDim2.new(math.clamp(share, 0, 1), 0, 1, 0)
+					figure.hpLabel.Text = worldBoss and ("Server: " .. math.floor(worldBoss.hp) .. " / " .. worldBoss.maxHp .. " pts") or "World boss"
+				end
 				local marks = {}
 				local kind = Duel.Kinds[enemy.kind]
 				if kind and kind.name ~= "" then
@@ -3132,6 +3143,19 @@ local function playResultNow(result)
 				duelEnding = "🤝 A draw with " .. opponent .. "."
 			else
 				duelEnding = "💀 " .. opponent .. " wins this duel. Rematch?"
+			end
+		elseif duel.mode == "raid" then
+			duelEnding = "🐉 You dealt " .. (result.points or 0) .. " points to the world boss!"
+			if result.aura then
+				duelEnding = duelEnding .. "  +" .. Format.short(result.aura) .. " aura"
+			elseif result.unpaid then
+				duelEnding = duelEnding .. "  (aura is paid for your first " .. Config.Raid.PaidFights .. " fights)"
+			elseif result.late then
+				duelEnding = duelEnding .. "  (the boss was already gone)"
+			end
+			if result.defeated then
+				duelEnding = duelEnding .. "\n🎉 The world boss falls! Everyone who fought gets a free booster."
+				playSound("bigPull")
 			end
 		elseif duel.win and duel.mode == "boss" then
 			if result.aura then
@@ -3738,8 +3762,9 @@ panels.Admin = function()
 		{ "cards", "+30 cards" },
 		{ "rebirth", "Rebirth ready" },
 		{ "tower", "+4 floors" },
+		{ "raid", "World boss" },
 	}) do
-		newButton(toolRow, "🧪 " .. tool[2], UDim2.new((index - 1) / 5, 4, 0, 6), UDim2.new(1 / 5, -8, 0, 34), COLORS.button, function()
+		newButton(toolRow, "🧪 " .. tool[2], UDim2.new((index - 1) / 6, 4, 0, 6), UDim2.new(1 / 6, -8, 0, 34), COLORS.button, function()
 			Remotes.OwnerTool:FireServer(tool[1])
 		end).TextSize = 12
 	end
@@ -4003,6 +4028,52 @@ local function refreshHud()
 end
 
 local seenAutoRev = 0
+
+-- World boss banner: health, time left and a Fight button while a world boss is out.
+local raidBanner = make("Frame", {
+	AnchorPoint = Vector2.new(0.5, 0),
+	Position = UDim2.new(0.5, 0, 0, 6),
+	Size = UDim2.new(0, 440, 0, 58),
+	BackgroundColor3 = Color3.fromRGB(60, 25, 30),
+	BackgroundTransparency = 0.1,
+	BorderSizePixel = 0,
+	Visible = false,
+}, screen)
+round(raidBanner, 12)
+make("UIStroke", { Color = Color3.fromRGB(255, 120, 80), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, raidBanner)
+addFitScale(raidBanner, 480, 400)
+local raidTitle = newLabel(raidBanner, "", UDim2.new(0, 12, 0, 4), UDim2.new(1, -130, 0, 22), {
+	Font = Enum.Font.FredokaOne,
+	TextSize = 16,
+	TextWrapped = false,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	TextColor3 = Color3.fromRGB(255, 210, 160),
+})
+local raidFill, raidBarLabel = newBar(raidBanner, UDim2.new(0, 12, 0, 30), UDim2.new(1, -136, 0, 20), Color3.fromRGB(230, 70, 60), 1, "")
+newButton(raidBanner, "⚔️ Fight", UDim2.new(1, -114, 0, 9), UDim2.new(0, 104, 0, 40), Color3.fromRGB(215, 80, 60), function()
+	duelAuto = false
+	startDuel("raid")
+end).TextSize = 16
+
+local function updateRaidBanner()
+	local worldBoss = state.raid or nil -- false when no world boss is out
+	local left = worldBoss and (worldBoss.endsAt - os.time()) or 0
+	local showing = worldBoss ~= nil and not worldBoss.defeated and left > 0 and duel == nil
+	raidBanner.Visible = showing
+	if not showing then
+		return
+	end
+	local trait = Duel.BossTraits[worldBoss.trait]
+	raidTitle.Text = "🐉 World boss: " .. worldBoss.name .. (trait and ("  ·  " .. trait.name) or "")
+	raidFill.Size = UDim2.new(math.clamp(worldBoss.hp / math.max(1, worldBoss.maxHp), 0, 1), 0, 1, 0)
+	raidBarLabel.Text = math.floor(worldBoss.hp) .. " / " .. worldBoss.maxHp .. " pts  ·  " .. string.format("%d:%02d", math.floor(left / 60), left % 60) .. " left"
+end
+task.spawn(function()
+	while true do
+		updateRaidBanner()
+		task.wait(1)
+	end
+end)
 
 Remotes.State.OnClientEvent:Connect(function(newState)
 	for key, value in pairs(newState) do

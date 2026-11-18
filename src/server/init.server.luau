@@ -199,6 +199,23 @@ local function auraMult(data)
 end
 
 local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
+-- The world boss while one is out: { boss (Duel.raidPick), hp, maxHp, endsAt, defeated,
+-- points = { [userId] = points }, fights = { [userId] = paid fights } }, or nil.
+local raid = nil
+local function raidView()
+	if raid == nil then
+		return nil
+	end
+	return {
+		name = raid.boss.name,
+		glyph = raid.boss.glyph,
+		trait = raid.boss.trait,
+		hp = math.max(0, raid.hp),
+		maxHp = raid.maxHp,
+		endsAt = raid.endsAt,
+		defeated = raid.defeated,
+	}
+end
 
 -- The player's total Luck stat, from every source (see Luck.luau).
 local function luckLevel(data)
@@ -258,6 +275,7 @@ local function pushState(player)
 		training = data.training,
 		tower = data.tower,
 		luckEventEndsAt = luckEventEndsAt,
+		raid = raidView() or false, -- false, not nil: the client merges updates key by key
 		luck = luckLevel(data),
 		quests = data.quests,
 		questRev = session.questRev,
@@ -1188,6 +1206,53 @@ end)
 
 -- Admin testing tools, so late-game screens can be reached without hours of play.
 -- Only admins (the owner, anyone the owner made an admin, anyone in Studio) can use them.
+---------------------------------------------------------------------
+-- World boss
+---------------------------------------------------------------------
+local function raidChanged()
+	for _, session in pairs(sessions) do
+		session.dirty = true
+	end
+end
+
+local function startRaid()
+	if raid then
+		return
+	end
+	local settings = Config.Raid
+	raid = {
+		boss = Duel.raidPick(rng),
+		maxHp = math.max(settings.MinPoints, settings.PointsPerPlayer * #Players:GetPlayers()),
+		endsAt = os.time() + settings.Duration,
+		defeated = false,
+		points = {},
+		fights = {},
+	}
+	raid.hp = raid.maxHp
+	raidChanged()
+	for player in pairs(sessions) do
+		notify(player, "🐉 A WORLD BOSS appears: " .. raid.boss.name .. "! Fight it together from the banner at the top.", "good")
+	end
+end
+
+-- The world boss falls: everyone who hurt it gets a free booster and bonus aura.
+local function raidDefeated()
+	raid.defeated = true
+	for userId in pairs(raid.points) do
+		local player = Players:GetPlayerByUserId(userId)
+		local data = player and PlayerData.get(player)
+		if data then
+			if data.gifts < Config.GiftMax then
+				data.gifts = data.gifts + 1
+			end
+			data.aura = data.aura + Quests.reward(data.rebirths) * Config.Raid.DefeatQuests
+			notify(player, "🎉 The world boss falls! You get a free booster 🎁 and bonus aura.", "good")
+			touch(player, true)
+		end
+	end
+	raidChanged()
+end
+
 OwnerToolRemote.OnServerEvent:Connect(function(player, action)
 	if not allow(player, "OwnerTool", 2, 4) or not isAdmin(player) then
 		return
@@ -1197,7 +1262,13 @@ OwnerToolRemote.OnServerEvent:Connect(function(player, action)
 	if session == nil or data == nil then
 		return
 	end
-	if action == "autoUpgrade" then
+	if action == "raid" then
+		if raid then
+			notify(player, "🧪 A world boss is already out.", "info")
+		else
+			startRaid()
+		end
+	elseif action == "autoUpgrade" then
 		session.autoUpgrade = not session.autoUpgrade
 		notify(player, session.autoUpgrade and "🧪 Auto upgrader ON: upgrades are bought as soon as you can afford them." or "🧪 Auto upgrader off.", "info")
 	elseif action == "cash" then
@@ -1533,6 +1604,14 @@ DuelStartRemote.OnServerInvoke = function(player, mode, bossFloor)
 		local challenge = Duel.challenge(Quests.today())
 		duel = Duel.new(challenge.floor, challenge.deck, rng, "daily", Duel.enemies(challenge.floor, challenge.power, challenge.set))
 		duel.day = Quests.today()
+	elseif mode == "raid" then
+		if raid == nil or raid.defeated or os.time() >= raid.endsAt then
+			return { ok = false, error = "There is no world boss out right now." }
+		end
+		duel = Duel.raidNew(raid.boss, battleDeckFor(data), rng)
+		if duel then
+			duel.raidStart = raid.endsAt -- which world boss this fight belongs to
+		end
 	elseif mode == "boss" then
 		-- a rematch with a boss already beaten
 		if type(bossFloor) ~= "number" or bossFloor % Duel.BossEvery ~= 0 or bossFloor < Duel.BossEvery or bossFloor > data.tower then
@@ -2066,6 +2145,32 @@ DuelActRemote.OnServerInvoke = function(player, action)
 					result.gift = true
 				end
 				touch(player, true)
+			end
+		elseif duel.mode == "raid" then
+			-- win or lose, the damage counts if this world boss is still out
+			local points = Duel.raidPoints(duel)
+			result.points = points
+			if raid and raid.endsAt == duel.raidStart and not raid.defeated then
+				local userId = player.UserId
+				raid.points[userId] = (raid.points[userId] or 0) + points
+				raid.hp = raid.hp - points
+				local fights = (raid.fights[userId] or 0) + 1
+				raid.fights[userId] = fights
+				if fights <= Config.Raid.PaidFights and points > 0 then
+					local aura = math.floor(Quests.reward(data.rebirths) * math.min(points, 20) / 10)
+					data.aura = data.aura + aura
+					result.aura = aura
+				else
+					result.unpaid = true
+				end
+				if raid.hp <= 0 then
+					raidDefeated()
+					result.defeated = true
+				end
+				raidChanged()
+				touch(player, true)
+			else
+				result.late = true
 			end
 		elseif duel.win and duel.mode == "boss" then
 			-- pays once a day per boss; replays are just for fun
@@ -2620,6 +2725,29 @@ local function markAllDirty()
 		session.dirty = true
 	end
 end
+
+-- World boss: one every Config.Raid.Interval; any boss (also one an admin summoned) leaves
+-- when it falls or its time runs out.
+task.spawn(function()
+	local nextRaid = os.time() + Config.Raid.Interval
+	while true do
+		task.wait(1)
+		if raid == nil and os.time() >= nextRaid then
+			startRaid()
+		end
+		if raid and (raid.defeated or os.time() >= raid.endsAt) then
+			if not raid.defeated then
+				for player in pairs(sessions) do
+					notify(player, "🐉 The world boss escapes. It will be back!", "info")
+				end
+			end
+			task.wait(5)
+			raid = nil
+			raidChanged()
+			nextRaid = os.time() + Config.Raid.Interval
+		end
+	end
+end)
 
 task.spawn(function()
 	local settings = Config.LuckEvent

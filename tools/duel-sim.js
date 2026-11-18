@@ -66,6 +66,15 @@ for _,sets in ipairs({3,5,7}) do
     line[#line+1]=f..": solo "..math.floor(coopRate(p,f,1,30)*100).."% duo "..math.floor(coopRate(p,f,2,30)*100).."% trio "..math.floor(coopRate(p,f,3,30)*100).."%" end
   print("  sets<="..sets.."  "..table.concat(line,"   "))
 end
+print("world boss (points per fight, bot):")
+for _,sets in ipairs({1,3,5,9}) do
+  local inv={} for _,d in ipairs(Cards.List) do if table.find(Cards.SetOrder,d.set)<=sets and Cards.Rarities[d.rarity].order<=5 then inv[d.id]=2 end end
+  local deck=Duel.autoDeck({inventory=inv,slots={},vault={}}) local total,low,high,alive=0,1e9,0,0
+  for i=1,40 do local s=Duel.raidNew(Duel.raidPick(rng),deck,rng)
+    while not s.over do local a=Duel.suggest(Duel.view(s)) if a.kind=="play" then Duel.play(s,a.hand,a.target,rng) else Duel.pass(s,rng) end end
+    local p=Duel.raidPoints(s) total=total+p low=math.min(low,p) high=math.max(high,p) if s.win then alive=alive+1 end end
+  print("  sets<="..sets..": avg "..string.format("%.1f",total/40).." (min "..low..", max "..high..")  survived "..math.floor(alive/40*100).."%")
+end
 local inv={} for _,d in ipairs(Cards.List) do inv[d.id..":prism"]=3 end
 top({inventory=inv,slots={},vault={}},"everything prism")
 local inv={} for _,d in ipairs(Cards.List) do inv[d.id..":gold"]=1 end

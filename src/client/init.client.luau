@@ -2144,6 +2144,7 @@ local roundQueue = {} -- rounds that arrived during playback, played next
 local duelEnding = nil -- the result line, once the duel is over
 local deckEditing = false
 local deckFilter = "all" -- the role shown in the deck editor
+local battleTab = "tower" -- which tab of the Battle screen is open
 -- roles in the order the deck screens list them
 local ROLE_ORDER = { "attack", "blast", "drain", "stun", "curse", "hex", "weaken", "charge", "shield", "heal", "mend" }
 local stage = nil -- the 3D scene: { folder, spot, figures = { { part, home, gui, ... } } }
@@ -3369,232 +3370,256 @@ panels.Battle = function()
 		return
 	end
 
-	local floor = state.tower + 1
-	local cleared = floor > Battle.MaxFloor
-	local infoRow = newRow(1, 92)
-	if cleared then
-		newLabel(infoRow, "You cleared the whole tower. More floors are coming!", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
-			Font = Enum.Font.FredokaOne,
-			TextSize = 18,
-		})
-	else
-		local aura, cash = Battle.reward(floor, state.cashCap)
-		aura = aura * (Season.event().tower or 1)
-		local boss = floor % Duel.BossEvery == 0
-		newLabel(infoRow, (boss and "👑 BOSS  ·  " or "") .. "Floor " .. floor .. "   ·   win: +" .. Format.short(aura) .. " aura, " .. Format.cash(cash) .. (boss and ", a Legendary card" or ""), UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 24), {
+	-- three tabs: the tower, other players, and the battle deck
+	local tabRow = newRow(0, 44)
+	tabRow.BackgroundTransparency = 1
+	for position, tab in ipairs({ { "tower", "🗼 Tower" }, { "players", "👥 Players" }, { "deck", "🃏 Deck" } }) do
+		local chosen = battleTab == tab[1]
+		newButton(tabRow, tab[2], UDim2.new((position - 1) / 3, 4, 0, 4), UDim2.new(1 / 3, -8, 0, 36), chosen and Color3.fromRGB(150, 95, 230) or COLORS.button, function()
+			battleTab = tab[1]
+			deckEditing = false
+			renderPanel()
+		end).TextSize = 15
+	end
+
+	if battleTab == "tower" then
+		local floor = state.tower + 1
+		local cleared = floor > Battle.MaxFloor
+		local infoRow = newRow(1, 92)
+		if cleared then
+			newLabel(infoRow, "You cleared the whole tower. More floors are coming!", UDim2.new(0, 14, 0, 0), UDim2.new(1, -28, 1, 0), {
+				Font = Enum.Font.FredokaOne,
+				TextSize = 18,
+			})
+		else
+			local aura, cash = Battle.reward(floor, state.cashCap)
+			aura = aura * (Season.event().tower or 1)
+			local boss = floor % Duel.BossEvery == 0
+			newLabel(infoRow, (boss and "👑 BOSS  ·  " or "") .. "Floor " .. floor .. "   ·   win: +" .. Format.short(aura) .. " aura, " .. Format.cash(cash) .. (boss and ", a Legendary card" or ""), UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 24), {
+				Font = Enum.Font.FredokaOne,
+				TextSize = 17,
+				TextWrapped = false,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			})
+			local names = {}
+			for _, enemy in ipairs(Duel.enemies(floor)) do
+				local kind = Duel.Kinds[enemy.kind]
+				local trait = enemy.trait and Duel.BossTraits[enemy.trait]
+				table.insert(names, enemy.name .. " (" .. typeText(enemy.type) .. (kind.name ~= "" and (", " .. kind.name) or "") .. (trait and (", " .. trait.name .. ": " .. trait.text) or "") .. ", " .. Duel.short(enemy.maxHp) .. " HP)")
+			end
+			newLabel(infoRow, "Enemies: " .. table.concat(names, ",  "), UDim2.new(0, 14, 0, 32), UDim2.new(1, -190, 0, 54), {
+				TextSize = 12,
+				TextColor3 = COLORS.dim,
+				TextYAlignment = Enum.TextYAlignment.Top,
+			})
+			newButton(infoRow, "FIGHT", UDim2.new(1, -160, 0, 8), UDim2.new(0, 148, 0, 42), COLORS.bad, function()
+				duelAuto = false
+				startDuel("tower")
+			end)
+			if autoUnlocked() then
+				newButton(infoRow, "🤖 Auto climb", UDim2.new(1, -160, 0, 54), UDim2.new(0, 148, 0, 30), Color3.fromRGB(150, 95, 230), function()
+					duelAuto = true
+					startDuel("tower")
+				end).TextSize = 13
+			else
+				local lockedAuto = newButton(infoRow, "🤖 Auto: finish 1 battle", UDim2.new(1, -160, 0, 54), UDim2.new(0, 148, 0, 30), COLORS.locked, nil)
+				lockedAuto.TextSize = 11
+				lockedAuto.AutoButtonColor = false
+			end
+		end
+
+		-- daily challenge: a preset deck, the same for everyone
+		local challenge = Duel.challenge(state.today)
+		local won = state.challengeDay == state.today
+		local dailyRow = newRow(2, 64)
+		dailyRow.BackgroundColor3 = Color3.fromRGB(60, 45, 80)
+		local challengeSet = Cards.Sets[challenge.set]
+		newLabel(dailyRow, "📅 Daily challenge  ·  " .. challengeSet.icon .. " " .. challengeSet.name, UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 22), {
 			Font = Enum.Font.FredokaOne,
 			TextSize = 17,
-			TextWrapped = false,
-			TextTruncate = Enum.TextTruncate.AtEnd,
+			TextColor3 = Color3.fromRGB(255, 215, 90),
 		})
-		local names = {}
-		for _, enemy in ipairs(Duel.enemies(floor)) do
-			local kind = Duel.Kinds[enemy.kind]
-			local trait = enemy.trait and Duel.BossTraits[enemy.trait]
-			table.insert(names, enemy.name .. " (" .. typeText(enemy.type) .. (kind.name ~= "" and (", " .. kind.name) or "") .. (trait and (", " .. trait.name .. ": " .. trait.text) or "") .. ", " .. Duel.short(enemy.maxHp) .. " HP)")
-		end
-		newLabel(infoRow, "Enemies: " .. table.concat(names, ",  "), UDim2.new(0, 14, 0, 32), UDim2.new(1, -190, 0, 54), {
+		local dailyText = won and "✅ Won today. Come back tomorrow for a new one (you can replay for fun)."
+			or ("Win with a preset " .. #challenge.deck .. "-card deck: +" .. Format.short(Quests.reward(state.rebirths) * Config.ChallengeAuraQuests * (Season.event().tower or 1)) .. " aura and a free booster.")
+		newLabel(dailyRow, dailyText, UDim2.new(0, 14, 0, 30), UDim2.new(1, -190, 0, 30), {
 			TextSize = 12,
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
 		})
-		newButton(infoRow, "FIGHT", UDim2.new(1, -160, 0, 8), UDim2.new(0, 148, 0, 42), COLORS.bad, function()
+		newButton(dailyRow, won and "Replay" or "PLAY", UDim2.new(1, -160, 0, 10), UDim2.new(0, 148, 0, 44), won and COLORS.locked or Color3.fromRGB(215, 160, 50), function()
 			duelAuto = false
-			startDuel("tower")
+			startDuel("daily")
 		end)
-		if autoUnlocked() then
-			newButton(infoRow, "🤖 Auto climb", UDim2.new(1, -160, 0, 54), UDim2.new(0, 148, 0, 30), Color3.fromRGB(150, 95, 230), function()
-				duelAuto = true
-				startDuel("tower")
-			end).TextSize = 13
-		else
-			local lockedAuto = newButton(infoRow, "🤖 Auto: finish 1 battle", UDim2.new(1, -160, 0, 54), UDim2.new(0, 148, 0, 30), COLORS.locked, nil)
-			lockedAuto.TextSize = 11
-			lockedAuto.AutoButtonColor = false
-		end
-	end
 
-	-- daily challenge: a preset deck, the same for everyone
-	local challenge = Duel.challenge(state.today)
-	local won = state.challengeDay == state.today
-	local dailyRow = newRow(2, 64)
-	dailyRow.BackgroundColor3 = Color3.fromRGB(60, 45, 80)
-	local challengeSet = Cards.Sets[challenge.set]
-	newLabel(dailyRow, "📅 Daily challenge  ·  " .. challengeSet.icon .. " " .. challengeSet.name, UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 22), {
-		Font = Enum.Font.FredokaOne,
-		TextSize = 17,
-		TextColor3 = Color3.fromRGB(255, 215, 90),
-	})
-	local dailyText = won and "✅ Won today. Come back tomorrow for a new one (you can replay for fun)."
-		or ("Win with a preset " .. #challenge.deck .. "-card deck: +" .. Format.short(Quests.reward(state.rebirths) * Config.ChallengeAuraQuests * (Season.event().tower or 1)) .. " aura and a free booster.")
-	newLabel(dailyRow, dailyText, UDim2.new(0, 14, 0, 30), UDim2.new(1, -190, 0, 30), {
-		TextSize = 12,
-		TextColor3 = COLORS.dim,
-		TextYAlignment = Enum.TextYAlignment.Top,
-	})
-	newButton(dailyRow, won and "Replay" or "PLAY", UDim2.new(1, -160, 0, 10), UDim2.new(0, 148, 0, 44), won and COLORS.locked or Color3.fromRGB(215, 160, 50), function()
-		duelAuto = false
-		startDuel("daily")
-	end)
-
-	-- boss rematches: each beaten boss once a day for aura and a chance at a Legendary
-	local beaten = math.floor(math.min(state.tower, Battle.MaxFloor) / Duel.BossEvery)
-	if beaten > 0 then
-		local bossRow = newRow(3, 36 + beaten * 40)
-		bossRow.BackgroundColor3 = Color3.fromRGB(70, 45, 40)
-		newLabel(bossRow, "👑 Boss rematches  ·  once a day each: " .. math.floor(Battle.RematchAuraShare * 100) .. "% of the floor's aura and a " .. math.floor(Battle.RematchDropChance * 100) .. "% Legendary chance", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 24), {
-			Font = Enum.Font.FredokaOne,
-			TextSize = 14,
-			TextColor3 = Color3.fromRGB(255, 200, 120),
-			TextWrapped = false,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-		})
-		for number = 1, beaten do
-			local bossFloor = number * Duel.BossEvery
-			local boss = Duel.enemies(bossFloor)[1]
-			local trait = boss.trait and Duel.BossTraits[boss.trait]
-			local done = (state.bossDay or {})[tostring(bossFloor)] == state.today
-			local y = 34 + (number - 1) * 40
-			newLabel(bossRow, "Floor " .. bossFloor .. ": " .. boss.name .. (trait and ("  ·  " .. trait.name) or ""), UDim2.new(0, 14, 0, y), UDim2.new(1, -190, 0, 34), {
-				TextSize = 13,
+		-- boss rematches: each beaten boss once a day for aura and a chance at a Legendary
+		local beaten = math.floor(math.min(state.tower, Battle.MaxFloor) / Duel.BossEvery)
+		if beaten > 0 then
+			local bossRow = newRow(3, 36 + beaten * 40)
+			bossRow.BackgroundColor3 = Color3.fromRGB(70, 45, 40)
+			newLabel(bossRow, "👑 Boss rematches  ·  once a day each: " .. math.floor(Battle.RematchAuraShare * 100) .. "% of the floor's aura and a " .. math.floor(Battle.RematchDropChance * 100) .. "% Legendary chance", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 24), {
+				Font = Enum.Font.FredokaOne,
+				TextSize = 14,
+				TextColor3 = Color3.fromRGB(255, 200, 120),
 				TextWrapped = false,
 				TextTruncate = Enum.TextTruncate.AtEnd,
 			})
-			newButton(bossRow, done and "✅ Replay" or "👑 Rematch", UDim2.new(1, -160, 0, y + 2), UDim2.new(0, 148, 0, 32), done and COLORS.locked or Color3.fromRGB(215, 120, 60), function()
-				duelAuto = false
-				startDuel("boss", bossFloor)
-			end).TextSize = 13
+			for number = 1, beaten do
+				local bossFloor = number * Duel.BossEvery
+				local boss = Duel.enemies(bossFloor)[1]
+				local trait = boss.trait and Duel.BossTraits[boss.trait]
+				local done = (state.bossDay or {})[tostring(bossFloor)] == state.today
+				local y = 34 + (number - 1) * 40
+				newLabel(bossRow, "Floor " .. bossFloor .. ": " .. boss.name .. (trait and ("  ·  " .. trait.name) or ""), UDim2.new(0, 14, 0, y), UDim2.new(1, -190, 0, 34), {
+					TextSize = 13,
+					TextWrapped = false,
+					TextTruncate = Enum.TextTruncate.AtEnd,
+				})
+				newButton(bossRow, done and "✅ Replay" or "👑 Rematch", UDim2.new(1, -160, 0, y + 2), UDim2.new(0, 148, 0, 32), done and COLORS.locked or Color3.fromRGB(215, 120, 60), function()
+					duelAuto = false
+					startDuel("boss", bossFloor)
+				end).TextSize = 13
+			end
 		end
+
 	end
 
-	-- player duels: challenge anyone in the server; nothing is at stake
-	local others = {}
-	for _, other in ipairs(Players:GetPlayers()) do
-		if other ~= player then
-			table.insert(others, other)
+	if battleTab == "players" then
+		-- player duels: challenge anyone in the server; nothing is at stake
+		local others = {}
+		for _, other in ipairs(Players:GetPlayers()) do
+			if other ~= player then
+				table.insert(others, other)
+			end
 		end
-	end
-	local shown = math.min(#others, 8)
-	local pvpRow = newRow(4, 78 + math.max(1, shown) * 40 + 96)
-	pvpRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
-	local stats = state.stats or {}
-	newLabel(pvpRow, "👥 Battle with players  ·  duels won " .. (stats.pvpWins or 0) .. " of " .. (stats.pvpDuels or 0), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
-		Font = Enum.Font.FredokaOne,
-		TextSize = 17,
-		TextColor3 = Color3.fromRGB(200, 170, 255),
-	})
-	newLabel(pvpRow, "🤝 Team up to fight your next tower floor together side by side on your duel pad (it counts for everyone whose next floor it is; helpers get bonus aura). ⚔️ Challenge for a duel: nothing at stake, cards hit by rarity, first win each day pays " .. Format.short(Quests.reward(state.rebirths)) .. " aura.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 44), {
-		TextSize = 12,
-		TextColor3 = COLORS.dim,
-		TextYAlignment = Enum.TextYAlignment.Top,
-	})
-	if #others == 0 then
-		newLabel(pvpRow, "Nobody else is in this server right now. Invite a friend, or practise below!", UDim2.new(0, 14, 0, 78), UDim2.new(1, -28, 0, 32), {
-			TextSize = 13,
+		local shown = math.min(#others, 8)
+		local pvpRow = newRow(4, 78 + math.max(1, shown) * 40 + 96)
+		pvpRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
+		local stats = state.stats or {}
+		newLabel(pvpRow, "👥 Battle with players  ·  duels won " .. (stats.pvpWins or 0) .. " of " .. (stats.pvpDuels or 0), UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 22), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 17,
+			TextColor3 = Color3.fromRGB(200, 170, 255),
 		})
-	end
-	-- practice against a bot, and whether others may challenge you
-	local practiceY = 78 + math.max(1, shown) * 40 + 6
-	newLabel(pvpRow, "🤖 Practice (no rewards):", UDim2.new(0, 14, 0, practiceY), UDim2.new(0, 190, 0, 34), {
-		TextSize = 13,
-		TextWrapped = false,
-	})
-	for level, settings in ipairs(Duel.PracticeLevels) do
-		newButton(pvpRow, settings.name, UDim2.new(0, 200 + (level - 1) * 112, 0, practiceY), UDim2.new(0, 104, 0, 34), COLORS.button, function()
-			Remotes.PvpPractice:FireServer(level)
-		end).TextSize = 13
-	end
-	local open = state.pvpOpen ~= false
-	newButton(pvpRow, open and "✅ Open to challenges" or "🚫 Not taking challenges", UDim2.new(0, 14, 0, practiceY + 44), UDim2.new(0, 260, 0, 34), open and COLORS.good or COLORS.locked, function()
-		Remotes.PvpOpen:FireServer(not open)
-	end).TextSize = 13
-	for index = 1, shown do
-		local other = others[index]
-		local y = 78 + (index - 1) * 40
-		newLabel(pvpRow, other.DisplayName, UDim2.new(0, 14, 0, y), UDim2.new(1, -340, 0, 34), {
-			TextSize = 14,
-			TextWrapped = false,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-		})
-		newButton(pvpRow, "🤝 Team up", UDim2.new(1, -316, 0, y + 2), UDim2.new(0, 148, 0, 32), COLORS.good, function()
-			Remotes.PvpChallenge:FireServer(other, "coop")
-		end).TextSize = 13
-		newButton(pvpRow, "⚔️ Challenge", UDim2.new(1, -160, 0, y + 2), UDim2.new(0, 148, 0, 32), Color3.fromRGB(150, 95, 230), function()
-			Remotes.PvpChallenge:FireServer(other)
-		end).TextSize = 13
-	end
-
-	-- Battle Training: aura upgrades for player duels
-	local trainingRow = newRow(5, 40 + #Training.Order * 44)
-	trainingRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
-	newLabel(trainingRow, "🏋️ Battle Training  ·  player duels only, kept through rebirths", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 26), {
-		Font = Enum.Font.FredokaOne,
-		TextSize = 16,
-		TextColor3 = Color3.fromRGB(200, 170, 255),
-	})
-	for index, trainingId in ipairs(Training.Order) do
-		local def = Training.Defs[trainingId]
-		local level = Training.level(state.training, trainingId)
-		local y = 36 + (index - 1) * 44
-		newLabel(trainingRow, def.icon .. " " .. def.name .. "  (" .. level .. "/" .. def.max .. ")", UDim2.new(0, 14, 0, y), UDim2.new(0.4, -14, 0, 20), {
-			TextSize = 14,
-			TextWrapped = false,
-		})
-		newLabel(trainingRow, def.describe(math.max(level, 1)), UDim2.new(0, 14, 0, y + 20), UDim2.new(1, -190, 0, 18), {
-			TextSize = 11,
+		newLabel(pvpRow, "🤝 Team up to fight your next tower floor together side by side on your duel pad (it counts for everyone whose next floor it is; helpers get bonus aura). ⚔️ Challenge for a duel: nothing at stake, cards hit by rarity, first win each day pays " .. Format.short(Quests.reward(state.rebirths)) .. " aura.", UDim2.new(0, 14, 0, 30), UDim2.new(1, -28, 0, 44), {
+			TextSize = 12,
 			TextColor3 = COLORS.dim,
-			TextWrapped = false,
-			TextTruncate = Enum.TextTruncate.AtEnd,
-		})
-		if level >= def.max then
-			newButton(trainingRow, "MAX", UDim2.new(1, -160, 0, y + 4), UDim2.new(0, 148, 0, 34), COLORS.locked, nil)
-		else
-			local cost = def.cost(level)
-			newButton(trainingRow, "✨ " .. Format.short(cost) .. " aura", UDim2.new(1, -160, 0, y + 4), UDim2.new(0, 148, 0, 34), state.aura >= cost and COLORS.good or COLORS.locked, function()
-				Remotes.BuyTraining:FireServer(trainingId)
-			end).TextSize = 13
-		end
-	end
-
-	-- how battles work: open for anyone who has never fought, a tap away for everyone else
-	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
-	local helpRow = newRow(6, showHelp and 540 or 40)
-	helpRow.BackgroundTransparency = showHelp and 0 or 1
-	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
-		battleHelp = not showHelp
-		renderPanel()
-	end).TextSize = 14
-	if showHelp then
-		newLabel(helpRow, table.concat({
-			"1.  You bring a battle deck of up to " .. Duel.DeckSize .. " cards you own. Battling never uses them up.",
-			"2.  Each round you gain 1 ⚡ energy and hold " .. Duel.HandSize .. " cards. Play ONE card, or Pass to save your ⚡.",
-			"3.  A card costs the ⚡ shown on it: Commons cost 1, Secrets cost 6 and hit far harder.",
-			"4.  Then every enemy attacks you. First side to run out of health loses.",
-			"",
-			"⚔️ Strike: damage to one enemy          💥 Blast: damage to every enemy",
-			"💚 Heal: restores your health               🛡️ Shield: blocks most of the next hit on you",
-			"💪 Power-up: your next attack is stronger   🌀 Weaken: an enemy's next attack is smaller",
-			"🧛 Drain: damage that heals you             🌿 Mend: heals you every round for 3 rounds",
-			"💫 Stun: an enemy loses its next turn       ☠️ Curse: damage every round for 3 rounds",
-			"🎯 Hex: the next hit on an enemy is stronger.  Every type has its own mix of these roles.",
-			"",
-			"Types:  ⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️.  Beating a type deals +30%, the reverse −25%.",
-			"Each type's Strikes and Blasts also leave a mark:",
-			"🐾 🩸 Bleed (stacks)   🔮 ♨️ Burn (3 rounds)   ⭐ ❄️ Chill (3 freeze an enemy for a turn)",
-			"⚙️ ⚡ Shock (ignores armour, Strikes arc)   ⚔️ 🔨 Stagger (breaks a wind-up)",
-			"Bosses (every 10th floor) warn you one round before a huge hit: shield up to block and parry it, stagger it, freeze it or finish it.",
-			"Each boss also has a signature (🌊 Undertow, ☁️ Cloud-step, ⚡ Thunderbolt, 📯 Rally, ❄️ Frostbite, 🔥 Ragnarok): check it before you fight.",
-			"Watch for 🐍 Venomous enemies (Heal cures poison), 🔮 Warded ones (no bleed, burn or chill) and 📯 Summoners.",
-			"⭐ Card mastery: cards you play in battles level up to ★5 (+5% damage and healing per star; not in duels or the daily).",
-			"Player duels: both pick in secret each round. Your school is your deck's main type. Shields parry 30% back;",
-			"⚡ Tech drains 1 energy, 🔨 Warrior breaks all shields (+15%), ❄️ 5 chills freeze a player.",
-			"✖ throws a card away for free. Your first battles come with a coach that points out a good move.",
-		}, "\n"), UDim2.new(0, 14, 0, 42), UDim2.new(1, -28, 1, -48), {
-			TextSize = 13,
 			TextYAlignment = Enum.TextYAlignment.Top,
 		})
+		if #others == 0 then
+			newLabel(pvpRow, "Nobody else is in this server right now. Invite a friend, or practise below!", UDim2.new(0, 14, 0, 78), UDim2.new(1, -28, 0, 32), {
+				TextSize = 13,
+			})
+		end
+		-- practice against a bot, and whether others may challenge you
+		local practiceY = 78 + math.max(1, shown) * 40 + 6
+		newLabel(pvpRow, "🤖 Practice (no rewards):", UDim2.new(0, 14, 0, practiceY), UDim2.new(0, 190, 0, 34), {
+			TextSize = 13,
+			TextWrapped = false,
+		})
+		for level, settings in ipairs(Duel.PracticeLevels) do
+			newButton(pvpRow, settings.name, UDim2.new(0, 200 + (level - 1) * 112, 0, practiceY), UDim2.new(0, 104, 0, 34), COLORS.button, function()
+				Remotes.PvpPractice:FireServer(level)
+			end).TextSize = 13
+		end
+		local open = state.pvpOpen ~= false
+		newButton(pvpRow, open and "✅ Open to challenges" or "🚫 Not taking challenges", UDim2.new(0, 14, 0, practiceY + 44), UDim2.new(0, 260, 0, 34), open and COLORS.good or COLORS.locked, function()
+			Remotes.PvpOpen:FireServer(not open)
+		end).TextSize = 13
+		for index = 1, shown do
+			local other = others[index]
+			local y = 78 + (index - 1) * 40
+			newLabel(pvpRow, other.DisplayName, UDim2.new(0, 14, 0, y), UDim2.new(1, -340, 0, 34), {
+				TextSize = 14,
+				TextWrapped = false,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			})
+			newButton(pvpRow, "🤝 Team up", UDim2.new(1, -316, 0, y + 2), UDim2.new(0, 148, 0, 32), COLORS.good, function()
+				Remotes.PvpChallenge:FireServer(other, "coop")
+			end).TextSize = 13
+			newButton(pvpRow, "⚔️ Challenge", UDim2.new(1, -160, 0, y + 2), UDim2.new(0, 148, 0, 32), Color3.fromRGB(150, 95, 230), function()
+				Remotes.PvpChallenge:FireServer(other)
+			end).TextSize = 13
+		end
+
+		-- Battle Training: aura upgrades for player duels
+		local trainingRow = newRow(5, 40 + #Training.Order * 44)
+		trainingRow.BackgroundColor3 = Color3.fromRGB(45, 40, 70)
+		newLabel(trainingRow, "🏋️ Battle Training  ·  player duels only, kept through rebirths", UDim2.new(0, 14, 0, 6), UDim2.new(1, -28, 0, 26), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 16,
+			TextColor3 = Color3.fromRGB(200, 170, 255),
+		})
+		for index, trainingId in ipairs(Training.Order) do
+			local def = Training.Defs[trainingId]
+			local level = Training.level(state.training, trainingId)
+			local y = 36 + (index - 1) * 44
+			newLabel(trainingRow, def.icon .. " " .. def.name .. "  (" .. level .. "/" .. def.max .. ")", UDim2.new(0, 14, 0, y), UDim2.new(0.4, -14, 0, 20), {
+				TextSize = 14,
+				TextWrapped = false,
+			})
+			newLabel(trainingRow, def.describe(math.max(level, 1)), UDim2.new(0, 14, 0, y + 20), UDim2.new(1, -190, 0, 18), {
+				TextSize = 11,
+				TextColor3 = COLORS.dim,
+				TextWrapped = false,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			})
+			if level >= def.max then
+				newButton(trainingRow, "MAX", UDim2.new(1, -160, 0, y + 4), UDim2.new(0, 148, 0, 34), COLORS.locked, nil)
+			else
+				local cost = def.cost(level)
+				newButton(trainingRow, "✨ " .. Format.short(cost) .. " aura", UDim2.new(1, -160, 0, y + 4), UDim2.new(0, 148, 0, 34), state.aura >= cost and COLORS.good or COLORS.locked, function()
+					Remotes.BuyTraining:FireServer(trainingId)
+				end).TextSize = 13
+			end
+		end
+
 	end
 
+	if battleTab == "tower" then
+		-- how battles work: open for anyone who has never fought, a tap away for everyone else
+		local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
+		local helpRow = newRow(6, showHelp and 540 or 40)
+		helpRow.BackgroundTransparency = showHelp and 0 or 1
+		newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
+			battleHelp = not showHelp
+			renderPanel()
+		end).TextSize = 14
+		if showHelp then
+			newLabel(helpRow, table.concat({
+				"1.  You bring a battle deck of up to " .. Duel.DeckSize .. " cards you own. Battling never uses them up.",
+				"2.  Each round you gain 1 ⚡ energy and hold " .. Duel.HandSize .. " cards. Play ONE card, or Pass to save your ⚡.",
+				"3.  A card costs the ⚡ shown on it: Commons cost 1, Secrets cost 6 and hit far harder.",
+				"4.  Then every enemy attacks you. First side to run out of health loses.",
+				"",
+				"⚔️ Strike: damage to one enemy          💥 Blast: damage to every enemy",
+				"💚 Heal: restores your health               🛡️ Shield: blocks most of the next hit on you",
+				"💪 Power-up: your next attack is stronger   🌀 Weaken: an enemy's next attack is smaller",
+				"🧛 Drain: damage that heals you             🌿 Mend: heals you every round for 3 rounds",
+				"💫 Stun: an enemy loses its next turn       ☠️ Curse: damage every round for 3 rounds",
+				"🎯 Hex: the next hit on an enemy is stronger.  Every type has its own mix of these roles.",
+				"",
+				"Types:  ⚔️ beats 🐾 beats 🔮 beats ⚙️ beats ⭐ beats ⚔️.  Beating a type deals +30%, the reverse −25%.",
+				"Each type's Strikes and Blasts also leave a mark:",
+				"🐾 🩸 Bleed (stacks)   🔮 ♨️ Burn (3 rounds)   ⭐ ❄️ Chill (3 freeze an enemy for a turn)",
+				"⚙️ ⚡ Shock (ignores armour, Strikes arc)   ⚔️ 🔨 Stagger (breaks a wind-up)",
+				"Bosses (every 10th floor) warn you one round before a huge hit: shield up to block and parry it, stagger it, freeze it or finish it.",
+				"Each boss also has a signature (🌊 Undertow, ☁️ Cloud-step, ⚡ Thunderbolt, 📯 Rally, ❄️ Frostbite, 🔥 Ragnarok): check it before you fight.",
+				"Watch for 🐍 Venomous enemies (Heal cures poison), 🔮 Warded ones (no bleed, burn or chill) and 📯 Summoners.",
+				"⭐ Card mastery: cards you play in battles level up to ★5 (+5% damage and healing per star; not in duels or the daily).",
+				"Player duels: both pick in secret each round. Your school is your deck's main type. Shields parry 30% back;",
+				"⚡ Tech drains 1 energy, 🔨 Warrior breaks all shields (+15%), ❄️ 5 chills freeze a player.",
+				"✖ throws a card away for free. Your first battles come with a coach that points out a good move.",
+			}, "\n"), UDim2.new(0, 14, 0, 42), UDim2.new(1, -28, 1, -48), {
+				TextSize = 13,
+				TextYAlignment = Enum.TextYAlignment.Top,
+			})
+		end
+
+	end
+
+	if battleTab ~= "deck" then
+		return
+	end
 	-- the battle deck
 	local saved = Duel.usableDeck(state, state.battleDeck)
 	local automatic = #saved == 0

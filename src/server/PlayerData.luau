@@ -46,6 +46,8 @@ local function newData()
 		perks = {}, -- Aura Shrine levels, kept through rebirths: [perkId] = level
 		training = {}, -- Battle Training levels for player duels, kept through rebirths: [trainingId] = level
 		mastery = {}, -- card mastery experience from battles: [cardId] = experience (Duel.masteryLevel)
+		pets = {}, -- pets owned, kept through rebirths: [petId] = count (Pets.luau)
+		petsEquipped = {}, -- array of pet ids, at most Pets.slots(rebirths)
 		tower = 0, -- highest battle tower floor cleared
 		battleDeck = {}, -- array of cardKeys to bring to tower duels (empty = pick automatically)
 		challengeDay = 0, -- Quests.today() of the last daily challenge won

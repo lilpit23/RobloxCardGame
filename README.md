@@ -104,7 +104,11 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
     from the banner at the top; each fight scores points against your own deck's strength,
     so new and veteran players count alike. Bring it down in time and every fighter gets a
     free booster.
-19. **Card mastery:** cards you play in battles earn experience and level up to ★5, each
+19. **Pets (late game):** after the 6th rebirth, spend aura on eggs (Ember, then Frost at
+    rebirth 7 and Starlight at rebirth 8). Each hatches a Common to Mythic pet that adds to
+    your cash and aura income while equipped (3 slots, 4 after the final rebirth). Pets are
+    kept through rebirths and follow you around.
+20. **Card mastery:** cards you play in battles earn experience and level up to ★5, each
     star making them 5% stronger in the tower, co-op and world boss fights (never in player
     duels or the daily challenge).
 20. **Card roles:** not every card attacks. Each type has its own mix of Strikes, Blasts, Heals,

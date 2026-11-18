@@ -26,6 +26,7 @@ local Battle = require(Shared:WaitForChild("Battle"))
 local Duel = require(Shared:WaitForChild("Duel"))
 local Titles = require(Shared:WaitForChild("Titles"))
 local Training = require(Shared:WaitForChild("Training"))
+local Pets = require(Shared:WaitForChild("Pets"))
 local Staff = require(Shared:WaitForChild("Staff"))
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes")
@@ -65,6 +66,8 @@ local state = {
 	perks = {},
 	training = {},
 	mastery = {},
+	pets = {},
+	petsEquipped = {},
 	pvpOpen = true,
 	bossDay = {},
 	raid = false, -- the world boss while one is out (see raidView on the server)
@@ -3776,6 +3779,206 @@ panels.Battle = function()
 	end
 end
 
+-- Pets: hatch eggs with aura, equip the best -------------------------------------------------
+-- The hatch animation: the egg wobbles harder and harder, flashes, and the pet pops out.
+local function playHatch(egg, petId, equippedNow)
+	local pet = Pets.ById[petId]
+	local rarity = Pets.Rarities[pet.rarity]
+	local overlay = make("TextButton", {
+		Text = "",
+		AutoButtonColor = false,
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 0.35,
+		ZIndex = 50,
+	}, screen)
+	local glow = make("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.42, 0),
+		Size = UDim2.new(0, 240, 0, 240),
+		BackgroundColor3 = egg.color,
+		BackgroundTransparency = 0.45,
+		ZIndex = 51,
+	}, overlay)
+	make("UICorner", { CornerRadius = UDim.new(0.5, 0) }, glow)
+	local figure = make("TextLabel", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.42, 0),
+		Size = UDim2.new(0, 200, 0, 200),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.FredokaOne,
+		Text = egg.glyph,
+		TextScaled = true,
+		ZIndex = 52,
+	}, overlay)
+	local caption = newLabel(overlay, "Hatching " .. egg.name .. "…", UDim2.new(0.1, 0, 0.66, 0), UDim2.new(0.8, 0, 0, 40), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 26,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextStrokeTransparency = 0.3,
+		ZIndex = 52,
+	})
+	local closed = false
+	overlay.Activated:Connect(function()
+		closed = true
+		overlay:Destroy()
+	end)
+	-- three wobbles, each bigger and quicker
+	for shake = 1, 3 do
+		if closed then
+			return
+		end
+		local angle = 8 + shake * 7
+		local speed = 0.16 - shake * 0.03
+		playSound("flip")
+		for _, target in ipairs({ angle, -angle, 0 }) do
+			local tween = TweenService:Create(figure, TweenInfo.new(speed), { Rotation = target })
+			tween:Play()
+			tween.Completed:Wait()
+		end
+		task.wait(0.25)
+	end
+	if closed then
+		return
+	end
+	-- crack: a white flash, then the pet pops out at full size
+	local flash = make("Frame", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0,
+		ZIndex = 53,
+	}, overlay)
+	TweenService:Create(flash, TweenInfo.new(0.7), { BackgroundTransparency = 1 }):Play()
+	figure.Text = pet.glyph
+	figure.Size = UDim2.new(0, 40, 0, 40)
+	glow.BackgroundColor3 = rarity.color
+	TweenService:Create(figure, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.new(0, 210, 0, 210) }):Play()
+	TweenService:Create(glow, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), { Size = UDim2.new(0, 280, 0, 280) }):Play()
+	playSound(rarity.order >= 4 and "bigPull" or "flip")
+	caption.Text = pet.rarity .. "!  " .. pet.name .. "  ·  " .. Pets.percent(pet.bonus) .. " cash & aura" .. (equippedNow and "\n✅ Equipped" or "")
+	caption.TextColor3 = rarity.color
+	caption.Size = UDim2.new(0.8, 0, 0, 70)
+	task.delay(4, function()
+		if not closed then
+			overlay:Destroy()
+		end
+	end)
+end
+
+panels.Pets = function()
+	titleLabel.Text = "🐾 Pets"
+	useList()
+	local slots = Pets.slots(state.rebirths)
+	local equipped = state.petsEquipped or {}
+	local bonus = Pets.bonus(equipped)
+	local header = newRow(1, 64)
+	newLabel(header, "Equipped " .. #equipped .. "/" .. slots .. "   ·   " .. Pets.percent(bonus.cash - 1) .. " cash & aura income", UDim2.new(0, 14, 0, 6), UDim2.new(1, -190, 0, 24), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 17,
+		TextWrapped = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	newLabel(header, "Pets are kept through rebirths and float beside you. A 4th slot opens after the final rebirth.", UDim2.new(0, 14, 0, 32), UDim2.new(1, -190, 0, 28), {
+		TextSize = 12,
+		TextColor3 = COLORS.dim,
+	})
+	newButton(header, "Equip best", UDim2.new(1, -160, 0, 12), UDim2.new(0, 148, 0, 40), COLORS.good, function()
+		Remotes.EquipPet:FireServer("best")
+	end).TextSize = 15
+
+	if state.rebirths < Pets.UnlockRebirths then
+		newNoteRow(2, "🔒 Pets arrive after your " .. Pets.UnlockRebirths .. "th rebirth. The eggs below show what's waiting for you!")
+	end
+
+	-- the eggs
+	for index, egg in ipairs(Pets.Eggs) do
+		local open = Pets.eggUnlocked(egg, state.rebirths)
+		local row = newRow(2 + index, 96)
+		newLabel(row, egg.glyph, UDim2.new(0, 10, 0, 10), UDim2.new(0, 60, 0, 60), {
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Center,
+		})
+		newLabel(row, egg.name .. "   ·   ✨ " .. Format.short(egg.cost) .. " aura", UDim2.new(0, 80, 0, 6), UDim2.new(1, -250, 0, 22), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 17,
+			TextColor3 = egg.color,
+			TextWrapped = false,
+		})
+		local odds = {}
+		for _, row2 in ipairs(egg.pets) do
+			local pet = Pets.ById[row2[1]]
+			table.insert(odds, pet.glyph .. " " .. pet.name .. " " .. math.floor(pet.chance * 100 + 0.5) .. "% (" .. Pets.percent(pet.bonus) .. ")")
+		end
+		newLabel(row, table.concat(odds, "   "), UDim2.new(0, 80, 0, 30), UDim2.new(1, -250, 0, 60), {
+			TextSize = 11,
+			TextColor3 = COLORS.dim,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		})
+		if open then
+			newButton(row, "🥚 Hatch", UDim2.new(1, -160, 0, 26), UDim2.new(0, 148, 0, 44), state.aura >= egg.cost and Color3.fromRGB(240, 110, 200) or COLORS.locked, function()
+				local ok, result = pcall(function()
+					return Remotes.HatchEgg:InvokeServer(egg.id)
+				end)
+				if not ok or type(result) ~= "table" or not result.ok then
+					toast(ok and type(result) == "table" and result.error or "Could not reach the server.", "error")
+					return
+				end
+				task.spawn(playHatch, egg, result.pet, result.equipped)
+			end).TextSize = 16
+		else
+			newButton(row, "🔒 Rebirth " .. egg.rebirths, UDim2.new(1, -160, 0, 26), UDim2.new(0, 148, 0, 44), COLORS.locked, nil).TextSize = 14
+		end
+	end
+
+	-- the pets you own, strongest first
+	local owned = {}
+	for petId, count in pairs(state.pets or {}) do
+		if Pets.ById[petId] and type(count) == "number" and count > 0 then
+			table.insert(owned, Pets.ById[petId])
+		end
+	end
+	table.sort(owned, function(a, b)
+		if a.bonus ~= b.bonus then
+			return a.bonus > b.bonus
+		end
+		return a.id < b.id
+	end)
+	local using = {}
+	for _, petId in ipairs(equipped) do
+		using[petId] = (using[petId] or 0) + 1
+	end
+	for index, pet in ipairs(owned) do
+		local count = state.pets[pet.id]
+		local row = newRow(10 + index, 44)
+		local rarity = Pets.Rarities[pet.rarity]
+		newLabel(row, pet.glyph, UDim2.new(0, 10, 0, 4), UDim2.new(0, 36, 0, 36), {
+			TextScaled = true,
+			TextXAlignment = Enum.TextXAlignment.Center,
+		})
+		newLabel(row, pet.name .. "  ×" .. count, UDim2.new(0, 54, 0, 2), UDim2.new(1, -230, 0, 20), {
+			Font = Enum.Font.FredokaOne,
+			TextSize = 15,
+			TextWrapped = false,
+		})
+		newLabel(row, pet.rarity .. "  ·  " .. Pets.percent(pet.bonus) .. " cash & aura" .. ((using[pet.id] or 0) > 0 and ("  ·  ✅ " .. using[pet.id] .. " equipped") or ""), UDim2.new(0, 54, 0, 22), UDim2.new(1, -230, 0, 18), {
+			TextSize = 12,
+			TextColor3 = rarity.color,
+			TextWrapped = false,
+		})
+		local inUse = using[pet.id] or 0
+		if inUse < count and #equipped < slots then
+			newButton(row, "Equip", UDim2.new(1, -164, 0, 6), UDim2.new(0, 76, 0, 32), COLORS.good, function()
+				Remotes.EquipPet:FireServer(pet.id, true)
+			end).TextSize = 13
+		end
+		if inUse > 0 then
+			newButton(row, "Unequip", UDim2.new(1, -84, 0, 6), UDim2.new(0, 76, 0, 32), COLORS.locked, function()
+				Remotes.EquipPet:FireServer(pet.id, false)
+			end).TextSize = 13
+		end
+	end
+end
+
 -- Admin tab: only for the owner and the players the owner made admins ---------------------
 panels.Admin = function()
 	titleLabel.Text = "🛠️ Admin"
@@ -3927,6 +4130,7 @@ local MENU = {
 	{ "Battle", "⚔️ Battle", Color3.fromRGB(200, 60, 60), "G" },
 	{ "Quests", "🎯 Quests", Color3.fromRGB(230, 120, 50), "Q" },
 	{ "Rebirth", "🌟 Rebirth", Color3.fromRGB(215, 160, 50), "R" },
+	{ "Pets", "🐾 Pets", Color3.fromRGB(240, 110, 200), "H" },
 	{ "Store", "💎 Store", Color3.fromRGB(120, 80, 200), "M" },
 	{ "Admin", "🛠️ Admin", Color3.fromRGB(170, 50, 50), "K" }, -- hidden unless you are an admin
 }
@@ -4066,6 +4270,84 @@ end
 
 local seenAutoRev = 0
 
+-- Pets float beside every player who has some equipped (the server sets a "Pets" attribute).
+local petFolder = Instance.new("Folder")
+petFolder.Name = "PetFollowers"
+petFolder.Parent = workspace
+local petFollowers = {} -- [Player] = { key = attribute, parts = { Part } }
+
+local function buildFollowers(owner, key)
+	local entry = petFollowers[owner]
+	if entry then
+		for _, part in ipairs(entry.parts) do
+			part:Destroy()
+		end
+	end
+	entry = { key = key, parts = {} }
+	petFollowers[owner] = entry
+	for petId in string.gmatch(key, "[^,]+") do
+		local pet = Pets.ById[petId]
+		if pet then
+			local part = Instance.new("Part")
+			part.Name = "Pet"
+			part.Anchored = true
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CanTouch = false
+			part.Transparency = 1
+			part.Size = Vector3.new(1, 1, 1)
+			local root = owner.Character and owner.Character:FindFirstChild("HumanoidRootPart")
+			part.CFrame = root and root.CFrame or CFrame.new()
+			part.Parent = petFolder
+			local gui = Instance.new("BillboardGui")
+			gui.Size = UDim2.new(2.6, 0, 2.6, 0)
+			gui.LightInfluence = 0
+			gui.MaxDistance = 120
+			gui.Parent = part
+			local label = Instance.new("TextLabel")
+			label.BackgroundTransparency = 1
+			label.Size = UDim2.new(1, 0, 1, 0)
+			label.Text = pet.glyph
+			label.TextScaled = true
+			label.Parent = gui
+			table.insert(entry.parts, part)
+		end
+	end
+end
+
+Players.PlayerRemoving:Connect(function(owner)
+	local entry = petFollowers[owner]
+	if entry then
+		for _, part in ipairs(entry.parts) do
+			part:Destroy()
+		end
+		petFollowers[owner] = nil
+	end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+	local now = os.clock()
+	for _, owner in ipairs(Players:GetPlayers()) do
+		local key = owner:GetAttribute("Pets")
+		key = type(key) == "string" and key or ""
+		local entry = petFollowers[owner]
+		if entry == nil or entry.key ~= key then
+			buildFollowers(owner, key)
+			entry = petFollowers[owner]
+		end
+		local root = owner.Character and owner.Character:FindFirstChild("HumanoidRootPart")
+		for index, part in ipairs(entry.parts) do
+			if root then
+				-- pairs of pets trail behind on either side, bobbing gently
+				local side = (index % 2 == 1) and -1 or 1
+				local back = math.floor((index - 1) / 2)
+				local target = root.CFrame * CFrame.new(side * (2.6 + back * 1.4), 0.8 + math.sin(now * 3 + index) * 0.3, 2.4 + back * 1.8)
+				part.CFrame = part.CFrame:Lerp(CFrame.new(target.Position), math.min(1, dt * 8))
+			end
+		end
+	end
+end)
+
 -- World boss banner: health, time left and a Fight button while a world boss is out.
 local raidBanner = make("Frame", {
 	AnchorPoint = Vector2.new(0.5, 0),
@@ -4154,6 +4436,12 @@ end)
 
 -- Someone in the server pulled a Mythic or Secret card.
 Remotes.Announce.OnClientEvent:Connect(function(playerName, key)
+	local petId = type(key) == "string" and string.match(key, "^pet:(.+)$")
+	if petId and Pets.ById[petId] then
+		local pet = Pets.ById[petId]
+		toast("🐾 " .. tostring(playerName) .. " hatched a " .. pet.rarity .. " " .. pet.glyph .. " " .. pet.name .. "!", "announce")
+		return
+	end
 	if Cards.parse(key) then
 		toast("🌟 " .. tostring(playerName) .. " pulled " .. Cards.getDisplayName(key) .. "!", "announce")
 	end

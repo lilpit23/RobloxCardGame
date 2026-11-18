@@ -17,6 +17,7 @@ local Luck = require(Shared:WaitForChild("Luck"))
 local Deck = require(Shared:WaitForChild("Deck"))
 local Season = require(Shared:WaitForChild("Season"))
 local Achievements = require(Shared:WaitForChild("Achievements"))
+local Pets = require(Shared:WaitForChild("Pets"))
 local Battle = require(Shared:WaitForChild("Battle"))
 local Duel = require(Shared:WaitForChild("Duel"))
 local Titles = require(Shared:WaitForChild("Titles"))
@@ -67,6 +68,8 @@ local BuyPerkRemote = newRemote("RemoteEvent", "BuyPerk")
 local DuelStartRemote = newRemote("RemoteFunction", "DuelStart")
 local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
 local BuyTrainingRemote = newRemote("RemoteEvent", "BuyTraining")
+local HatchEggRemote = newRemote("RemoteFunction", "HatchEgg")
+local EquipPetRemote = newRemote("RemoteEvent", "EquipPet")
 local PvpChallengeRemote = newRemote("RemoteEvent", "PvpChallenge")
 local PvpRespondRemote = newRemote("RemoteEvent", "PvpRespond")
 local PvpInviteRemote = newRemote("RemoteEvent", "PvpInvite") -- server -> client
@@ -189,13 +192,14 @@ local function storeMult(data)
 	end
 	local achievementBonus = Achievements.incomeMult(data.achievements)
 	local weekly = Season.event().cash or 1
-	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus * achievementBonus * weekly
+	local petBonus = Pets.bonus(data.petsEquipped).cash
+	return Upgrades.getStoreTier(data.upgrades.store).mult * Rebirth.incomeMult(data.rebirths) * collectionBonus * combos.income * setBonus * passBonus * achievementBonus * weekly * petBonus
 end
 
--- Aura multiplier: Aura Magnet perk x deck combos.
+-- Aura multiplier: Aura Magnet perk x deck combos x weekly event x equipped pets.
 local function auraMult(data)
 	local passBonus = hasPass(data, "doubleAura") and 2 or 1
-	return Perks.auraMult(data.perks) * Combos.evaluate(data.slots).aura * passBonus * (Season.event().aura or 1)
+	return Perks.auraMult(data.perks) * Combos.evaluate(data.slots).aura * passBonus * (Season.event().aura or 1) * Pets.bonus(data.petsEquipped).aura
 end
 
 local luckEventEndsAt = 0 -- os.time() when the current lucky event ends
@@ -288,6 +292,8 @@ local function pushState(player)
 		vaultSlots = vaultSlots(data),
 		perks = data.perks,
 		training = data.training,
+		pets = data.pets,
+		petsEquipped = data.petsEquipped,
 		mastery = data.mastery,
 		tower = data.tower,
 		luckEventEndsAt = luckEventEndsAt,
@@ -1169,6 +1175,17 @@ RedeemCodeRemote.OnServerEvent:Connect(function(player, text)
 end)
 
 -- Redraws every employee's desk in the player's store to match their upgrades.
+-- Keeps the equipped pets valid (owned, within the slot count) and tells every client which
+-- pets to draw beside this player (the "Pets" attribute: pet ids joined by commas).
+local function updatePets(player)
+	local data = PlayerData.get(player)
+	if data == nil then
+		return
+	end
+	data.petsEquipped = Pets.clean(data.pets, data.petsEquipped, Pets.slots(data.rebirths))
+	player:SetAttribute("Pets", table.concat(data.petsEquipped, ","))
+end
+
 local function updateStaff(player)
 	local session = sessions[player]
 	local data = PlayerData.get(player)
@@ -1215,6 +1232,7 @@ ResetDataRemote.OnServerEvent:Connect(function(player)
 	Plots.setTier(session.plot, 1)
 	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 	updateStaff(player)
+	updatePets(player)
 	resetOverhead(player)
 	notify(player, "Your save was wiped. Welcome to a brand-new store!", "good")
 	touch(player, true)
@@ -1443,6 +1461,97 @@ BuyPerkRemote.OnServerEvent:Connect(function(player, perkId)
 	data.perks[perkId] = level + 1
 	notify(player, Staff.Defs[staffId].name .. ": " .. def.name .. " is now level " .. (level + 1) .. " — permanently!", "good")
 	updateStaff(player)
+	touch(player, true)
+end)
+
+-- Pets: hatch an egg with aura. Returns { ok, pet } for the client's hatch animation, or
+-- { ok = false, error }. A new pet goes straight into a free slot, or replaces the weakest
+-- equipped pet if it is stronger.
+HatchEggRemote.OnServerInvoke = function(player, eggId)
+	if not allow(player, "HatchEgg", 1, 2) then
+		return { ok = false, error = "Slow down a little." }
+	end
+	local data = PlayerData.get(player)
+	local egg = type(eggId) == "string" and Pets.EggById[eggId] or nil
+	if data == nil or egg == nil then
+		return { ok = false, error = "Pick an egg." }
+	end
+	if not Pets.eggUnlocked(egg, data.rebirths) then
+		return { ok = false, error = egg.name .. " opens after " .. egg.rebirths .. " rebirths." }
+	end
+	if not spend(data, "aura", egg.cost) then
+		return { ok = false, error = "Not enough aura." }
+	end
+	local petId = Pets.roll(egg, rng)
+	data.pets[petId] = (data.pets[petId] or 0) + 1
+	local slots = Pets.slots(data.rebirths)
+	local equipped = Pets.clean(data.pets, data.petsEquipped, slots)
+	local pet = Pets.ById[petId]
+	local equippedNow = false
+	if #equipped < slots then
+		table.insert(equipped, petId)
+		equippedNow = true
+	else
+		local weakest, weakestIndex = math.huge, nil
+		for index, otherId in ipairs(equipped) do
+			if Pets.ById[otherId].bonus < weakest then
+				weakest, weakestIndex = Pets.ById[otherId].bonus, index
+			end
+		end
+		if weakestIndex and pet.bonus > weakest then
+			equipped[weakestIndex] = petId
+			equippedNow = true
+		end
+	end
+	data.petsEquipped = equipped
+	updatePets(player)
+	if Pets.Rarities[pet.rarity].order >= 4 then
+		AnnounceRemote:FireAllClients(player.DisplayName, "pet:" .. petId)
+	end
+	touch(player, true)
+	return { ok = true, pet = petId, equipped = equippedNow }
+end
+
+-- Equip or unequip a pet, or equip the best ones (petId = "best").
+EquipPetRemote.OnServerEvent:Connect(function(player, petId, equip)
+	if not allow(player, "EquipPet", 5, 10) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data == nil or type(petId) ~= "string" then
+		return
+	end
+	local slots = Pets.slots(data.rebirths)
+	if petId == "best" then
+		data.petsEquipped = Pets.best(data.pets, slots)
+	elseif Pets.ById[petId] then
+		local equipped = Pets.clean(data.pets, data.petsEquipped, slots)
+		if equip == true then
+			local using = 0
+			for _, otherId in ipairs(equipped) do
+				if otherId == petId then
+					using = using + 1
+				end
+			end
+			if #equipped >= slots then
+				notify(player, "All " .. slots .. " pet slots are full. Unequip one first.", "error")
+				return
+			elseif using >= (data.pets[petId] or 0) then
+				notify(player, "You don't have another one of those to equip.", "error")
+				return
+			end
+			table.insert(equipped, petId)
+		else
+			local index = table.find(equipped, petId)
+			if index then
+				table.remove(equipped, index)
+			end
+		end
+		data.petsEquipped = equipped
+	else
+		return
+	end
+	updatePets(player)
 	touch(player, true)
 end)
 
@@ -2503,6 +2612,7 @@ RebirthRemote.OnServerEvent:Connect(function(player)
 	Plots.setTier(session.plot, 1)
 	Plots.setOwnerSign(session.plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 	updateStaff(player)
+	updatePets(player)
 
 	notify(player, "🌟 REBIRTH " .. data.rebirths .. "!  " .. Rebirth.describeBonuses(data.rebirths), "good")
 	touch(player, true)
@@ -2914,6 +3024,7 @@ local function onPlayerAdded(player)
 	Plots.setTier(plot, data.upgrades.store + 1)
 	Plots.setOwnerSign(plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 	updateStaff(player)
+	updatePets(player)
 	for index = 1, slotCount(data) do
 		Plots.setCard(plot, index, data.slots[tostring(index)])
 	end

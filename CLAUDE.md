@@ -6,7 +6,7 @@ The backlog for agents is in `docs/AGENT_PLAN.md`.
 ## Layout
 
 - `src/shared/` → `ReplicatedStorage.Shared`. Data tables and pure logic used by both sides:
-  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Titles`, `Staff`, `Training` (aura upgrades for player duels), `Format`, `CardView` (builds a card's GUI).
+  `Config`, `Cards`, `Packs`, `Upgrades`, `Rebirth`, `Quests`, `Perks`, `Combos`, `Luck`, `Deck`, `Season`, `Achievements`, `Battle`, `Duel` (turn-based tower duels), `Titles`, `Staff`, `Training` (aura upgrades for player duels), `Pets` (late-game income pets), `Format`, `CardView` (builds a card's GUI).
 - `src/server/` → `ServerScriptService.Server`. `init.server.luau` holds the remotes and game
   rules; `PlayerData.luau` is the only code that touches DataStores; `Monetization.luau` handles game
   passes and product receipts; `Plots.luau` builds the map
@@ -76,6 +76,12 @@ way so the repo stays the whole game.
   tower, boss rematch, co-op and world-boss battles earn experience (`awardMastery`), and each
   star adds `Duel.MasteryBonus` damage and healing there (`hero.mastery`). Never in player
   duels or the daily challenge, which stay equal for everyone.
+- Pets (`Pets.luau`, owner's request: super late game): eggs bought with aura open after
+  rebirths 6, 7 and 8 and hatch one random pet (`Pets.roll`). Equipped pets
+  (`data.petsEquipped`, up to `Pets.slots`) multiply cash in `storeMult` and aura in `auraMult`
+  (`Pets.bonus`). Pets are kept through rebirths, never traded, and float beside their owner on
+  every client (the player's "Pets" attribute, set by `updatePets`). Pets are original
+  creatures, not from any story.
 - World boss (`Duel.raid*`, `Config.Raid`): every so often the server fights one boss. Each
   fight is a solo duel of `Duel.RaidRounds` rounds against an unkillable copy; damage becomes
   points against the player's own health (`Duel.raidPoints`), so collections of any size

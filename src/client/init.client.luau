@@ -2139,6 +2139,9 @@ local duelLog = {} -- the last few things that happened
 local duelBusy = false -- waiting for the server, or playing back a round
 local duelEnding = nil -- the result line, once the duel is over
 local deckEditing = false
+local deckFilter = "all" -- the role shown in the deck editor
+-- roles in the order the deck screens list them
+local ROLE_ORDER = { "attack", "blast", "drain", "stun", "curse", "hex", "weaken", "charge", "shield", "heal", "mend" }
 local stage = nil -- the 3D scene: { folder, spot, figures = { { part, home, gui, ... } } }
 local duelAuto = false -- the Auto battler is playing for you
 local autoToken = 0 -- changes whenever a duel ends, so a queued "next floor" can tell it is stale
@@ -3475,8 +3478,31 @@ panels.Battle = function()
 	local saved = Duel.usableDeck(state, state.battleDeck)
 	local automatic = #saved == 0
 	local deck = automatic and Duel.autoDeck(state) or saved
-	local deckRow = newRow(7, 46)
-	newLabel(deckRow, "Battle deck: " .. #deck .. "/" .. Duel.DeckSize .. (automatic and " (automatic)" or "") .. "   ·   " .. Duel.short(Duel.deckHealth(deck)) .. " health", UDim2.new(0, 14, 0, 0), UDim2.new(1, -300, 1, 0), {
+	local deckRow = newRow(7, 66)
+	-- what the deck is made of: school, hitters vs support, average cost, roles
+	local roleCounts, hitters, totalCost = {}, 0, 0
+	for _, key in ipairs(deck) do
+		local card = Duel.card(key)
+		roleCounts[card.role] = (roleCounts[card.role] or 0) + 1
+		totalCost = totalCost + card.cost
+		if Duel.Damaging[card.role] then
+			hitters = hitters + 1
+		end
+	end
+	local roleParts = {}
+	for _, roleId in ipairs(ROLE_ORDER) do
+		if roleCounts[roleId] then
+			table.insert(roleParts, Duel.Roles[roleId].icon .. roleCounts[roleId])
+		end
+	end
+	local school = Duel.school(deck)
+	newLabel(deckRow, "School " .. Cards.Types[school].icon .. " " .. Cards.Types[school].name .. "  ·  " .. hitters .. " hit / " .. (#deck - hitters) .. " support  ·  avg ⚡" .. (#deck > 0 and string.format("%.1f", totalCost / #deck) or "0") .. "  ·  " .. table.concat(roleParts, " "), UDim2.new(0, 14, 0, 44), UDim2.new(1, -28, 0, 18), {
+		TextSize = 11,
+		TextColor3 = COLORS.dim,
+		TextWrapped = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	})
+	newLabel(deckRow, "Battle deck: " .. #deck .. "/" .. Duel.DeckSize .. (automatic and " (automatic)" or "") .. "   ·   " .. Duel.short(Duel.deckHealth(deck)) .. " health", UDim2.new(0, 14, 0, 0), UDim2.new(1, -300, 0, 44), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 15,
 		TextWrapped = false,
@@ -3507,6 +3533,30 @@ panels.Battle = function()
 				table.insert(options, card)
 			end
 		end
+		-- filter by role
+		local filterRow = newRow(8, 40)
+		filterRow.BackgroundTransparency = 1
+		local filters = { "all" }
+		for _, roleId in ipairs(ROLE_ORDER) do
+			table.insert(filters, roleId)
+		end
+		for position, roleId in ipairs(filters) do
+			local chosen = deckFilter == roleId
+			local label = roleId == "all" and "All" or Duel.Roles[roleId].icon
+			newButton(filterRow, label, UDim2.new(0, (position - 1) * 46, 0, 4), UDim2.new(0, 42, 0, 32), chosen and Color3.fromRGB(150, 95, 230) or COLORS.button, function()
+				deckFilter = roleId
+				renderPanel()
+			end).TextSize = 14
+		end
+		if deckFilter ~= "all" then
+			local kept = {}
+			for _, card in ipairs(options) do
+				if card.role == deckFilter then
+					table.insert(kept, card)
+				end
+			end
+			options = kept
+		end
 		table.sort(options, function(a, b)
 			local deckA, deckB = inDeck[a.key] and 1 or 0, inDeck[b.key] and 1 or 0
 			if deckA ~= deckB then
@@ -3517,12 +3567,12 @@ panels.Battle = function()
 			return a.key < b.key
 		end)
 		if automatic then
-			newNoteRow(5, "Your deck is empty, so your strongest cards are picked for you. Add a card to start your own deck.")
+			newNoteRow(8, "Your deck is empty, so your strongest cards are picked for you. Add a card to start your own deck.")
 		end
 		for index, card in ipairs(options) do
 			local have = inDeck[card.key] or 0
 			local most = math.min(owned[card.key], Duel.MaxCopies)
-			fillLazily(newRow(8 + index, 40), function(row)
+			fillLazily(newRow(9 + index, 40), function(row)
 				newCardLine(row, card.key, UDim2.new(0, 12, 0, 2), UDim2.new(1, -190, 0, 18))
 				newLabel(row, roleLine(card) .. "  ·  " .. card.text, UDim2.new(0, 12, 0, 20), UDim2.new(1, -190, 0, 16), {
 					TextSize = 11,
@@ -3547,14 +3597,14 @@ panels.Battle = function()
 	end
 
 	if #deck == 0 then
-		newNoteRow(5, "You have no cards yet — open a pack first.")
+		newNoteRow(8, "You have no cards yet — open a pack first.")
 		return
 	end
 	local grid = make("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -12, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		LayoutOrder = 5,
+		LayoutOrder = 8,
 	}, body)
 	make("UIGridLayout", {
 		CellSize = UDim2.new(0, 120, 0, 222),

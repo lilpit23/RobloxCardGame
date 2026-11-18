@@ -288,6 +288,7 @@ local function pushState(player)
 		vaultSlots = vaultSlots(data),
 		perks = data.perks,
 		training = data.training,
+		mastery = data.mastery,
 		tower = data.tower,
 		luckEventEndsAt = luckEventEndsAt,
 		raid = raidView() or false, -- false, not nil: the client merges updates key by key
@@ -1627,6 +1628,9 @@ DuelStartRemote.OnServerInvoke = function(player, mode, bossFloor)
 		end
 		duel = Duel.raidNew(raid.boss, battleDeckFor(data), rng)
 		if duel then
+			duel.mastery = data.mastery
+		end
+		if duel then
 			duel.raidStart = raid.endsAt -- which world boss this fight belongs to
 		end
 	elseif mode == "boss" then
@@ -1637,6 +1641,7 @@ DuelStartRemote.OnServerInvoke = function(player, mode, bossFloor)
 		duel = Duel.new(bossFloor, battleDeckFor(data), rng, "boss")
 		if duel then
 			duel.day = Quests.today()
+			duel.mastery = data.mastery
 		end
 	else
 		local floor = data.tower + 1
@@ -1644,6 +1649,9 @@ DuelStartRemote.OnServerInvoke = function(player, mode, bossFloor)
 			return { ok = false, error = "You have cleared the whole tower!" }
 		end
 		duel = Duel.new(floor, battleDeckFor(data), rng)
+		if duel then
+			duel.mastery = data.mastery
+		end
 	end
 	if duel == nil then
 		return { ok = false, error = "You need at least one card to battle." }
@@ -1688,6 +1696,32 @@ local function clearFloor(player, data, floor, result)
 	end
 	checkTitles(player, data)
 	touch(player, true)
+end
+
+-- Card mastery: experience for every card played in a battle (2 per play after a win, 1
+-- after a loss). Returns { "Name ★n", ... } for the cards that gained a star.
+local function awardMastery(player, data, played, won)
+	if type(played) ~= "table" then
+		return {}
+	end
+	local raised = {}
+	for cardId, plays in pairs(played) do
+		local def = Cards.ById[cardId]
+		if def then
+			local before = data.mastery[cardId] or 0
+			local after = before + plays * (won and 2 or 1)
+			data.mastery[cardId] = after
+			local level = Duel.masteryLevel(after)
+			if level > Duel.masteryLevel(before) then
+				table.insert(raised, def.name .. " " .. string.rep("★", level))
+			end
+		end
+	end
+	if #raised > 0 then
+		notify(player, "⭐ Card mastery up: " .. table.concat(raised, ", "), "good")
+		touch(player, true)
+	end
+	return raised
 end
 
 -- Co-op: helping on a floor you already cleared (or have not reached) pays this share of
@@ -1811,6 +1845,7 @@ local function finishCoop(match)
 		end
 		if data and not hero.left then
 			data.stats.duels = (data.stats.duels or 0) + 1
+			extras[side].mastered = awardMastery(player, data, hero.played, match.state.win)
 			if match.state.win then
 				questProgress(player, "win_battles", 1)
 				data.stats.coopWins = (data.stats.coopWins or 0) + 1
@@ -1837,6 +1872,7 @@ local function sendCoopRound(match, events, extras)
 			local extra = extras and extras[side]
 			if extra then
 				result.aura, result.cash, result.drop, result.helper = extra.aura, extra.cash, extra.drop, extra.helper
+				result.mastered = extra.mastered
 			end
 			PvpRoundRemote:FireClient(player, result)
 		end
@@ -1962,6 +1998,9 @@ PvpRespondRemote.OnServerEvent:Connect(function(player, challenger, accept)
 			notify(player, "You both need at least one card to battle.", "error")
 			notify(challenger, "You both need at least one card to battle.", "error")
 			return
+		end
+		for side, who in ipairs(players) do
+			state.heroes[side].mastery = PlayerData.get(who).mastery
 		end
 		local match = { coop = true, floor = floor, players = players, state = state, deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK }
 		for side, who in ipairs(players) do
@@ -2146,6 +2185,9 @@ DuelActRemote.OnServerInvoke = function(player, action)
 	if duel.over then
 		session.duel = nil
 		data.stats.duels = (data.stats.duels or 0) + 1 -- the Auto battler unlocks after the first
+		if duel.mode ~= "daily" then
+			result.mastered = awardMastery(player, data, duel.played, duel.win)
+		end
 		if duel.win then
 			questProgress(player, "win_battles", 1)
 		end

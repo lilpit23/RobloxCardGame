@@ -72,6 +72,10 @@ way so the repo stays the whole game.
   duels (`runCoop`, `finishCoop`); a win clears the floor for everyone whose next floor it was
   (`clearFloor`) and pays the rest a helper's share of aura. Events name heroes by index and
   are converted per player with `Duel.coopEventsFor`.
+- Card mastery (`Duel.Mastery*`, `data.mastery` = experience per card id): cards played in
+  tower, boss rematch, co-op and world-boss battles earn experience (`awardMastery`), and each
+  star adds `Duel.MasteryBonus` damage and healing there (`hero.mastery`). Never in player
+  duels or the daily challenge, which stay equal for everyone.
 - World boss (`Duel.raid*`, `Config.Raid`): every so often the server fights one boss. Each
   fight is a solo duel of `Duel.RaidRounds` rounds against an unkillable copy; damage becomes
   points against the player's own health (`Duel.raidPoints`), so collections of any size

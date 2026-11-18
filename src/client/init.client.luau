@@ -64,6 +64,7 @@ local state = {
 	autoUpgrade = false,
 	perks = {},
 	training = {},
+	mastery = {},
 	pvpOpen = true,
 	bossDay = {},
 	raid = false, -- the world boss while one is out (see raidView on the server)
@@ -2218,7 +2219,14 @@ end
 -- "⚡2  ⚔️ Strike"
 local function roleLine(card)
 	local role = Duel.Roles[card.role]
-	return "⚡" .. card.cost .. "  " .. role.icon .. " " .. role.name
+	local line = "⚡" .. card.cost .. "  " .. role.icon .. " " .. role.name
+	-- card mastery stars (they don't count in player duels or the daily challenge)
+	local fair = duel ~= nil and (duel.mode == "pvp" or duel.mode == "daily")
+	local stars = Duel.masteryLevel((state.mastery or {})[card.id])
+	if stars > 0 and not fair then
+		line = line .. "  " .. string.rep("★", stars)
+	end
+	return line
 end
 
 local function newBar(parent, position, size, color, fraction, text)
@@ -3184,6 +3192,9 @@ local function playResultNow(result)
 			duelEnding = "💀 Defeat. Tune your battle deck, or pull stronger cards, and try again."
 		end
 	end
+	if duelEnding and type(result.mastered) == "table" and #result.mastered > 0 then
+		duelEnding = duelEnding .. "\n⭐ Mastery up: " .. table.concat(result.mastered, ", ")
+	end
 	duelBusy = false
 	renderDuelHud()
 	task.defer(autoStep)
@@ -3547,7 +3558,7 @@ panels.Battle = function()
 
 	-- how battles work: open for anyone who has never fought, a tap away for everyone else
 	local showHelp = battleHelp or (state.stats ~= nil and (state.stats.duels or 0) == 0)
-	local helpRow = newRow(6, showHelp and 520 or 40)
+	local helpRow = newRow(6, showHelp and 540 or 40)
 	helpRow.BackgroundTransparency = showHelp and 0 or 1
 	newButton(helpRow, showHelp and "❓ How battles work  ▲" or "❓ How battles work  ▼", UDim2.new(0, 0, 0, 3), UDim2.new(0, 220, 0, 34), Color3.fromRGB(150, 95, 230), function()
 		battleHelp = not showHelp
@@ -3574,6 +3585,7 @@ panels.Battle = function()
 			"Bosses (every 10th floor) warn you one round before a huge hit: shield up to block and parry it, stagger it, freeze it or finish it.",
 			"Each boss also has a signature (🌊 Undertow, ☁️ Cloud-step, ⚡ Thunderbolt, 📯 Rally, ❄️ Frostbite, 🔥 Ragnarok): check it before you fight.",
 			"Watch for 🐍 Venomous enemies (Heal cures poison), 🔮 Warded ones (no bleed, burn or chill) and 📯 Summoners.",
+			"⭐ Card mastery: cards you play in battles level up to ★5 (+5% damage and healing per star; not in duels or the daily).",
 			"Player duels: both pick in secret each round. Your school is your deck's main type. Shields parry 30% back;",
 			"⚡ Tech drains 1 energy, 🔨 Warrior breaks all shields (+15%), ❄️ 5 chills freeze a player.",
 			"✖ throws a card away for free. Your first battles come with a coach that points out a good move.",

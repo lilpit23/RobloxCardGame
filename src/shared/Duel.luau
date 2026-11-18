@@ -218,6 +218,7 @@ function Duel.card(key)
 	end
 	local card = {
 		key = key,
+		id = def.id,
 		name = Cards.getDisplayName(key),
 		glyph = def.glyph,
 		type = def.type,
@@ -1064,10 +1065,14 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 	local card = Duel.card(hero.hand[handIndex])
 	hero.energy = hero.energy - card.cost
 	table.insert(hero.discard, table.remove(hero.hand, handIndex))
+	-- card mastery: stronger damage and healing, and the play is counted toward it
+	local mastery = Duel.masteryMult(hero.mastery, card.id)
+	hero.played = hero.played or {}
+	hero.played[card.id] = (hero.played[card.id] or 0) + 1
 
 	if card.role == "attack" or card.role == "blast" or card.role == "drain" then
 		local boost = table.remove(hero.charges, 1)
-		local damage = card.amount * (1 + (boost or 0))
+		local damage = card.amount * mastery * (1 + (boost or 0))
 		if boost then
 			table.insert(events, { kind = "boost", text = "💪 Power-up: +" .. percent(boost) .. " damage!" })
 		end
@@ -1096,7 +1101,7 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 				end
 			end
 		end
-		local healed = math.min(card.amount, patient.maxHp - patient.hp)
+		local healed = math.min(math.floor(card.amount * mastery), patient.maxHp - patient.hp)
 		patient.hp = patient.hp + healed
 		local cured = patient.poison > 0
 		patient.poison = 0
@@ -1114,12 +1119,12 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 		table.insert(hero.charges, card.amount)
 		table.insert(events, { kind = "charge", text = card.name .. " powers up " .. whoIs(hero) .. ": the next attack deals +" .. percent(card.amount) })
 	elseif card.role == "mend" then
-		hero.mend = math.max(hero.mendRounds > 0 and hero.mend or 0, card.amount)
+		hero.mend = math.max(hero.mendRounds > 0 and hero.mend or 0, math.floor(card.amount * mastery))
 		hero.mendRounds = Duel.MendRounds
 		table.insert(events, { kind = "charge", text = "🌿 " .. card.name .. ": " .. whoIs(hero) .. " will heal " .. short(hero.mend) .. " a round for " .. Duel.MendRounds .. " rounds" })
 	elseif card.role == "stun" then
 		local enemy = state.enemies[targetIndex]
-		hitEnemy(state, events, card, targetIndex, card.amount)
+		hitEnemy(state, events, card, targetIndex, card.amount * mastery)
 		if enemy.hp > 0 then
 			local text
 			if enemy.boss then
@@ -1135,7 +1140,7 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 		end
 	elseif card.role == "curse" then
 		local enemy = state.enemies[targetIndex]
-		enemy.curse = math.max(enemy.curseRounds > 0 and enemy.curse or 0, card.amount)
+		enemy.curse = math.max(enemy.curseRounds > 0 and enemy.curse or 0, math.floor(card.amount * mastery))
 		enemy.curseRounds = Duel.CurseRounds
 		table.insert(events, { kind = "weaken", text = "☠️ " .. card.name .. " curses " .. enemy.name .. ": " .. short(enemy.curse) .. " damage a round for " .. Duel.CurseRounds .. " rounds", enemy = targetIndex, icon = "☠️" })
 	elseif card.role == "hex" then
@@ -1153,6 +1158,31 @@ function applyCard(state, hero, heroIndex, handIndex, targetIndex, events)
 		table.insert(enemy.weak, card.amount)
 		table.insert(events, { kind = "weaken", text = card.name .. " weakens " .. enemy.name .. ": its next attack deals -" .. percent(card.amount), enemy = targetIndex, icon = "🌀" })
 	end
+end
+
+-- Card mastery ---------------------------------------------------------------------------
+-- Cards you play in battles (tower, boss rematches, co-op, world boss; not player duels or
+-- the daily challenge) earn mastery: 2 per play in a won battle, 1 in a lost one. Each star
+-- makes that card's damage and healing Duel.MasteryBonus stronger in those battles.
+-- mastery = the saved table { [cardId] = experience }.
+Duel.MasteryXp = { 10, 30, 70, 150, 300 } -- experience for each star
+Duel.MasteryBonus = 0.05
+
+function Duel.masteryLevel(experience)
+	local level = 0
+	for star, need in ipairs(Duel.MasteryXp) do
+		if (experience or 0) >= need then
+			level = star
+		end
+	end
+	return level
+end
+
+function Duel.masteryMult(mastery, cardId)
+	if mastery == nil or cardId == nil then
+		return 1
+	end
+	return 1 + Duel.MasteryBonus * Duel.masteryLevel(mastery[cardId])
 end
 
 -- World boss -------------------------------------------------------------------------------

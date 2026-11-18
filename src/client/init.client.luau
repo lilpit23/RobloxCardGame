@@ -2254,6 +2254,58 @@ local duelGui = make("Frame", {
 	Size = UDim2.new(1, 0, 1, 0),
 	Visible = false,
 }, screen)
+
+-- The card you just played flies up out of your hand toward the enemies and fades.
+local function cardFlyout(key)
+	local group = make("CanvasGroup", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 1, -170),
+		Size = UDim2.new(0, 96, 0, 126),
+		ZIndex = 20,
+	}, duelGui)
+	CardView.new(key).Parent = group
+	local fly = TweenService:Create(group, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0.38, 0),
+		Size = UDim2.new(0, 134, 0, 176),
+	})
+	fly:Play()
+	fly.Completed:Once(function()
+		local fade = TweenService:Create(group, TweenInfo.new(0.3), { GroupTransparency = 1 })
+		fade:Play()
+		fade.Completed:Once(function()
+			group:Destroy()
+		end)
+	end)
+end
+
+-- Your own health changes float up beside your health bar: green for healing, red for harm.
+local function healthPop(change)
+	if change == 0 then
+		return
+	end
+	local label = make("TextLabel", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.25, 0, 1, -190),
+		Size = UDim2.new(0, 160, 0, 36),
+		Font = Enum.Font.FredokaOne,
+		Text = (change > 0 and "+" or "-") .. Duel.short(math.abs(change)),
+		TextColor3 = change > 0 and Color3.fromRGB(120, 255, 150) or Color3.fromRGB(255, 110, 100),
+		TextSize = 30,
+		TextStrokeTransparency = 0.3,
+		ZIndex = 20,
+	}, duelGui)
+	local rise = TweenService:Create(label, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.25, 0, 1, -250),
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	})
+	rise:Play()
+	rise.Completed:Once(function()
+		label:Destroy()
+	end)
+end
 local duelTop = make("Frame", {
 	AnchorPoint = Vector2.new(0.5, 0),
 	Position = UDim2.new(0.5, 0, 0, 56),
@@ -2914,6 +2966,10 @@ function duelAct(action)
 		return
 	end
 	duelBusy = true
+	local playedKey = action.kind == "play" and duel.hand[action.hand] or nil
+	if playedKey then
+		cardFlyout(playedKey)
+	end
 	local ok, result = pcall(function()
 		return Remotes.DuelAct:InvokeServer(action)
 	end)
@@ -3030,6 +3086,7 @@ local function playResultNow(result)
 			duel.enemies[event.enemy].attack = event.attack
 		end
 		if event.hp then
+			healthPop(event.hp - duel.hp)
 			duel.hp = event.hp
 		end
 		renderDuelHud()

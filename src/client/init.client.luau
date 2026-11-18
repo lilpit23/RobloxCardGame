@@ -768,6 +768,7 @@ local currentPanel = nil
 local renderPanel -- defined below; panels call it to refresh themselves
 local openPanel -- defined below
 local renderDuelHud, duelAct, duelTitleText, playResult -- the duel screen, defined with the Battle panel
+local battleTab = "tower" -- which tab of the Battle screen is open
 local renderedRev = -1
 local panels = {}
 
@@ -1671,6 +1672,13 @@ panels.Rebirth = function()
 			TextColor3 = COLORS.dim,
 			TextYAlignment = Enum.TextYAlignment.Top,
 		})
+		if level.tower and (state.tower or 0) < level.tower then
+			-- the tower floor is missing: a shortcut to the Battle screen
+			newButton(row, "⚔️ To the tower", UDim2.new(1, -170, 0, 6), UDim2.new(0, 156, 0, 30), Color3.fromRGB(200, 60, 60), function()
+				battleTab = "tower"
+				openPanel("Battle")
+			end).TextSize = 13
+		end
 		local button
 		button = newButton(row, ready and "REBIRTH" or "Not ready", UDim2.new(1, -170, 0, bottom), UDim2.new(0, 156, 0, 46), ready and Color3.fromRGB(215, 160, 50) or COLORS.locked, function()
 			if not ready then
@@ -2148,7 +2156,6 @@ local roundQueue = {} -- rounds that arrived during playback, played next
 local duelEnding = nil -- the result line, once the duel is over
 local deckEditing = false
 local deckFilter = "all" -- the role shown in the deck editor
-local battleTab = "tower" -- which tab of the Battle screen is open
 -- roles in the order the deck screens list them
 local ROLE_ORDER = { "attack", "blast", "drain", "stun", "curse", "hex", "weaken", "charge", "shield", "heal", "mend" }
 local stage = nil -- the 3D scene: { folder, spot, figures = { { part, home, gui, ... } } }

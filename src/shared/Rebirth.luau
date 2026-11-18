@@ -8,20 +8,24 @@ local Rebirth = {}
 
 -- Levels[n] = what it takes to go from rebirth n-1 to rebirth n.
 -- cards = card ids you must own (any variant; display, inventory or vault all count).
+-- tower = the Battle Tower floor you must have cleared (tower progress is never reset, so this
+-- only asks for the next few floors each time). The floors sit at about 60-75% of what a deck
+-- of the sets open by then can reach (node tools/duel-sim.js), so battling is needed but a
+-- normal collection gets there.
 -- Every rebirth opens the next set (4x the income), more shelves and a bigger store, which
 -- together make a run earn roughly ten times the one before, so the costs climb about 10x.
 -- From the sixth rebirth the store and shelves are maxed and only the new set helps, so the
 -- climb slows to about 5x. Aura per second does not grow with later sets, so the aura asked
 -- for flattens too.
 Rebirth.Levels = {
-	{ cash = 120000000, aura = 500, cards = { "piglet", "winnie_the_pooh" } }, -- Storybook Friends
-	{ cash = 2500000000, aura = 5000, cards = { "tigger", "mad_hatter", "jim_hawkins" } }, -- + High Seas
-	{ cash = 30000000000, aura = 40000, cards = { "long_john_silver", "zhu_bajie" } }, -- + Journey to the West
-	{ cash = 350000000000, aura = 250000, cards = { "moby_dick", "nezha", "dr_watson" } }, -- + Midnight Classics
-	{ cash = 4000000000000, aura = 1000000, cards = { "sun_wukong", "sherlock_holmes" } },
-	{ cash = 40000000000000, aura = 3000000, cards = { "jade_emperor", "count_dracula" } },
-	{ cash = 200000000000000, aura = 8000000, cards = { "hercules", "medusa" } }, -- + Olympus
-	{ cash = 1000000000000000, aura = 20000000, cards = { "zeus", "king_arthur", "merlin", "julius_caesar" } }, -- + Knights and Outlaws, Glory of Rome
+	{ cash = 120000000, aura = 500, tower = 3, cards = { "piglet", "winnie_the_pooh" } }, -- Storybook Friends
+	{ cash = 2500000000, aura = 5000, tower = 8, cards = { "tigger", "mad_hatter", "jim_hawkins" } }, -- + High Seas
+	{ cash = 30000000000, aura = 40000, tower = 12, cards = { "long_john_silver", "zhu_bajie" } }, -- + Journey to the West
+	{ cash = 350000000000, aura = 250000, tower = 16, cards = { "moby_dick", "nezha", "dr_watson" } }, -- + Midnight Classics
+	{ cash = 4000000000000, aura = 1000000, tower = 20, cards = { "sun_wukong", "sherlock_holmes" } },
+	{ cash = 40000000000000, aura = 3000000, tower = 24, cards = { "jade_emperor", "count_dracula" } },
+	{ cash = 200000000000000, aura = 8000000, tower = 28, cards = { "hercules", "medusa" } }, -- + Olympus
+	{ cash = 1000000000000000, aura = 20000000, tower = 32, cards = { "zeus", "king_arthur", "merlin", "julius_caesar" } }, -- + Knights and Outlaws, Glory of Rome
 }
 
 Rebirth.IncomePerRebirth = 0.5 -- +50% income per rebirth
@@ -83,7 +87,7 @@ function Rebirth.ownsCard(profile, id)
 	return false
 end
 
--- profile needs: rebirths, cash, aura, inventory, slots, vault.
+-- profile needs: rebirths, cash, aura, tower, inventory, slots, vault.
 -- Returns level (nil when maxed), ready, requirements = { { text = string, met = boolean }, ... }
 function Rebirth.check(profile)
 	local level = Rebirth.Levels[(profile.rebirths or 0) + 1]
@@ -94,6 +98,13 @@ function Rebirth.check(profile)
 		{ text = Format.cash(level.cash) .. " cash", met = profile.cash >= level.cash },
 		{ text = Format.short(level.aura) .. " aura", met = profile.aura >= level.aura },
 	}
+	if level.tower then
+		local cleared = profile.tower or 0
+		table.insert(requirements, {
+			text = "⚔️ Clear Battle Tower floor " .. level.tower .. "  (you've cleared " .. cleared .. ")",
+			met = cleared >= level.tower,
+		})
+	end
 	for _, id in ipairs(level.cards) do
 		local def = Cards.ById[id]
 		table.insert(requirements, {

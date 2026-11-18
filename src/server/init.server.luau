@@ -1334,6 +1334,7 @@ OwnerToolRemote.OnServerEvent:Connect(function(player, action)
 			addCard(data, id, 1)
 		end
 		data.aura = math.max(data.aura, level.aura)
+		data.tower = math.max(data.tower, level.tower or 0)
 		addCash(data, level.cash)
 		notify(player, "🧪 You now meet the next rebirth's requirements.", "info")
 	elseif action == "tower" then

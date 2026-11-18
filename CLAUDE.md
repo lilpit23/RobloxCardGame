@@ -95,7 +95,9 @@ way so the repo stays the whole game.
 - A new set every rebirth: a set's packs unlock by rebirth count (`pack.rebirths`,
   `Packs.unlocked`), not by store tier. The store tier only gives the income multiplier and
   shelves. Rebirth costs in `Rebirth.luau` assume this, and each level's required cards must
-  come from sets already open in that run.
+  come from sets already open in that run. Each level also asks for a cleared Battle Tower
+  floor (`tower`, owner's decision: battles are required for rebirths); keep it within reach of
+  the sets open by then (`node tools/duel-sim.js`). `tools/simulate.js` does not model battles.
 - Deck slots are the store's shelves: `Upgrades.slotCount(storeLevel, rebirths, bonus)` is the
   only place the count is decided (store tier, capped per rebirth until the fifth). There is no
   deck-slot upgrade. `Plots.luau` puts 16 shelves on the ground floor and 8 on each storey.

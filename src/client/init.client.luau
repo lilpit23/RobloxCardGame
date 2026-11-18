@@ -3784,7 +3784,7 @@ end
 local function playHatch(egg, petId, equippedNow)
 	local pet = Pets.ById[petId]
 	local rarity = Pets.Rarities[pet.rarity]
-	local overlay = make("TextButton", {
+	local hatchScreen = make("TextButton", {
 		Text = "",
 		AutoButtonColor = false,
 		Size = UDim2.new(1, 0, 1, 0),
@@ -3799,7 +3799,7 @@ local function playHatch(egg, petId, equippedNow)
 		BackgroundColor3 = egg.color,
 		BackgroundTransparency = 0.45,
 		ZIndex = 51,
-	}, overlay)
+	}, hatchScreen)
 	make("UICorner", { CornerRadius = UDim.new(0.5, 0) }, glow)
 	local figure = make("TextLabel", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -3810,8 +3810,8 @@ local function playHatch(egg, petId, equippedNow)
 		Text = egg.glyph,
 		TextScaled = true,
 		ZIndex = 52,
-	}, overlay)
-	local caption = newLabel(overlay, "Hatching " .. egg.name .. "…", UDim2.new(0.1, 0, 0.66, 0), UDim2.new(0.8, 0, 0, 40), {
+	}, hatchScreen)
+	local caption = newLabel(hatchScreen, "Hatching " .. egg.name .. "…", UDim2.new(0.1, 0, 0.66, 0), UDim2.new(0.8, 0, 0, 40), {
 		Font = Enum.Font.FredokaOne,
 		TextSize = 26,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -3819,9 +3819,9 @@ local function playHatch(egg, petId, equippedNow)
 		ZIndex = 52,
 	})
 	local closed = false
-	overlay.Activated:Connect(function()
+	hatchScreen.Activated:Connect(function()
 		closed = true
-		overlay:Destroy()
+		hatchScreen:Destroy()
 	end)
 	-- three wobbles, each bigger and quicker
 	for shake = 1, 3 do
@@ -3847,7 +3847,7 @@ local function playHatch(egg, petId, equippedNow)
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		BackgroundTransparency = 0,
 		ZIndex = 53,
-	}, overlay)
+	}, hatchScreen)
 	TweenService:Create(flash, TweenInfo.new(0.7), { BackgroundTransparency = 1 }):Play()
 	figure.Text = pet.glyph
 	figure.Size = UDim2.new(0, 40, 0, 40)
@@ -3860,7 +3860,7 @@ local function playHatch(egg, petId, equippedNow)
 	caption.Size = UDim2.new(0.8, 0, 0, 70)
 	task.delay(4, function()
 		if not closed then
-			overlay:Destroy()
+			hatchScreen:Destroy()
 		end
 	end)
 end

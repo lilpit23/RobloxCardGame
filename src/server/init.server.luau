@@ -1599,7 +1599,12 @@ end
 local COOP_HELPER_SHARE = 0.25
 
 local PVP_INVITE_TIME = 30
-local PVP_PLAYBACK = 4 -- seconds added to each round's timer for the clients' playback
+local PVP_PLAYBACK = 4 -- seconds added to the first round's timer while the duel screen opens
+-- Seconds the clients need to play back a round of `count` events (about 0.45 s each), added
+-- to the next round's timer so nobody loses thinking time to the animation.
+local function playbackSeconds(count)
+	return 2 + 0.5 * count
+end
 local pvpInvites = {} -- [target player] = { [challenger player] = { at = os.clock(), kind = "duel" | "coop" } }
 
 local function pvpViewFor(match, side)
@@ -1685,7 +1690,7 @@ local function runPvp(match)
 		end
 		if (fighters[1].move and fighters[2].move) or os.clock() >= match.deadline then
 			local events = Duel.pvpResolve(match.state, rng)
-			match.deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK
+			match.deadline = os.clock() + Duel.PvpTurnTime + playbackSeconds(#events[1])
 			sendPvpRound(match, events, match.state.over and finishPvp(match) or nil)
 		end
 		task.wait(0.2)
@@ -1745,7 +1750,7 @@ local function runCoop(match)
 	while not match.state.over do
 		if Duel.coopReady(match.state) or os.clock() >= match.deadline then
 			local events = Duel.coopResolve(match.state, rng)
-			match.deadline = os.clock() + Duel.PvpTurnTime + PVP_PLAYBACK
+			match.deadline = os.clock() + Duel.PvpTurnTime + playbackSeconds(#events)
 			sendCoopRound(match, events, match.state.over and finishCoop(match) or nil)
 		end
 		task.wait(0.2)

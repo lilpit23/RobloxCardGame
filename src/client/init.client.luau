@@ -2137,6 +2137,8 @@ local duel = nil -- what the server last told us about the duel in progress
 local duelTarget = 1 -- which enemy the next card is aimed at
 local duelLog = {} -- the last few things that happened
 local duelBusy = false -- waiting for the server, or playing back a round
+local playing = false -- a round is being played back
+local roundQueue = {} -- rounds that arrived during playback, played next
 local duelEnding = nil -- the result line, once the duel is over
 local deckEditing = false
 local deckFilter = "all" -- the role shown in the deck editor
@@ -2522,6 +2524,7 @@ end
 
 local function leaveDuel()
 	autoToken = autoToken + 1
+	table.clear(roundQueue)
 	duel = nil
 	duelEnding = nil
 	duelLog = {}
@@ -2814,6 +2817,7 @@ function renderDuelHud()
 		duelAct({ kind = "pass" })
 	end)
 	passButton.TextSize = 14
+	passButton.Visible = not (coop and duel.hp <= 0)
 	newButton(status, pvp and "Forfeit" or (coop and "Leave" or "Flee"), UDim2.new(0, 544, 0, 5), UDim2.new(0, 88, 0, 36), COLORS.locked, function()
 		duelAuto = false
 		duelAct({ kind = "flee" })
@@ -2843,6 +2847,9 @@ function renderDuelHud()
 		end
 	end
 
+	if coop and duel.hp <= 0 then
+		return -- knocked out: nothing to play until the team wins or falls
+	end
 	local aim = duel.enemies[duelTarget]
 	local handCount = #duel.hand
 	local cardFor = pvp and Duel.pvpCard or Duel.card
@@ -2919,8 +2926,9 @@ function duelAct(action)
 		return
 	end
 	if result.waiting then
-		-- a player duel: the move is locked in, and the round arrives through PvpRound
-		if duel then
+		-- a player duel or co-op: the move is locked in, and the round arrives through
+		-- PvpRound. That round may already have arrived, so only mark the round it was for.
+		if duel and type(result.view) == "table" and result.view.round == duel.round and not duel.over then
 			duel.chosen = true
 			renderDuelHud()
 		end
@@ -2930,8 +2938,8 @@ function duelAct(action)
 end
 
 -- Play back a round's events (from DuelAct, or PvpRound in a player duel), then show the
--- new state.
-function playResult(result)
+-- new state. Rounds are played one at a time: one that arrives mid-playback waits its turn.
+local function playResultNow(result)
 	if duel == nil then
 		return
 	end
@@ -3098,6 +3106,26 @@ function playResult(result)
 	duelBusy = false
 	renderDuelHud()
 	task.defer(autoStep)
+end
+
+function playResult(result)
+	if playing then
+		table.insert(roundQueue, result)
+		return
+	end
+	playing = true
+	local ok, problem = pcall(playResultNow, result)
+	playing = false
+	if not ok then
+		warn("[AuraPacks] duel playback failed: " .. tostring(problem))
+		duelBusy = false
+	end
+	local nextResult = table.remove(roundQueue, 1)
+	if nextResult and duel then
+		playResult(nextResult)
+	else
+		table.clear(roundQueue)
+	end
 end
 
 function startDuel(mode, bossFloor)

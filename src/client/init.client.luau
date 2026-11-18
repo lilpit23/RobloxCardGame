@@ -75,7 +75,7 @@ local state = {
 	boosts = { luckUntil = 0, cashUntil = 0 },
 	showcase = { left = "", right = "" },
 	packsOpened = 0,
-	stats = { fused = 0, earned = 0, duels = 0, pvpWins = 0, pvpDuels = 0 },
+	stats = { fused = 0, earned = 0, duels = 0, pvpWins = 0, pvpDuels = 0, coopWins = 0, raidPoints = 0, rematches = 0 },
 	achievements = {},
 	packCounts = {},
 	autoPack = { packId = "", on = false, sell = 0 },
@@ -4033,7 +4033,7 @@ local seenAutoRev = 0
 local raidBanner = make("Frame", {
 	AnchorPoint = Vector2.new(0.5, 0),
 	Position = UDim2.new(0.5, 0, 0, 6),
-	Size = UDim2.new(0, 440, 0, 58),
+	Size = UDim2.new(0, 440, 0, 76),
 	BackgroundColor3 = Color3.fromRGB(60, 25, 30),
 	BackgroundTransparency = 0.1,
 	BorderSizePixel = 0,
@@ -4050,7 +4050,13 @@ local raidTitle = newLabel(raidBanner, "", UDim2.new(0, 12, 0, 4), UDim2.new(1, 
 	TextColor3 = Color3.fromRGB(255, 210, 160),
 })
 local raidFill, raidBarLabel = newBar(raidBanner, UDim2.new(0, 12, 0, 30), UDim2.new(1, -136, 0, 20), Color3.fromRGB(230, 70, 60), 1, "")
-newButton(raidBanner, "⚔️ Fight", UDim2.new(1, -114, 0, 9), UDim2.new(0, 104, 0, 40), Color3.fromRGB(215, 80, 60), function()
+local raidTop = newLabel(raidBanner, "", UDim2.new(0, 12, 0, 54), UDim2.new(1, -24, 0, 18), {
+	TextSize = 12,
+	TextWrapped = false,
+	TextTruncate = Enum.TextTruncate.AtEnd,
+	TextColor3 = Color3.fromRGB(255, 225, 170),
+})
+newButton(raidBanner, "⚔️ Fight", UDim2.new(1, -114, 0, 8), UDim2.new(0, 104, 0, 42), Color3.fromRGB(215, 80, 60), function()
 	duelAuto = false
 	startDuel("raid")
 end).TextSize = 16
@@ -4067,6 +4073,11 @@ local function updateRaidBanner()
 	raidTitle.Text = "🐉 World boss: " .. worldBoss.name .. (trait and ("  ·  " .. trait.name) or "")
 	raidFill.Size = UDim2.new(math.clamp(worldBoss.hp / math.max(1, worldBoss.maxHp), 0, 1), 0, 1, 0)
 	raidBarLabel.Text = math.floor(worldBoss.hp) .. " / " .. worldBoss.maxHp .. " pts  ·  " .. string.format("%d:%02d", math.floor(left / 60), left % 60) .. " left"
+	local leaders = {}
+	for place, entry in ipairs(worldBoss.top or {}) do
+		table.insert(leaders, ({ "🥇", "🥈", "🥉" })[place] .. " " .. entry.name .. " " .. entry.points)
+	end
+	raidTop.Text = #leaders > 0 and table.concat(leaders, "   ") or "Nobody has hit it yet. Be the first!"
 end
 task.spawn(function()
 	while true do

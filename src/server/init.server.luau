@@ -206,7 +206,22 @@ local function raidView()
 	if raid == nil then
 		return nil
 	end
+	-- the three biggest hitters still in the server
+	local top = {}
+	for userId, points in pairs(raid.points) do
+		local who = Players:GetPlayerByUserId(userId)
+		if who then
+			table.insert(top, { name = who.DisplayName, points = points })
+		end
+	end
+	table.sort(top, function(a, b)
+		return a.points > b.points
+	end)
+	while #top > 3 do
+		table.remove(top)
+	end
 	return {
+		top = top,
 		name = raid.boss.name,
 		glyph = raid.boss.glyph,
 		trait = raid.boss.trait,
@@ -1796,6 +1811,7 @@ local function finishCoop(match)
 			data.stats.duels = (data.stats.duels or 0) + 1
 			if match.state.win then
 				questProgress(player, "win_battles", 1)
+				data.stats.coopWins = (data.stats.coopWins or 0) + 1
 				if match.floor == data.tower + 1 then
 					clearFloor(player, data, match.floor, extras[side])
 				else
@@ -2153,6 +2169,7 @@ DuelActRemote.OnServerInvoke = function(player, action)
 			if raid and raid.endsAt == duel.raidStart and not raid.defeated then
 				local userId = player.UserId
 				raid.points[userId] = (raid.points[userId] or 0) + points
+				data.stats.raidPoints = (data.stats.raidPoints or 0) + points
 				raid.hp = raid.hp - points
 				local fights = (raid.fights[userId] or 0) + 1
 				raid.fights[userId] = fights
@@ -2177,6 +2194,7 @@ DuelActRemote.OnServerInvoke = function(player, action)
 			local slot = tostring(duel.floor)
 			if duel.day == Quests.today() and data.bossDay[slot] ~= duel.day then
 				data.bossDay[slot] = duel.day
+				data.stats.rematches = (data.stats.rematches or 0) + 1
 				local aura = Battle.reward(duel.floor, Rebirth.cashCap(data.rebirths))
 				aura = math.floor(aura * Battle.RematchAuraShare * (Season.event().tower or 1))
 				data.aura = data.aura + aura

@@ -2,6 +2,7 @@
 -- Plot local space: the street is toward -Z, the back of the store is +Z, floor top is Y = 1.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
@@ -845,8 +846,11 @@ local function buildTunnel(map, layout)
 end
 
 -- The PvE arena: a stone circle, the tower with its gate, a lane, braziers and monster gates.
+local arenaCenter = Vector3.new() -- set by buildArena; the world boss looms over it
+
 local function buildArena(map, layout)
 	local centerX = layout.arenaX
+	arenaCenter = Vector3.new(centerX, 0, 0)
 	newDisc(map, "ArenaRim", ARENA_RADIUS + 4, 0.2, Vector3.new(centerX, 0.1, 0), ROCK, Enum.Material.Slate)
 	newDisc(map, "ArenaFloor", ARENA_RADIUS, 0.3, Vector3.new(centerX, 0.15, 0), DARK_STONE, Enum.Material.Cobblestone)
 
@@ -1010,6 +1014,53 @@ function Plots.setGlobalBoard(index, title, lines)
 end
 
 -- Where a plot's owner stands for a tower duel (at ground level, facing their enemies).
+-- The world boss looms over the arena while it is out: a giant glowing card with its name
+-- and the server's progress. info = { name, glyph, hp, maxHp } or nil to take it away.
+local raidModel = nil
+function Plots.setRaidBoss(info)
+	if info == nil then
+		if raidModel then
+			raidModel.part:Destroy()
+			raidModel = nil
+		end
+		return
+	end
+	if raidModel == nil or raidModel.name ~= info.name then
+		if raidModel then
+			raidModel.part:Destroy()
+		end
+		local part = newPart(workspace, "WorldBoss", Vector3.new(16, 24, 1), CFrame.new(arenaCenter + Vector3.new(0, 30, 0)), Color3.fromRGB(70, 20, 30), Enum.Material.Neon)
+		part.CanCollide = false
+		part.CanQuery = false
+		local light = Instance.new("PointLight")
+		light.Color = Color3.fromRGB(255, 90, 60)
+		light.Range = 50
+		light.Brightness = 3
+		light.Parent = part
+		for _, face in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back }) do
+			local gui = Instance.new("SurfaceGui")
+			gui.Face = face
+			gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+			gui.PixelsPerStud = 20
+			gui.Parent = part
+			local glyph = Instance.new("TextLabel")
+			glyph.BackgroundTransparency = 1
+			glyph.Size = UDim2.new(1, 0, 1, 0)
+			glyph.Text = info.glyph or "🐉"
+			glyph.TextScaled = true
+			glyph.Parent = gui
+		end
+		local title = newBillboard(part, "", 16, 30, 3)
+		title.Parent.MaxDistance = 400
+		local spin = TweenService:Create(part, TweenInfo.new(12, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), {
+			CFrame = part.CFrame * CFrame.Angles(0, math.pi, 0),
+		})
+		spin:Play()
+		raidModel = { part = part, name = info.name, title = title }
+	end
+	raidModel.title.Text = "🐉 " .. info.name .. "\n" .. math.max(0, math.floor(info.hp)) .. " / " .. info.maxHp .. " pts"
+end
+
 function Plots.getDuelSpot(plot)
 	return duelSpots[plot.index]
 end

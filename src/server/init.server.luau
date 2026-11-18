@@ -1228,6 +1228,8 @@ local function raidChanged()
 	for _, session in pairs(sessions) do
 		session.dirty = true
 	end
+	-- the giant figure over the arena (gone once the boss falls or leaves)
+	Plots.setRaidBoss(raid and not raid.defeated and raidView() or nil)
 end
 
 local function startRaid()

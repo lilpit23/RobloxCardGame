@@ -71,6 +71,7 @@ local BuyTrainingRemote = newRemote("RemoteEvent", "BuyTraining")
 local HatchEggRemote = newRemote("RemoteFunction", "HatchEgg")
 local EquipPetRemote = newRemote("RemoteEvent", "EquipPet")
 local FusePetRemote = newRemote("RemoteEvent", "FusePet")
+local SeenNewsRemote = newRemote("RemoteEvent", "SeenNews")
 local OpenAlabasterRemote = newRemote("RemoteEvent", "OpenAlabaster") -- server -> client
 local PvpChallengeRemote = newRemote("RemoteEvent", "PvpChallenge")
 local PvpRespondRemote = newRemote("RemoteEvent", "PvpRespond")
@@ -296,6 +297,7 @@ local function pushState(player)
 		training = data.training,
 		pets = data.pets,
 		alabasterBeaten = data.alabasterBeaten,
+		seenNews = data.seenNews,
 		petsEquipped = data.petsEquipped,
 		mastery = data.mastery,
 		tower = data.tower,
@@ -1518,6 +1520,17 @@ HatchEggRemote.OnServerInvoke = function(player, eggId)
 	touch(player, true)
 	return { ok = true, pet = petId, equipped = equippedNow }
 end
+
+-- The player closed the "What's new" popup.
+SeenNewsRemote.OnServerEvent:Connect(function(player)
+	if not allow(player, "SeenNews", 1, 2) then
+		return
+	end
+	local data = PlayerData.get(player)
+	if data then
+		data.seenNews = Config.News.version
+	end
+end)
 
 -- Fuse Pets.GoldenCost copies of a pet into its golden version.
 FusePetRemote.OnServerEvent:Connect(function(player, petId)
@@ -3088,6 +3101,9 @@ local function onPlayerAdded(player)
 	Plots.setOwnerSign(plot, player, data.upgrades.store, data.rebirths, hasPass(data, "vip"))
 	updateStaff(player)
 	updatePets(player)
+	if data.rebirths == 0 and data.packsOpened < 20 then
+		data.seenNews = Config.News.version -- new players get the tutorial, not a list of changes
+	end
 	for index = 1, slotCount(data) do
 		Plots.setCard(plot, index, data.slots[tostring(index)])
 	end

@@ -91,6 +91,19 @@ return {
 		hit = "rbxasset://sounds/swordslash.wav",
 	},
 
+	-- "What's new": shown once to returning players after an update. Raise version whenever the
+	-- list changes. panel/tab say where each line's Go button leads.
+	News = {
+		version = 1,
+		items = {
+			{ text = "🐉 World boss: every 45 minutes the whole server fights one boss together. Free boosters if it falls!", panel = "Battle", tab = "tower" },
+			{ text = "🐾 Pets (late game): beat Alabaster the Ragdoll beside the Battle Tower, then hatch eggs that boost cash and aura.", panel = "Pets" },
+			{ text = "🤝 Co-op and ⚔️ player duels: team up on tower floors or duel anyone in the server (nothing at stake).", panel = "Battle", tab = "players" },
+			{ text = "⭐ Card mastery: cards you battle with level up to ★5. 👑 Beaten bosses can be rematched daily.", panel = "Battle", tab = "deck" },
+			{ text = "🗼 Rebirths now also ask for a Battle Tower floor. The tower is 60 floors, with a boss every 10th.", panel = "Rebirth" },
+		},
+	},
+
 	PlotCount = 8, -- set the experience's max players to this
 	PlotSize = 64,
 }

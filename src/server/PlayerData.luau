@@ -48,6 +48,7 @@ local function newData()
 		mastery = {}, -- card mastery experience from battles: [cardId] = experience (Duel.masteryLevel)
 		pets = {}, -- pets owned, kept through rebirths: [petId] = count (Pets.luau)
 		alabasterBeaten = false, -- beat Alabaster the Ragdoll, which unlocks pets
+		seenNews = 0, -- the Config.News version this player has already seen
 		petsEquipped = {}, -- array of pet ids, at most Pets.slots(rebirths)
 		tower = 0, -- highest battle tower floor cleared
 		battleDeck = {}, -- array of cardKeys to bring to tower duels (empty = pick automatically)

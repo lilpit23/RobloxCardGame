@@ -116,6 +116,8 @@ way so the repo stays the whole game.
   depicting current or recent government officials and candidates, and living or recently dead
   people also have likeness rights. No modern politicians, ever. Show real people respectfully:
   no caricature, and they are never tower enemies (`Duel.TowerSets`).
+- "What's new" (`Config.News`): returning players see the list once per `version`
+  (`data.seenNews`); new players skip it. When a feature lands, add a line and raise `version`.
 - A card's id is its name slugified (`winnie_the_pooh`) and is what gets saved. Renaming or
   removing a card orphans owned copies, so add a migration when that matters.
 - The active deck is `data.slots` (4 to 64 slots, shown as rows of cards in the store). Its cash

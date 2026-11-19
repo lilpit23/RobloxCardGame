@@ -69,6 +69,7 @@ local state = {
 	pets = {},
 	petsEquipped = {},
 	alabasterBeaten = false,
+	seenNews = math.huge, -- until the server says otherwise, don't show "What's new"
 	pvpOpen = true,
 	bossDay = {},
 	raid = false, -- the world boss while one is out (see raidView on the server)
@@ -4496,9 +4497,54 @@ task.spawn(function()
 	end
 end)
 
+-- "What's new": once per update, for returning players.
+local newsShown = false
+local function showNews()
+	newsShown = true
+	local items = Config.News.items
+	local box = make("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Size = UDim2.new(0, 520, 0, 92 + #items * 50),
+		BackgroundColor3 = Color3.fromRGB(30, 26, 46),
+		BorderSizePixel = 0,
+		ZIndex = 30,
+	}, screen)
+	round(box, 14)
+	make("UIStroke", { Color = Color3.fromRGB(255, 215, 90), Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, box)
+	addFitScale(box, 560, 92 + #items * 50 + 40)
+	newLabel(box, "📰 What's new in " .. Config.GameName, UDim2.new(0, 16, 0, 10), UDim2.new(1, -32, 0, 30), {
+		Font = Enum.Font.FredokaOne,
+		TextSize = 22,
+		TextColor3 = Color3.fromRGB(255, 215, 90),
+	})
+	local function close()
+		box:Destroy()
+		Remotes.SeenNews:FireServer()
+	end
+	for index, item in ipairs(items) do
+		local y = 46 + (index - 1) * 50
+		newLabel(box, item.text, UDim2.new(0, 16, 0, y), UDim2.new(1, -110, 0, 46), {
+			TextSize = 13,
+		})
+		newButton(box, "Go", UDim2.new(1, -86, 0, y + 6), UDim2.new(0, 70, 0, 34), Color3.fromRGB(150, 95, 230), function()
+			close()
+			if item.tab then
+				battleTab = item.tab
+			end
+			openPanel(item.panel)
+		end).TextSize = 14
+	end
+	newButton(box, "Got it!", UDim2.new(0.5, -80, 1, -46), UDim2.new(0, 160, 0, 38), COLORS.good, close).TextSize = 16
+end
+
 Remotes.State.OnClientEvent:Connect(function(newState)
 	for key, value in pairs(newState) do
 		state[key] = value
+	end
+	if not newsShown and (state.seenNews or 0) < Config.News.version then
+		task.defer(showNews)
+		newsShown = true
 	end
 	-- did this update come from the Auto Packer (rather than something the player did)?
 	local fromAutoPacker = (state.autoRev or 0) ~= seenAutoRev

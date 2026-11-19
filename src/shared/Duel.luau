@@ -1646,7 +1646,7 @@ end
 -- with the first move alternating each round. Each player has a "school": the type most of
 -- their deck belongs to, which decides type advantage against them.
 Duel.PvpHealth = 250
-Duel.PvpPower = { 30, 64, 104, 146, 192, 240 } -- by energy cost: a little more per energy for rarer cards
+Duel.PvpPower = { 30, 64, 106, 150, 200, 252 } -- by energy cost: a little more per energy for rarer cards
 Duel.PvpBlast = 1 -- a Blast hits the one opponent for this share of its power
 Duel.PvpHeal = 1 -- a Heal restores this share of its power
 Duel.PvpMaxRounds = 30 -- then the healthier player (by share of health) wins
@@ -1655,15 +1655,15 @@ Duel.PvpChillToFreeze = 5
 Duel.PvpBleedShare = 0.25 -- of a Beast hit, added to the bleed (more than in the tower)
 Duel.PvpThreat = 80
 Duel.PvpParry = 0.3 -- of the damage a shield blocks, sent back at the attacker
-Duel.PvpShockDrain = 1 -- a Tech hit takes this much energy from the opponent
-Duel.PvpStagger = 1.15 -- a Warrior hit deals this much more and breaks every shield
+Duel.PvpShockDrain = 1 -- a Tech Strike or Stun takes this much energy from the opponent
+Duel.PvpStagger = 1.25 -- a Warrior hit deals this much more and breaks every shield
 -- How each type's mark works in a player duel (bleed and burn work as in the tower).
 Duel.PvpEffects = {
 	beast = "🩸 Bleed: stacks, every round",
 	mystic = "♨️ Burn: 3 rounds",
 	star = "❄️ Chill: 5 freeze them for a turn",
-	tech = "⚡ Shock: drains 1 energy",
-	warrior = "🔨 Stagger: +15%, breaks all shields",
+	tech = "⚡ Shock: Strikes and Stuns drain 1 energy",
+	warrior = "🔨 Stagger: +25%, breaks all shields",
 }
 
 local pvpCache = {}
@@ -1895,7 +1895,7 @@ function Duel.pvpResolve(state, rng)
 		end
 		damage = math.max(1, math.floor(damage * (me.might or 1) * (foe.guard or 1)))
 		foe.hp = math.max(0, foe.hp - damage)
-		if card.type == "tech" and foe.energy > 0 then
+		if card.type == "tech" and card.role ~= "blast" and foe.energy > 0 then
 			foe.energy = math.max(0, foe.energy - Duel.PvpShockDrain)
 			table.insert(notes, "⚡ -" .. Duel.PvpShockDrain .. " energy")
 		end

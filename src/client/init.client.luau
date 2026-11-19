@@ -3634,7 +3634,7 @@ panels.Battle = function()
 				"Watch for 🐍 Venomous enemies (Heal cures poison), 🔮 Warded ones (no bleed, burn or chill) and 📯 Summoners.",
 				"⭐ Card mastery: cards you play in battles level up to ★5 (+5% damage and healing per star; not in duels or the daily).",
 				"Player duels: both pick in secret each round. Your school is your deck's main type. Shields parry 30% back;",
-				"⚡ Tech drains 1 energy, 🔨 Warrior breaks all shields (+15%), ❄️ 5 chills freeze a player.",
+				"⚡ Tech Strikes and Stuns drain 1 energy, 🔨 Warrior breaks all shields (+25%), ❄️ 5 chills freeze a player.",
 				"✖ throws a card away for free. Your first battles come with a coach that points out a good move.",
 			}, "\n"), UDim2.new(0, 14, 0, 42), UDim2.new(1, -28, 1, -48), {
 				TextSize = 13,

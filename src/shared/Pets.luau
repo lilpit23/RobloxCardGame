@@ -101,6 +101,28 @@ for _, egg in ipairs(Pets.Eggs) do
 	end
 end
 
+-- Golden pets: fuse Pets.GoldenCost copies of a pet into its golden version, which gives
+-- Pets.GoldenMult times the bonus. Eggs never hatch golden pets.
+Pets.GoldenCost = 5
+Pets.GoldenMult = 2.5
+for _, pet in ipairs(table.clone(Pets.Order)) do
+	local golden = {
+		id = pet.id .. "_golden",
+		name = "Golden " .. pet.name,
+		glyph = pet.glyph,
+		rarity = pet.rarity,
+		weight = 0,
+		chance = 0,
+		egg = pet.egg,
+		bonus = pet.bonus * Pets.GoldenMult,
+		golden = true,
+		base = pet.id,
+	}
+	pet.goldenId = golden.id
+	Pets.ById[golden.id] = golden
+	table.insert(Pets.Order, golden)
+end
+
 function Pets.eggUnlocked(egg, rebirths)
 	return (rebirths or 0) >= egg.rebirths
 end

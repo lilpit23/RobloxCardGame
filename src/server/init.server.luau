@@ -70,6 +70,7 @@ local DuelActRemote = newRemote("RemoteFunction", "DuelAct")
 local BuyTrainingRemote = newRemote("RemoteEvent", "BuyTraining")
 local HatchEggRemote = newRemote("RemoteFunction", "HatchEgg")
 local EquipPetRemote = newRemote("RemoteEvent", "EquipPet")
+local FusePetRemote = newRemote("RemoteEvent", "FusePet")
 local OpenAlabasterRemote = newRemote("RemoteEvent", "OpenAlabaster") -- server -> client
 local PvpChallengeRemote = newRemote("RemoteEvent", "PvpChallenge")
 local PvpRespondRemote = newRemote("RemoteEvent", "PvpRespond")
@@ -1517,6 +1518,38 @@ HatchEggRemote.OnServerInvoke = function(player, eggId)
 	touch(player, true)
 	return { ok = true, pet = petId, equipped = equippedNow }
 end
+
+-- Fuse Pets.GoldenCost copies of a pet into its golden version.
+FusePetRemote.OnServerEvent:Connect(function(player, petId)
+	if not allow(player, "FusePet", 2, 4) then
+		return
+	end
+	local data = PlayerData.get(player)
+	local pet = type(petId) == "string" and Pets.ById[petId] or nil
+	if data == nil or pet == nil or pet.golden then
+		return
+	end
+	local have = data.pets[petId] or 0
+	if have < Pets.GoldenCost then
+		notify(player, "You need " .. Pets.GoldenCost .. " " .. pet.name .. " to make a golden one.", "error")
+		return
+	end
+	data.pets[petId] = have - Pets.GoldenCost
+	if data.pets[petId] <= 0 then
+		data.pets[petId] = nil
+	end
+	data.pets[pet.goldenId] = (data.pets[pet.goldenId] or 0) + 1
+	-- the golden pet takes the place of the copies it was made from
+	local slots = Pets.slots(data.rebirths)
+	local equipped = {}
+	for _, otherId in ipairs(data.petsEquipped) do
+		table.insert(equipped, otherId == petId and pet.goldenId or otherId)
+	end
+	data.petsEquipped = Pets.clean(data.pets, equipped, slots)
+	updatePets(player)
+	notify(player, "✨ " .. Pets.GoldenCost .. " " .. pet.name .. " fused into a Golden " .. pet.name .. "! (" .. Pets.percent(Pets.ById[pet.goldenId].bonus) .. ")", "good")
+	touch(player, true)
+end)
 
 -- Equip or unequip a pet, or equip the best ones (petId = "best").
 EquipPetRemote.OnServerEvent:Connect(function(player, petId, equip)

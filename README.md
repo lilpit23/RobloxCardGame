@@ -107,7 +107,8 @@ Rare cards also radiate **aura**, a second currency for luck and permanent perks
 19. **Pets (late game):** after the 6th rebirth, spend aura on eggs (Ember, then Frost at
     rebirth 7 and Starlight at rebirth 8). Each hatches a Common to Mythic pet that adds to
     your cash and aura income while equipped (3 slots, 4 after the final rebirth). Pets are
-    kept through rebirths and follow you around. First you must beat **Alabaster the
+    kept through rebirths and follow you around. Fuse 5 of the same pet into a Golden one
+    (2.5x its bonus, and it sparkles). First you must beat **Alabaster the
     Ragdoll**, a seal-point Ragdoll cat beside the Battle Tower who guards the eggs: he
     half-dodges, regenerates, gets angry and has Nine Lives. He is meant to be very hard.
 20. **Card mastery:** cards you play in battles earn experience and level up to ★5, each

@@ -3991,17 +3991,22 @@ panels.Pets = function()
 			TextScaled = true,
 			TextXAlignment = Enum.TextXAlignment.Center,
 		})
-		newLabel(row, pet.name .. "  ×" .. count, UDim2.new(0, 54, 0, 2), UDim2.new(1, -230, 0, 20), {
+		newLabel(row, pet.name .. "  ×" .. count .. (pet.golden and "" or ("  (" .. count .. "/" .. Pets.GoldenCost .. " for golden)")), UDim2.new(0, 54, 0, 2), UDim2.new(1, -310, 0, 20), {
 			Font = Enum.Font.FredokaOne,
 			TextSize = 15,
 			TextWrapped = false,
 		})
-		newLabel(row, pet.rarity .. "  ·  " .. Pets.percent(pet.bonus) .. " cash & aura" .. ((using[pet.id] or 0) > 0 and ("  ·  ✅ " .. using[pet.id] .. " equipped") or ""), UDim2.new(0, 54, 0, 22), UDim2.new(1, -230, 0, 18), {
+		newLabel(row, pet.rarity .. "  ·  " .. Pets.percent(pet.bonus) .. " cash & aura" .. ((using[pet.id] or 0) > 0 and ("  ·  ✅ " .. using[pet.id] .. " equipped") or ""), UDim2.new(0, 54, 0, 22), UDim2.new(1, -310, 0, 18), {
 			TextSize = 12,
 			TextColor3 = rarity.color,
 			TextWrapped = false,
 		})
 		local inUse = using[pet.id] or 0
+		if not pet.golden and count >= Pets.GoldenCost then
+			newButton(row, "✨ Golden", UDim2.new(1, -250, 0, 6), UDim2.new(0, 80, 0, 32), Color3.fromRGB(215, 160, 50), function()
+				Remotes.FusePet:FireServer(pet.id)
+			end).TextSize = 13
+		end
 		if inUse < count and #equipped < slots then
 			newButton(row, "Equip", UDim2.new(1, -164, 0, 6), UDim2.new(0, 76, 0, 32), COLORS.good, function()
 				Remotes.EquipPet:FireServer(pet.id, true)
@@ -4385,6 +4390,17 @@ local function buildFollowers(owner, key)
 			label.Text = pet.glyph
 			label.TextScaled = true
 			label.Parent = gui
+			if pet.golden then
+				-- golden pets shine
+				local shine = Instance.new("PointLight")
+				shine.Color = Color3.fromRGB(255, 210, 90)
+				shine.Range = 10
+				shine.Brightness = 3
+				shine.Parent = part
+				local sparkles = Instance.new("Sparkles")
+				sparkles.SparkleColor = Color3.fromRGB(255, 220, 120)
+				sparkles.Parent = part
+			end
 			table.insert(entry.parts, part)
 		end
 	end

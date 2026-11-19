@@ -889,6 +889,34 @@ local function buildAlabaster(map, position)
 	piece("Tail", Vector3.new(1.4, 1.4, 4.8), at(2.6, 1.6, 0.4) * CFrame.Angles(0, math.rad(-25), 0), SEAL, nil, Enum.Material.Fabric)
 	piece("TailTip", Vector3.new(1.6, 1.6, 1.6), at(3.3, 1.7, 2.6), SEAL, BALL, Enum.Material.Fabric)
 
+	-- idle animations: the tail swishes slowly, and now and then he tilts his head
+	local tail = model:FindFirstChild("Tail")
+	local tailTip = model:FindFirstChild("TailTip")
+	if tail and tailTip then
+		for _, part in ipairs({ tail, tailTip }) do
+			TweenService:Create(part, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+				CFrame = part.CFrame * CFrame.new(0.5, 0, 0) * CFrame.Angles(0, math.rad(14), 0),
+			}):Play()
+		end
+	end
+	local headParts = {}
+	for _, part in ipairs(model:GetChildren()) do
+		if part:IsA("BasePart") and (part.Name == "Head" or part.Name == "Mask" or part.Name == "Ear" or part.Name == "Eye" or part.Name == "Nose") then
+			headParts[part] = part.CFrame
+		end
+	end
+	local pivot = at(0, 6.9, 1.3)
+	task.spawn(function()
+		while model.Parent do
+			task.wait(4 + math.random() * 4)
+			local tilt = CFrame.Angles(0, 0, math.rad(math.random(0, 1) == 0 and -12 or 12))
+			for part, rest in pairs(headParts) do
+				local tilted = pivot * tilt * pivot:Inverse() * rest
+				TweenService:Create(part, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, true, 0.8), { CFrame = tilted }):Play()
+			end
+		end
+	end)
+
 	local head = model:FindFirstChild("Head")
 	newBillboard(head, "🐱 Alabaster the Ragdoll", 4, 14, 1.6)
 	newBillboard(head, "Guardian of the pet eggs. Beat him to unlock pets.", 2.6, 16, 0.9)
